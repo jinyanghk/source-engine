@@ -34,6 +34,14 @@ build*/
 .cache/
 .ccache/
 waf3*/
-.vscode/
+
 .depproj/
 source-engine.sln
+
+hl1
+hl2
+episodic
+hl2mp
+dod
+cstrike
+portal
