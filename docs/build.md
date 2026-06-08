@@ -1,7 +1,3 @@
-## Build, run and Debug Half Life 2 on Ubuntu 24.04
-
-https://www.jamesfmackenzie.com/howto/how-to-install-half-life-2-halflife-2-on-raspberry-pi/
-
 ### dependencies
 
 ```sh
@@ -17,16 +13,36 @@ python3 ./waf build -p -v
 python3 ./waf install
 ```
 
-### game asset
+### run
 
 ```sh
-wget https://github.com/SteamRE/DepotDownloader/releases/download/DepotDownloader_3.4.0/DepotDownloader-linux-x64.zip
-unzip DepotDownloader-linux-x64.zip
-
-./DepotDownloader -app 220 -depot 221 -manifest 3666218991449795038 -username <steam_username>
+cd hl2
+./hl2_launcher
 ```
 
+### other source games
+
+* hl1 = Half-Life 1: Source
+* hl2 = Half-Life 2
+* episodic = Half-Life 2 Episode 1 and 2
+* hl2mp = Half-Life 2: Deathmatch
+* dod = Day of Defeat
+* cstrike = Counter-Strike: Source
+* portal = Portal
+
 ```sh
-rsync -ah --progress depots/221/19307283/hl2/* source-engine/hl2/hl2
-scp -r depots/221/19307283/platform source-engine/hl2/
+python3 ./waf configure -T debug --prefix=portal --build-games=portal --disable-warns
+
+python3 ./waf build -p -v 
+
+python3 ./waf install
+
+cd portal
+
+./hl2_launcher -game portal
+```
+
+### clean
+```sh
+python3 ./waf clean
 ```
