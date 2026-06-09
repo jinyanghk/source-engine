@@ -3,3 +3,13 @@
 | breakpoint | file | description |
 | ---------- | ---- | ---------- |
 | CBasePlayer::Spawn | game/server/player.cpp | Called everytime the player respawns |
+
+### .gdbinit
+
+```sh
+nano ~/.gdbninit
+```
+add
+```
+handle SIGPIPE nostop noprint
+```

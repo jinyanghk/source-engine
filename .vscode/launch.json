@@ -8,17 +8,24 @@
         "name": "(gdb) Launch",
         "type": "cppdbg",
         "request": "launch",
-        "program": "${workspaceFolder}/hl2/hl2_launcher",
+        //"program": "${workspaceFolder}/hl2/hl2_launcher",
         //"program": "${workspaceFolder}/portal/hl2_launcher",
         //"program": "${workspaceFolder}/cstrike/hl2_launcher",
-        "args": ["-game", "hl2", "-console", "-window", "-height", "1024", "-width", "768"],
+        "program": "${workspaceFolder}/cstrike/dedicated_launcher",
+        //"args": ["-game", "hl2", "-console", "-window", "-height", "1024", "-width", "768"],
         //"args": ["-game", "portal", "-console", "-window", "-height", "1024", "-width", "768"],
         //"args": ["-game", "cstrike", "-console", "-window", "-height", "1024", "-width", "768"],
+        "args": ["-game", "cstrike", "-console", "-usercon", "+map", "de_dust2"],
         "stopAtEntry": false,
-        "cwd": "${workspaceFolder}/hl2",
+        //"cwd": "${workspaceFolder}/hl2",
         //"cwd": "${workspaceFolder}/portal",
-        //"cwd": "${workspaceFolder}/cstrike",
-        "environment": [],
+        "cwd": "${workspaceFolder}/cstrike",
+        "environment": [
+            {
+                "name": "LD_LIBRARY_PATH",
+                "value": "bin:${env:LD_LIBRARY_PATH}"
+            }
+        ],
         "externalConsole": false,
         "MIMode": "gdb",
         "setupCommands": [
