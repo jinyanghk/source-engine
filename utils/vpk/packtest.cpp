@@ -17,7 +17,7 @@
 #include "tier1/utldict.h"
 #include "tier1/utlbuffer.h"
 #ifdef VPK_ENABLE_SIGNING
-#include "crypto.h"
+#include "openssl/crypto.h"
 #endif
 
 static bool s_bBeVerbose = false;
@@ -2165,8 +2165,9 @@ int main(int argc, char **argv)
 			fprintf( stderr, "Incorrect number of arguments for '%s' command.\n", pszCommand );
 			exit(1);
 		}
-
+#ifdef VPK_ENABLE_SIGNING
 		CheckHashes( argv[2] );
+#endif
 	}
 #ifdef VPK_ENABLE_SIGNING
 	else if ( V_strcmp( pszCommand, "generate_keypair" ) == 0 )

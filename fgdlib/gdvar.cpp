@@ -3,13 +3,15 @@
 //=============================================================================
 
 #include "fgdlib/fgdlib.h"
-#include "fgdlib/GameData.h"
-#include "fgdlib/WCKeyValues.h"
+#include "fgdlib/ieditortexture.h"
+#include "fgdlib/gamedata.h"
+#include "fgdlib/wckeyvalues.h"
 #include "fgdlib/gdvar.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include <tier0/memdbgon.h>
 
+#include <string>
 
 typedef struct
 {
@@ -669,7 +671,12 @@ void GDinputvariable::ToKeyValue(MDkeyvalue *pkv)
 	}
 	else if (eStoreAs == INTEGER)
 	{
+#ifdef _WIN32
 		itoa(m_nValue, pkv->szValue, 10);
+#endif
+#if defined( POSIX )
+		m_nValue = std::stoi(pkv->szValue);
+#endif
 	}
 }
 

@@ -4,11 +4,12 @@
 //
 //=============================================================================
 
-#include "fgdlib/WCKeyValues.h"
+#include "fgdlib/wckeyvalues.h"
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include <tier0/memdbgon.h>
 
+#include <string>
 
 //-----------------------------------------------------------------------------
 // Purpose: Destructor.
@@ -149,7 +150,7 @@ const char *WCKeyValuesT<Base>::GetValue(const char *pszKey, int *piIndex) const
 		if(piIndex)
 			piIndex[0] = i;
 			
-		return m_KeyValues[i].szValue;
+		return this->m_KeyValues[i].szValue;
 	}
 }
 
@@ -169,8 +170,12 @@ template<class Base>
 void WCKeyValuesT<Base>::SetValue(const char *pszKey, int iValue)
 {
 	char szValue[100];
+#ifdef _WIN32
 	itoa(iValue, szValue, 10);
-
+#endif
+#if defined( POSIX )
+	iValue = std::stoi(szValue);
+#endif
 	SetValue(pszKey, szValue);
 }
 
@@ -251,7 +256,7 @@ void WCKeyValuesT<Base>::SetValue(const char *pszKey, const char *pszValue)
 	{
 		if (pszValue != NULL)
 		{
-			V_strncpy(m_KeyValues[i].szValue, szTmpValue, sizeof(m_KeyValues[i].szValue));
+			V_strncpy(this->m_KeyValues[i].szValue, szTmpValue, sizeof(this->m_KeyValues[i].szValue));
 		}
 		//
 		// If we are setting to a NULL value, delete the key.
@@ -270,7 +275,7 @@ void WCKeyValuesT<Base>::SetValue(const char *pszKey, const char *pszValue)
 template<class Base>
 void WCKeyValuesT<Base>::RemoveAll(void)
 {
-	m_KeyValues.RemoveAll();
+	this->m_KeyValues.RemoveAll();
 }
 
 
