@@ -146,6 +146,17 @@ projects={
 		'vstdlib',
 		'vtf',
 		'stub_steam'
+	],
+	'utils': [
+		'tier0',
+		'tier1',
+		'tier2',
+		'bitmap',
+		'mathlib',
+		'vpklib',
+		'vstdlib',
+		'fgdlib',
+		'utils/vpk'
 	]
 }
 
@@ -179,8 +190,9 @@ def run_test(self, fragment, msg):
 def define_platform(conf):
 	conf.env.DEDICATED = conf.options.DEDICATED
 	conf.env.TESTS = conf.options.TESTS
+	conf.env.UTILS = conf.options.UTILS
 	conf.env.TOGLES = conf.options.TOGLES
-	conf.env.GL = conf.options.GL and not conf.options.TESTS and not conf.options.DEDICATED
+	conf.env.GL = conf.options.GL and not conf.options.TESTS and not conf.options.DEDICATED and not conf.options.UTILS
 	conf.env.OPUS = conf.options.OPUS
 
 	arch32 = conf.run_test(CPP_32BIT_CHECK, 'Testing 32bit support')
@@ -293,6 +305,9 @@ def options(opt):
 
 	grp.add_option('--tests', action = 'store_true', dest = 'TESTS', default = False,
 		help = 'build unit tests [default: %default]')
+
+	grp.add_option('--utils', action = 'store_true', dest = 'UTILS', default = False,
+		help = 'build utils [default: %default]')
 
 	grp.add_option('-D', '--debug-engine', action = 'store_true', dest = 'DEBUG_ENGINE', default = False,
 		help = 'build with -DDEBUG [default: %default]')
@@ -610,6 +625,7 @@ def configure(conf):
 		conf.env.LIBDIR = conf.env.PREFIX+'/bin/'
 		conf.env.TESTDIR = conf.env.PREFIX+'/tests/'
 		conf.env.BINDIR = conf.env.PREFIX
+		conf.env.UTILSDIR = conf.env.PREFIX+'/utils/'
 	else:
 		conf.env.LIBDIR = conf.env.BINDIR = conf.env.PREFIX
 
@@ -621,6 +637,8 @@ def configure(conf):
 		conf.add_subproject(projects['tests'])
 	elif conf.options.DEDICATED:
 		conf.add_subproject(projects['dedicated'])
+	elif conf.options.UTILS:
+		conf.add_subproject(projects['utils'])
 	else:
 		conf.add_subproject(projects['game'])
 
@@ -643,6 +661,8 @@ def build(bld):
 		bld.add_subproject(projects['tests'])
 	elif bld.env.DEDICATED:
 		bld.add_subproject(projects['dedicated'])
+	elif bld.env.UTILS:
+		bld.add_subproject(projects['utils'])		
 	else:
 		if bld.env.TOGLES:
 			projects['game'] += ['togles']
