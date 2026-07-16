@@ -1135,7 +1135,7 @@ int RunVBSP( int argc, char **argv )
 		}
 		else if ( !Q_stricmp( argv[i], "-FullMinidumps" ) )
 		{
-			EnableFullMinidumps( true );
+			//EnableFullMinidumps( true );
 		}
 		else if ( !Q_stricmp( argv[i], "-embed" ) && i < argc - 1 )
 		{
@@ -1436,7 +1436,7 @@ main
 int main (int argc, char **argv)
 {
 	// Install an exception handler.
-	SetupDefaultToolsMinidumpHandler();
+	//SetupDefaultToolsMinidumpHandler();
 	return RunVBSP( argc, argv );
 }
 

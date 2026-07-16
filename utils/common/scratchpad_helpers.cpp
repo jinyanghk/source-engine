@@ -95,9 +95,10 @@ void ScratchPad_DrawWorld( IScratchPad3D *pPad, bool bDrawFaceNumbers, const CSP
 	pPad->SetAutoFlush( bAutoFlush );
 }
 
-
+#ifdef _WIN32
 void ScratchPad_DrawWorld( bool bDrawFaceNumbers, const CSPColor &faceColor )
 {
 	IScratchPad3D *pPad = ScratchPad3D_Create();
 	ScratchPad_DrawWorld( pPad, bDrawFaceNumbers );
 }
+#endif

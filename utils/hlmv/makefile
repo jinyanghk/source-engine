@@ -8,10 +8,10 @@ LIBS = -lmxtk-qt -lqt -lqgl -lGL -lGLU -lXaw
 
 HLMV = ../bin/hlmv
 OBJS = \
-	ControlPanel.o \
-	FileAssociation.o \
-	GlWindow.o \
-	ViewerSettings.o \
+	controlpanel.o \
+	fileAssociation.o \
+	glwindow.o \
+	viewersettings.o \
 	mathlib.o \
 	mdlviewer.o \
 	pakviewer.o \
@@ -23,32 +23,32 @@ all: $(HLMV)
 $(HLMV): $(OBJS)
 	$(CC) $(LFLAGS) -o $(HLMV) $(OBJS) $(LIBS) 
 
-ControlPanel.o: ControlPanel.cpp ControlPanel.h ViewerSettings.h StudioModel.h GlWindow.h
-	$(CC) -c $(CFLAGS) $(IFLAGS) ControlPanel.cpp
+controlpanel.o: controlpanel.cpp controlpanel.h viewersettings.h studiomodel.h glwindow.h
+	$(CC) -c $(CFLAGS) $(IFLAGS) controlpanel.cpp
 
-FileAssociation.o: FileAssociation.cpp FileAssociation.h
-	$(CC) -c $(CFLAGS) $(IFLAGS) FileAssociation.cpp
+fileassociation.o: filesssociation.cpp fileassociation.h
+	$(CC) -c $(CFLAGS) $(IFLAGS) fileassociation.cpp
 
-GlWindow.o: GlWindow.cpp GlWindow.h StudioModel.h ViewerSettings.h
-	$(CC) -c $(CFLAGS) $(IFLAGS) GlWindow.cpp
+glwindow.o: glwindow.cpp glwindow.h studiomodel.h viewersettings.h
+	$(CC) -c $(CFLAGS) $(IFLAGS) glWindow.cpp
 
-ViewerSettings.o: ViewerSettings.cpp ViewerSettings.h
-	$(CC) -c $(CFLAGS) $(IFLAGS) ViewerSettings.cpp
+viewersettings.o: viewersettings.cpp viewersettings.h
+	$(CC) -c $(CFLAGS) $(IFLAGS) viewersettings.cpp
 
 mathlib.o: mathlib.c mathlib.h
 	$(CC) -c $(CFLAGS) $(IFLAGS) mathlib.c
 
-mdlviewer.o: mdlviewer.cpp mdlviewer.h GlWindow.h ControlPanel.h StudioModel.h pakviewer.h FileAssociation.h
+mdlviewer.o: mdlviewer.cpp mdlviewer.h glwindow.h controlpanel.h studiomodel.h pakviewer.h fileassociation.h
 	$(CC) -c $(CFLAGS) $(IFLAGS) mdlviewer.cpp
 
-pakviewer.o: pakviewer.cpp pakviewer.h mdlviewer.h GlWindow.h ControlPanel.h StudioModel.h FileAssociation.h
+pakviewer.o: pakviewer.cpp pakviewer.h mdlviewer.h glwindow.h controlpanel.h studiomodel.h fileassociation.h
 	$(CC) -c $(CFLAGS) $(IFLAGS) pakviewer.cpp
 
 
-studio_render.o: studio_render.cpp StudioModel.h ViewerSettings.h
+studio_render.o: studio_render.cpp studiomodel.h viewersettings.h
 	$(CC) -c $(CFLAGS) $(IFLAGS) studio_render.cpp
 
-studio_utils.o: studio_utils.cpp StudioModel.h
+studio_utils.o: studio_utils.cpp studiomodel.h
 	$(CC) -c $(CFLAGS) $(IFLAGS) studio_utils.cpp
 
 

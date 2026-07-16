@@ -13,6 +13,9 @@
 // Copyright (c) 1999-2000 Microsoft Corporation. All rights reserved.
 //-----------------------------------------------------------------------------
 
+#include <cstring>
+#include <climits>
+
 typedef unsigned short WORD;
 
 //

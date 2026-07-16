@@ -3,7 +3,12 @@
 #include "map_shared.h"
 #include "fgdlib/fgdlib.h"
 #include "manifest.h"
+#ifdef _WIN32
 #include "windows.h"
+#endif
+#if defined( POSIX )
+#include <pwd.h>
+#endif
 
 //-----------------------------------------------------------------------------
 // Purpose: default constructor
@@ -359,7 +364,13 @@ bool CManifest::LoadVMFManifestUserPrefs( const char *pszFileName )
 	DWORD		UserNameSize;
 
 	UserNameSize = sizeof( UserName );
+#ifdef _WIN32
 	if ( GetUserName( UserName, &UserNameSize ) == 0 )
+#endif
+#if defined( POSIX )
+	struct passwd *pass = getpwuid( getuid() );
+	if( !pass )
+#endif
 	{
 		strcpy( UserPrefsFileName, "default" );
 	}

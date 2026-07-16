@@ -1271,7 +1271,12 @@ void ConvertSideList( entity_t *mapent, char *key )
 					}
 
 					char szIndex[15];
+#ifdef _WIN32
 					itoa( nIndex, szIndex, 10 );
+#endif
+#if defined( POSIX )
+					nIndex = std::stoi(szIndex);
+#endif
 					strcat( szNewValue, szIndex );
 				}
 			}

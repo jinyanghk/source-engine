@@ -61,7 +61,43 @@ CUtlLinkedList<SpewHookFn, unsigned short> g_ExtraSpewHooks;
 bool g_bStopOnExit = false;
 void (*g_ExtraSpewHook)(const char*) = NULL;
 
-#if defined( _WIN32 ) || defined( WIN32 )
+#if defined ( POSIX )
+#include <pthread.h>
+#include <iostream>
+typedef pthread_mutex_t CRITICAL_SECTION;
+
+inline void InitializeCriticalSection(CRITICAL_SECTION* ps)
+{
+   pthread_mutex_init(ps, NULL);
+}
+
+inline void EnterCriticalSection(CRITICAL_SECTION* ps)
+{
+   pthread_mutex_lock(ps);
+}
+
+inline void LeaveCriticalSection(CRITICAL_SECTION* ps)
+{
+   pthread_mutex_unlock(ps);
+}
+
+inline int GetCurrentProcess()
+{
+	return pthread_self();
+}
+
+inline int TerminateProcess(int pid, int x)
+{
+	return pthread_cancel(pid);
+}
+
+inline void OutputDebugString(const char * msg)
+{
+	std::cerr << "Debug message: " << msg << std::endl;
+}
+#endif
+
+//#if defined( _WIN32 ) || defined( WIN32 )
 
 void CmdLib_FPrintf( FileHandle_t hFile, const char *pFormat, ... )
 {
@@ -128,9 +164,13 @@ char* CmdLib_FGets( char *pOut, int outSize, FileHandle_t hFile )
 	return pOut;
 }
 
-#if !defined( _X360 )
+#if !defined( _X360 ) && defined ( _WIN32 )
 #include <wincon.h>
 #endif
+
+#if defined ( POSIX )
+#include <termios.h>
+#endif 
 
 // This pauses before exiting if they use -StopOnExit. Useful for debugging.
 class CExitStopper
@@ -141,7 +181,13 @@ public:
 		if ( g_bStopOnExit )
 		{
 			Warning( "\nPress any key to quit.\n" );
+#ifdef _WIN32
 			getch();
+#endif
+
+#if defined ( POSIX )
+			getchar();
+#endif
 		}
 	}
 } g_ExitStopper;
@@ -153,7 +199,7 @@ static unsigned short g_BadColor = 0xFFFF;
 static WORD g_BackgroundFlags = 0xFFFF;
 static void GetInitialColors( )
 {
-#if !defined( _X360 )
+#if !defined( _X360 ) && defined ( _WIN32 )
 	// Get the old background attributes.
 	CONSOLE_SCREEN_BUFFER_INFO oldInfo;
 	GetConsoleScreenBufferInfo( GetStdHandle( STD_OUTPUT_HANDLE ), &oldInfo );
@@ -175,7 +221,7 @@ static void GetInitialColors( )
 WORD SetConsoleTextColor( int red, int green, int blue, int intensity )
 {
 	WORD ret = g_LastColor;
-#if !defined( _X360 )
+#if !defined( _X360 ) && defined ( _WIN32 )
 	
 	g_LastColor = 0;
 	if( red )	g_LastColor |= FOREGROUND_RED;
@@ -194,7 +240,7 @@ WORD SetConsoleTextColor( int red, int green, int blue, int intensity )
 
 void RestoreConsoleTextColor( WORD color )
 {
-#if !defined( _X360 )
+#if !defined( _X360 ) && defined ( _WIN32 )
 	SetConsoleTextAttribute( GetStdHandle( STD_OUTPUT_HANDLE ), color | g_BackgroundFlags );
 	g_LastColor = color;
 #endif
@@ -420,7 +466,7 @@ void CmdLib_Exit( int exitCode )
 
 #endif
 
-#endif
+//#endif
 
 
 
@@ -720,7 +766,7 @@ void CmdLib_AddBasePath( const char *pPath )
 
 bool CmdLib_HasBasePath( const char *pFileName_, int &pathLength )
 {
-	char *pFileName = ( char * )_alloca( strlen( pFileName_ ) + 1 );
+	char *pFileName = ( char * )_alloca( V_strlen( pFileName_ ) + 1 );
 	strcpy( pFileName, pFileName_ );
 	Q_FixSlashes( pFileName );
 	pathLength = 0;
@@ -728,9 +774,9 @@ bool CmdLib_HasBasePath( const char *pFileName_, int &pathLength )
 	for( i = 0; i < g_NumBasePaths; i++ )
 	{
 		// see if we can rip the base off of the filename.
-		if( Q_strncasecmp( g_pBasePaths[i], pFileName, strlen( g_pBasePaths[i] ) ) == 0 )
+		if( Q_strncasecmp( g_pBasePaths[i], pFileName, V_strlen( g_pBasePaths[i] ) ) == 0 )
 		{
-			pathLength = strlen( g_pBasePaths[i] );
+			pathLength = V_strlen( g_pBasePaths[i] );
 			return true;
 		}
 	}
@@ -958,7 +1004,7 @@ void CreatePath (char *path)
 }
 
 //-----------------------------------------------------------------------------
-// Creates a path, path may already exist
+// Creates a path, path may already exist. This is kinda janky, avoid.
 //-----------------------------------------------------------------------------
 #if defined( _WIN32 ) || defined( WIN32 )
 void SafeCreatePath( char *path )
@@ -985,6 +1031,24 @@ void SafeCreatePath( char *path )
 		}
 	}
 }
+#elif defined( POSIX )
+void SafeCreatePath( char *path )
+{
+	char *ptr = path;
+	// Ignore leading slashes (don't mkdir /)
+	while ( *ptr == '/' ) { ptr++; };
+
+	while ( ptr && *ptr )
+	{
+		ptr = strchr( ptr+1, '/' );
+		if ( ptr )
+		{
+			*ptr = '\0';
+			_mkdir( path );
+			*ptr = '/';
+		}
+	}
+}
 #endif
 
 /*
@@ -1004,6 +1068,3 @@ void QCopyFile (char *from, char *to)
 	SaveFile (to, buffer, length);
 	free (buffer);
 }
-
-
-

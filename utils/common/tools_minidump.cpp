@@ -5,8 +5,11 @@
 // $NoKeywords: $
 //=============================================================================//
 
+#ifdef _WIN32
 #include <windows.h>
 #include <dbghelp.h>
+#endif
+
 #include "tier0/minidump.h"
 #include "tools_minidump.h"
 
