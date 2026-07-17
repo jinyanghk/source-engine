@@ -459,7 +459,13 @@ void CmdLib_Cleanup()
 
 void CmdLib_Exit( int exitCode )
 {
+#ifdef _WIN32
 	TerminateProcess( GetCurrentProcess(), 1 );
+#endif
+
+#if defined ( POSIX )
+	exit(exitCode);
+#endif
 }	
 
 

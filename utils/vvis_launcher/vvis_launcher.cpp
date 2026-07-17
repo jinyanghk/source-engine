@@ -8,14 +8,23 @@
 // vvis_launcher.cpp : Defines the entry point for the console application.
 //
 
+#ifdef _WIN32
 #include "stdafx.h"
 #include <direct.h>
+#endif
+
+#if defined ( POSIX )
+#include <cstring>  // For strerror
+#include <cerrno>   // For errno
+typedef void* LPVOID;
+#endif
+
 #include "tier1/strtools.h"
 #include "tier0/icommandline.h"
 #include "ilaunchabledll.h"
+#include "tier1/interface.h"
 
-
-
+#ifdef _WIN32
 char* GetLastErrorString()
 {
 	static char err[2048];
@@ -40,7 +49,14 @@ char* GetLastErrorString()
 
 	return err;
 }
+#endif
 
+#if defined ( POSIX )
+char* GetLastErrorString()
+{
+	return std::strerror(errno);
+}
+#endif
 
 int main(int argc, char* argv[])
 {

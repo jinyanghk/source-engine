@@ -1,0 +1,71 @@
+#! /usr/bin/env python
+# encoding: utf-8
+
+from waflib import Utils
+import os
+
+top = '.'
+PROJECT_NAME = 'vvis_dll'
+
+def options(opt):
+	# stub
+	return
+
+def configure(conf):
+	conf.define('PROTECTED_THINGS_DISABLE',1)
+
+def build(bld):
+	source = [
+		'../common/bsplib.cpp',
+		'../common/cmdlib.cpp',
+		'../../public/collisionutils.cpp',
+		'../../public/filesystem_helpers.cpp',
+		'flow.cpp',
+		'../../public/loadcmdline.cpp',
+		'../../public/lumpfiles.cpp',
+		'../../public/filesystem_init.cpp',
+		'../common/filesystem_tools.cpp',
+		'../common/pacifier.cpp',
+		'../../public/scratchpad3d.cpp',
+		'../common/scratchpad_helpers.cpp',
+		'../common/scriplib.cpp',
+		'../common/threads.cpp',
+		'vvis.cpp',
+		'WaterDist.cpp',
+		'../../public/zip_utils.cpp',
+		'../../filesystem/linux_support.cpp',
+	]
+
+	includes = [
+		'.', '../../public', 
+		'../../public/tier0', 
+		'../../public/tier1', 
+		'../../external/vpc/public', 
+		'../common'
+	]
+
+	defines = []
+
+	libs = [
+		'tier2',
+		'tier1',
+		'tier0',
+		'mathlib',
+		'vstdlib',
+		'lzma',
+	]
+
+	install_path = bld.env.LIBDIR
+
+	bld.shlib(
+		source   = source,
+		target   = PROJECT_NAME,
+		name     = PROJECT_NAME,
+		features = 'c cxx',
+		includes = includes,
+		defines  = defines,
+		use      = libs,
+		install_path = install_path,
+		subsystem = bld.env.MSVC_SUBSYSTEM,
+		idx      = bld.get_taskgen_count()
+	)

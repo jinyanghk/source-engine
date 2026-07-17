@@ -1,5 +1,12 @@
 
+### offical doc for map compiling
+
 https://developer.valvesoftware.com/wiki/Map_Compiling_Theory
+
+
+### sortie's fixes
+
+https://github.com/ValveSoftware/source-sdk-2013/pull/160
 
 
 ### build

@@ -161,6 +161,8 @@ projects={
 		'utils/lzma',
 		'utils/vpk',
 		'utils/vbsp',
+		'utils/vvis_launcher',
+		'utils/vvis',
 	]
 }
 

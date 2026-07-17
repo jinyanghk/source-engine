@@ -7,19 +7,25 @@
 //=============================================================================//
 // vis.c
 
+#ifdef _WIN32
 #include <windows.h>
+#endif
 #include "vis.h"
 #include "threads.h"
 #include "stdlib.h"
 #include "pacifier.h"
+#ifdef _WIN32
 #include "vmpi.h"
 #include "mpivis.h"
+#endif
 #include "tier1/strtools.h"
 #include "collisionutils.h"
 #include "tier0/icommandline.h"
 #include "vmpi_tools_shared.h"
 #include "ilaunchabledll.h"
+#ifdef _WIN32
 #include "tools_minidump.h"
+#endif
 #include "loadcmdline.h"
 #include "byteswap.h"
 
@@ -302,11 +308,13 @@ void CalcPortalVis (void)
 	}
 
 
+#ifdef _WIN32
     if (g_bUseMPI) 
 	{
  		RunMPIPortalFlow();
 	}
 	else 
+#endif
 	{
 		RunThreadsOnIndividual (g_numportals*2, true, PortalFlow);
 	}
@@ -331,11 +339,13 @@ void CalcVis (void)
 {
 	int		i;
 
+#ifdef _WIN32
 	if (g_bUseMPI) 
 	{
 		RunMPIBasePortalVis();
 	}
 	else 
+#endif
 	{
 	    RunThreadsOnIndividual (g_numportals*2, true, BasePortalVis);
 	}
@@ -414,6 +424,7 @@ void LoadPortals (char *name)
 	FILE *f;
 
 	// Open the portal file.
+#ifdef _WIN32
 	if ( g_bUseMPI )
 	{
 		// If we're using MPI, copy off the file to a temporary first. This will download the file
@@ -448,6 +459,7 @@ void LoadPortals (char *name)
 		f = fopen( tempFile, "rSTD" ); // read only, sequential, temporary, delete on close
 	}
 	else
+#endif
 	{
 		f = fopen( name, "r" );
 	}
@@ -955,7 +967,7 @@ int ParseCommandLine( int argc, char **argv )
 		}
 		else if ( !Q_stricmp( argv[i], "-FullMinidumps" ) )
 		{
-			EnableFullMinidumps( true );
+			//EnableFullMinidumps( true );
 		}
 		else if ( !Q_stricmp( argv[i], CMDLINEOPTION_NOVCONFIG ) )
 		{
@@ -973,9 +985,10 @@ int ParseCommandLine( int argc, char **argv )
 		// argument was -mpi and the current argument was something valid like -game, it would skip it.
 		else if ( !Q_strncasecmp( argv[i], "-mpi", 4 ) || !Q_strncasecmp( argv[i-1], "-mpi", 4 ) )
 		{
+#ifdef _WIN32
 			if ( stricmp( argv[i], "-mpi" ) == 0 )
 				g_bUseMPI = true;
-		
+#endif
 			// Any other args that start with -mpi are ok too.
 			if ( i == argc - 1 )
 				break;
@@ -1110,6 +1123,7 @@ int RunVVis( int argc, char **argv )
 	start = Plat_FloatTime();
 
 
+#ifdef _WIN32
 	if (!g_bUseMPI)
 	{
 		// Setup the logfile.
@@ -1117,6 +1131,7 @@ int RunVVis( int argc, char **argv )
 		_snprintf( logFile, sizeof(logFile), "%s.log", source );
 		SetSpewFunctionLogFile( logFile );
 	}
+#endif
 
 	// Run in the background?
 	if( g_bLowPriority )
@@ -1187,10 +1202,12 @@ int RunVVis( int argc, char **argv )
 		{
 			Error("Invalid cluster trace: %d to %d, valid range is 0 to %d\n", g_TraceClusterStart, g_TraceClusterStop, portalclusters-1 );
 		}
+#ifdef _WIN32
 		if ( g_bUseMPI )
 		{
 			Warning("Can't compile trace in MPI mode\n");
 		}
+#endif
 		CalcVisTrace ();
 		WritePortalTrace(source);
 	}
@@ -1221,6 +1238,7 @@ int main (int argc, char **argv)
 	InstallAllocationFunctions();
 	InstallSpewFunction();
 
+#ifdef _WIN32
 	VVIS_SetupMPI( argc, argv );
 
 	// Install an exception handler.
@@ -1228,6 +1246,7 @@ int main (int argc, char **argv)
 		SetupToolsMinidumpHandler( VMPI_ExceptionFilter );
 	else
 		SetupDefaultToolsMinidumpHandler();
+#endif
 
 	return RunVVis( argc, argv );
 }
