@@ -22,7 +22,7 @@ def build(bld):
 	]
 
 	includes = ['.', '../../public', '../../public/tier0', '../common']
-	defines = ['_7ZIP_ST']
+	defines = ['_NO_EXCEPTIONS', '_LZMA_PROB32', '_7ZIP_ST']
 	libs = ['tier0']
 
 	bld.stlib(

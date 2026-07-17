@@ -157,6 +157,7 @@ projects={
 		'vstdlib',
 		'fgdlib',
 		'vtf',
+		'materialsystem/shaderapiempty',
 		'utils/lzma',
 		'utils/vpk',
 		'utils/vbsp',

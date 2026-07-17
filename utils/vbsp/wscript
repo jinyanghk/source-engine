@@ -83,7 +83,7 @@ def build(bld):
         '../common'
     ]
 
-	defines = []
+	defines = ['MACRO_MATHLIB', 'PROTECTED_THINGS_DISABLE']
 
 	libs = [
         'tier2', 

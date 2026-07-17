@@ -2,8 +2,21 @@
 https://developer.valvesoftware.com/wiki/Map_Compiling_Theory
 
 
+### build
 
-some files need to be updated from official sdk, e.g. staticprop.cpp
+```sh
+python3 ./waf configure -T debug --prefix=hl2 --utils --disable-warns
+
+python3 ./waf build -v 
+
+python3 ./waf install
+```
+
+### wsl core dump
+
+location: %TEMP%\wsl-crashes
+
+### some files need to be updated from official sdk, e.g. staticprop.cpp
 
 https://github.com/ValveSoftware/source-sdk-2013
 
