@@ -11,9 +11,10 @@
 #include "radial.h"
 #include "mathlib/bumpvects.h"
 #include "utlrbtree.h"
-#include "mathlib/VMatrix.h"
+#include "mathlib/vmatrix.h"
 #include "macro_texture.h"
 
+#include <algorithm>
 
 void WorldToLuxelSpace( lightinfo_t const *l, Vector const &world, Vector2D &coord )
 {
@@ -89,19 +90,19 @@ void AddDirectToRadial( radial_t *rad,
 	s_max = ( int )( coordmaxs[0] + 0.9999f ) + 1; // ????
 	t_max = ( int )( coordmaxs[1] + 0.9999f ) + 1;
 
-	s_min = max( s_min, 0 );
-	t_min = max( t_min, 0 );
-	s_max = min( s_max, rad->w );
-	t_max = min( t_max, rad->h );
+	s_min = std::max<int>( s_min, 0 );
+	t_min = std::max<int>( t_min, 0 );
+	s_max = std::min<int>( s_max, rad->w );
+	t_max = std::min<int>( t_max, rad->h );
 
 	for( s = s_min; s < s_max; s++ )
 	{
 		for( t = t_min; t < t_max; t++ )
 		{
-			float s0 = max( coordmins[0] - s, -1.0 );
-			float t0 = max( coordmins[1] - t, -1.0 );
-			float s1 = min( coordmaxs[0] - s, 1.0 );
-			float t1 = min( coordmaxs[1] - t, 1.0 );
+			float s0 = std::max<float>( coordmins[0] - s, -1.0 );
+			float t0 = std::max<float>( coordmins[1] - t, -1.0 );
+			float s1 = std::min<float>( coordmaxs[0] - s, 1.0 );
+			float t1 = std::min<float>( coordmaxs[1] - t, 1.0 );
 
 			area = (s1 - s0) * (t1 - t0);
 
@@ -176,8 +177,8 @@ void AddBouncedToRadial( radial_t *rad,
 	distt = (coordmaxs[1] - coordmins[1]);
 
 	// patches less than a luxel in size could be mistakeningly filtered, so clamp.
-	dists = max( 1.0, dists );
-	distt = max( 1.0, distt );
+	dists = std::max<float>( 1.0, dists );
+	distt = std::max<float>( 1.0, distt );
 
 	// find possible domain of patch influence
   	s_min = ( int )( coord[0] - dists * RADIALDIST );
@@ -186,10 +187,10 @@ void AddBouncedToRadial( radial_t *rad,
   	t_max = ( int )( coord[1] + distt * RADIALDIST + 1.0f );
 
 	// clamp to valid luxel
-	s_min = max( s_min, 0 );
-	t_min = max( t_min, 0 );
-	s_max = min( s_max, rad->w );
-	t_max = min( t_max, rad->h );
+	s_min = std::max<int>( s_min, 0 );
+	t_min = std::max<int>( t_min, 0 );
+	s_max = std::min<int>( s_max, rad->w );
+	t_max = std::min<int>( t_max, rad->h );
 
 	for( s = s_min; s < s_max; s++ )
 	{

@@ -11,7 +11,9 @@
 #include "radial.h"
 #include "mathlib/bumpvects.h"
 #include "tier1/utlvector.h"
+#ifdef _WIN32
 #include "vmpi.h"
+#endif
 #include "mathlib/anorms.h"
 #include "map_utils.h"
 #include "mathlib/halton.h"
@@ -22,6 +24,10 @@
 #include "mathlib/quantize.h"
 #include "bitmap/imageformat.h"
 #include "coordsize.h"
+
+#if defined ( POSIX )
+#include <algorithm>
+#endif
 
 enum
 {
@@ -90,8 +96,8 @@ int CNormalList::FindOrAddNormal( Vector const &vNormal )
 	for( int iDim=0; iDim < 3; iDim++ )
 	{
 		gi[iDim] = (int)( ((vNormal[iDim] + 1.0f) * 0.5f) * NUM_SUBDIVS - 0.000001f );
-		gi[iDim] = min( gi[iDim], NUM_SUBDIVS );
-		gi[iDim] = max( gi[iDim], 0 );
+		gi[iDim] = std::min<int>( gi[iDim], NUM_SUBDIVS );
+		gi[iDim] = std::max<int>( gi[iDim], 0 );
 	}
 
 	// Look for a matching vector in there.
@@ -2534,7 +2540,11 @@ static void GatherSampleLightAt4Points( SSE_SampleInfo_t& info, int sampleIdx, i
 			if (info.m_WarnFace != info.m_FaceNum)
 			{
 				Warning ("\nWARNING: Too many light styles on a face at (%f, %f, %f)\n",
+#if !USE_STDC_FOR_SIMD
+					info.m_Points.x[0], info.m_Points.y[0], info.m_Points.z[0] );
+#else
 					info.m_Points.x.m128_f32[0], info.m_Points.y.m128_f32[0], info.m_Points.z.m128_f32[0] );
+#endif
 				info.m_WarnFace = info.m_FaceNum;
 			}
 			continue;
@@ -3174,7 +3184,7 @@ void BuildFacelights (int iThread, int facenum)
 		}
 	}
 
-	if (!g_bUseMPI) 
+	//if (!g_bUseMPI) 
 	{
 		//
 		// This is done on the master node when MPI is used

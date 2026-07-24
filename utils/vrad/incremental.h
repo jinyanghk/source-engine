@@ -19,6 +19,17 @@
 #include "utlbuffer.h"
 #include "vrad.h"
 
+#if defined( POSIX )
+#include <pthread.h>
+#undef CRITICAL_SECTION
+#undef EnterCriticalSection
+#undef LeaveCriticalSection
+#define CRITICAL_SECTION pthread_mutex_t
+#define InitializeCriticalSection(x) pthread_mutex_init(x, NULL)
+#define EnterCriticalSection(x) pthread_mutex_lock(x)
+#define LeaveCriticalSection(x) pthread_mutex_unlock(x)
+#define DeleteCriticalSection(x) pthread_mutex_destroy(x)
+#endif
 
 #define INCREMENTALFILE_VERSION	31241
 

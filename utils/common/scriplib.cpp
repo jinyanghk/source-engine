@@ -316,7 +316,7 @@ bool ExpandMacroToken( char *&token_p )
 		}
 
 		// paste token into 
-		len = strlen( script->macrovalue[index] );
+		len = V_strlen( script->macrovalue[index] );
 		strcpy( token_p, script->macrovalue[index] );
 		token_p += len;
 		
@@ -375,7 +375,7 @@ bool ExpandVariableToken( char *&token_p )
 		}
 
 		// paste token into 
-		len = strlen( g_definevariable[index].value );
+		len = V_strlen( g_definevariable[index].value );
 		strcpy( token_p, g_definevariable[index].value );
 		token_p += len;
 		
@@ -1087,6 +1087,7 @@ int CScriptLib::CompareFileTime( const char *pFilenameA, const char *pFilenameB 
 //-----------------------------------------------------------------------------
 char *CScriptLib::MakeTemporaryFilename( char const *pchModPath, char *pPath, int pathSize )
 {
+#if 0
 	char *pBuffer = _tempnam( pchModPath, "mgd_" );
 	if ( pBuffer[0] == '\\' )
 	{
@@ -1101,6 +1102,11 @@ char *CScriptLib::MakeTemporaryFilename( char const *pchModPath, char *pPath, in
 	free( pBuffer );
 
 	return pPath;
+#else
+	// misyl: Deprecated!
+
+	return nullptr;
+#endif
 }
 
 //-----------------------------------------------------------------------------
@@ -1212,56 +1218,54 @@ int CScriptLib::GetFileList( const char* pDirPath, const char* pPattern, CUtlVec
 	while ( !_findnext( h, &findData ) );
 
 	_findclose( h );
-#elif defined(POSIX)
-	FIND_DATA findData;
+
+#elif defined( POSIX )
 	Q_FixSlashes( fullPath );
-	void *h = FindFirstFile( fullPath, &findData );
-	if ( (int)h == -1 )
+	DIR *dir = opendir( fullPath );
+	if ( dir == NULL )
 	{
 		return 0;
 	}
 
-	do
+	while ( struct dirent* entry = readdir(dir) )
 	{
-		// dos attribute complexities i.e. _A_NORMAL is 0
+		struct stat st;
+		if ( fstatat( dirfd(dir), entry->d_name, &st, 0 ) )
+			continue;
+
 		if ( bFindDirs )
 		{
 			// skip non dirs
-			if ( !( findData.dwFileAttributes & S_IFDIR ) )
+			if ( !S_ISDIR(st.st_mode) )
 				continue;
 		}
 		else
 		{
 			// skip dirs
-			if ( findData.dwFileAttributes & S_IFDIR )
+			if ( S_ISDIR(st.st_mode) )
 				continue;
 		}
 
-		if ( !stricmp( findData.cFileName, "." ) )
+		if ( !strcmp( entry->d_name, "." ) )
 			continue;
 
-		if ( !stricmp( findData.cFileName, ".." ) )
+		if ( !strcmp( entry->d_name, ".." ) )
 			continue;
 
 		char fileName[MAX_PATH];
 		strcpy( fileName, sourcePath );
-		strcat( fileName, findData.cFileName );
+		strcat( fileName, entry->d_name );
 
 		int j = fileList.AddToTail();
 		fileList[j].fileName.Set( fileName );
-		struct stat statbuf;
-		if ( stat( fileName, &statbuf ) )
 #ifdef OSX
-			fileList[j].timeWrite = statbuf.st_mtimespec.tv_sec;
+		fileList[j].timeWrite = st.st_mtimespec.tv_sec;
 #else
-			fileList[j].timeWrite = statbuf.st_mtime;
+		fileList[j].timeWrite = st.st_mtim.tv_sec;
 #endif
-		else
-			fileList[j].timeWrite = 0;
 	}
-	while ( !FindNextFile( h, &findData ) );
 
-	FindClose( h );
+	closedir( dir );
 
 #else
 #error

@@ -1,0 +1,96 @@
+#! /usr/bin/env python
+# encoding: utf-8
+
+from waflib import Utils
+import os
+
+top = '.'
+PROJECT_NAME = 'vrad_dll'
+
+def options(opt):
+	# stub
+	return
+
+def configure(conf):
+	conf.define('PROTECTED_THINGS_DISABLE',1)
+
+def build(bld):
+	source = [
+		'../../public/bsptreedata.cpp',
+        '../../public/disp_common.cpp',
+        '../../public/disp_powerinfo.cpp',
+		'disp_vrad.cpp',
+		'imagepacker.cpp',
+		'incremental.cpp',
+		'leaf_ambient_lighting.cpp',
+		'lightmap.cpp',
+        '../../public/loadcmdline.cpp',
+        '../../public/lumpfiles.cpp',
+		'macro_texture.cpp',
+		'../common/pacifier.cpp',
+		'../common/physdll.cpp',
+		'radial.cpp',
+		'samplehash.cpp',
+		'trace.cpp',
+		'../common/utilmatlib.cpp',
+		'vismat.cpp',
+		'vrad.cpp',
+		'vrad_dispcoll.cpp',
+		'vraddetailprops.cpp',
+		'vraddisps.cpp',
+		'vraddll.cpp',
+		'vradstaticprops.cpp',
+		'../../public/zip_utils.cpp',
+		'../common/bsplib.cpp',
+		'../../public/builddisp.cpp',
+		'../../public/chunkfile.cpp',
+		'../common/cmdlib.cpp',
+		'../../public/dispcoll_common.cpp',
+		'../common/map_shared.cpp',
+		'../common/polylib.cpp',
+		'../common/scriplib.cpp',
+		'../common/threads.cpp',
+		'../../public/collisionutils.cpp',
+		'../../public/filesystem_helpers.cpp',
+		'../../public/scratchpad3d.cpp',
+		'../../public/scratchpadutils.cpp',
+		'../common/filesystem_tools.cpp',
+		'../../public/filesystem_init.cpp',
+	]
+
+	includes = [
+		'.', '../../public', 
+		'../../public/tier0', 
+		'../../public/tier1', 
+		'../../external/vpc/public', 
+		'../common'
+	]
+
+	defines = ['VRAD']
+
+	libs = [
+		'tier2',
+		'tier1',
+		'tier0',
+		'raytrace',
+        'vtf',
+		'vstdlib',
+        'bitmap',
+		'mathlib',
+		'lzma',
+	]
+
+	install_path = bld.env.LIBDIR
+
+	bld.shlib(
+		source   = source,
+		target   = PROJECT_NAME,
+		name     = PROJECT_NAME,
+		features = 'c cxx',
+		includes = includes,
+		defines  = defines,
+		use      = libs,
+		install_path = install_path,
+		subsystem = bld.env.MSVC_SUBSYSTEM,
+		idx      = bld.get_taskgen_count()
+	)

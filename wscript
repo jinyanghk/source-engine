@@ -94,6 +94,15 @@ projects={
 		'utils/vtex',
 		'unicode',
 		'video',
+#		'fgdlib',
+#		'raytrace',
+#		'utils/lzma',
+#		'utils/vpk',
+#		'utils/vbsp',
+#		'utils/vvis_launcher',
+#		'utils/vvis',
+#		'utils/vrad_launcher',
+#		'utils/vrad',
 	],
 	'tests': [
 		'appframework',
@@ -158,11 +167,16 @@ projects={
 		'fgdlib',
 		'vtf',
 		'materialsystem/shaderapiempty',
+		'raytrace',
 		'utils/lzma',
 		'utils/vpk',
+#		'utils/vtex_launcher',
+#		'utils/videocardstats',
 		'utils/vbsp',
 		'utils/vvis_launcher',
 		'utils/vvis',
+		'utils/vrad_launcher',
+		'utils/vrad',
 	]
 }
 

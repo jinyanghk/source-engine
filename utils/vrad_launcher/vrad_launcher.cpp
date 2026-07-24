@@ -8,12 +8,22 @@
 // vrad_launcher.cpp : Defines the entry point for the console application.
 //
 
+#ifdef _WIN32
 #include "stdafx.h"
 #include <direct.h>
+#endif
 #include "tier1/strtools.h"
 #include "tier0/icommandline.h"
+#include "tier1/interface.h"
+#include "ivraddll.h"
 
+#if defined ( POSIX )
+#include <cstring>  // For strerror
+#include <cerrno>   // For errno
+typedef void* LPVOID;
+#endif
 
+#ifdef _WIN32
 char* GetLastErrorString()
 {
 	static char err[2048];
@@ -38,7 +48,14 @@ char* GetLastErrorString()
 
 	return err;
 }
+#endif
 
+#if defined ( POSIX )
+char* GetLastErrorString()
+{
+	return std::strerror(errno);
+}
+#endif
 
 void MakeFullPath( const char *pIn, char *pOut, int outLen )
 {

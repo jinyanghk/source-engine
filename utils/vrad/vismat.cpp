@@ -7,7 +7,9 @@
 //=============================================================================//
 
 #include "vrad.h"
+#ifdef _WIN32
 #include "vmpi.h"
+#endif
 #ifdef MPI
 #include "messbuf.h"
 static MessageBuffer mb;
@@ -467,11 +469,13 @@ BuildVisMatrix
 */
 void BuildVisMatrix (void)
 {
+#ifdef _WIN32
 	if ( g_bUseMPI )
 	{
 		RunMPIBuildVisLeafs();
 	}
 	else 
+#endif
 	{
 		RunThreadsOn (dvis->numclusters, true, BuildVisLeafs);
 	}

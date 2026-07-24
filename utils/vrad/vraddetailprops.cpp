@@ -10,16 +10,18 @@
 //=============================================================================//
 
 #include "vrad.h"
-#include "Bsplib.h"
-#include "GameBSPFile.h"
-#include "UtlBuffer.h"
+#include "bsplib.h"
+#include "gamebspfile.h"
+#include "utlbuffer.h"
 #include "utlvector.h"
-#include "CModel.h"
+#include "cmodel.h"
 #include "studio.h"
 #include "pacifier.h"
 #include "vraddetailprops.h"
 #include "mathlib/halton.h"
+#ifdef _WIN32
 #include "messbuf.h"
+#endif
 #include "byteswap.h"
 
 bool LoadStudioModel( char const* pModelName, CUtlBuffer& buf );
@@ -227,7 +229,11 @@ static void ComputeMaxDirectLighting( DetailObjectLump_t& prop, Vector* maxcolor
 		normal4.DuplicateVector( normal );
 
 		GatherSampleLightSSE ( out, dl, -1, origin4, &normal4, 1, iThread );
+#if !USE_STDC_FOR_SIMD
+		VectorMA( maxcolor[dl->light.style], ((float*) &out.m_flFalloff)[0] * ((float*) &out.m_flDot[0])[0], dl->light.intensity, maxcolor[dl->light.style] );
+#else
 		VectorMA( maxcolor[dl->light.style], out.m_flFalloff.m128_f32[0] * out.m_flDot[0].m128_f32[0], dl->light.intensity, maxcolor[dl->light.style] );
+#endif
 	}
 }
 
@@ -524,7 +530,8 @@ private:
 	bool TestPointAgainstSkySurface( Vector const &pt, dface_t *pFace )
 	{
 		// Create sky face winding.
-		winding_t *pWinding = WindingFromFace( pFace, Vector( 0.0f, 0.0f, 0.0f ) );
+		Vector v( 0.0f, 0.0f, 0.0f );
+		winding_t *pWinding = WindingFromFace( pFace,  v);
 
 		// Test point in winding. (Since it is at the node, it is in the plane.)
 		bool bRet = PointInWinding( pt, pWinding );
@@ -960,6 +967,7 @@ void UnserializeDetailPropLighting( int lumpID, int lumpVersion, CUtlVector<Deta
 
 DetailObjectLump_t *g_pMPIDetailProps = NULL;
 
+#ifdef _WIN32
 void VMPI_ProcessDetailPropWU( int iThread, int iWorkUnit, MessageBuffer *pBuf )
 {
 	CUtlVector<DetailPropLightstylesLump_t> *pDetailPropLump = s_pDetailPropLightStyleLump;
@@ -1000,7 +1008,8 @@ void VMPI_ReceiveDetailPropWU( int iWorkUnit, MessageBuffer *pBuf, int iWorker )
 		pBuf->read( &l->m_Style, sizeof( l->m_Style ) );
 	}
 }
-	
+#endif
+
 //-----------------------------------------------------------------------------
 // Computes lighting for the detail props
 //-----------------------------------------------------------------------------
