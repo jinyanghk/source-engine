@@ -63,7 +63,8 @@ def build(bld):
 		'../../public/tier0', 
 		'../../public/tier1', 
 		'../../external/vpc/public', 
-		'../common'
+		'../common',
+		'../../thirdparty/SDL',
 	]
 
 	defines = ['VRAD']
