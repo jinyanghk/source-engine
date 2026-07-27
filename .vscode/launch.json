@@ -8,7 +8,7 @@
         "name": "(gdb) Launch",
         "type": "cppdbg",
         "request": "launch",
-        "program": "${workspaceFolder}/hl2/vvis",
+        "program": "${workspaceFolder}/hl2/vrad",
         //"program": "${workspaceFolder}/hl2/hl2_launcher",
         //"program": "${workspaceFolder}/portal/hl2_launcher",
         //"program": "${workspaceFolder}/cstrike/hl2_launcher",

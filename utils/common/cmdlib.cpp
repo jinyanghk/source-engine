@@ -564,7 +564,7 @@ void qprintf (const char *format, ...)
 	//  	memcpy(pMsgs[iMsg], data, len);
 	//  	pMsgs[iMsg][len] = 0;
 	//  	iMsg++;
-	}
+	//  }
 	printf( "%s", str );
 #endif
 
