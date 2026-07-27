@@ -38,11 +38,13 @@
 #include <direct.h>
 #endif
 
+#if defined(POSIX)
+#include <pthread.h>
+#endif
+
 #if defined( _X360 )
 #include "xbox/xbox_win32stubs.h"
 #endif
-
-#include "tier0/memdbgon.h"
 
 // set these before calling CheckParm
 int myargc;
@@ -60,44 +62,6 @@ CUtlLinkedList<SpewHookFn, unsigned short> g_ExtraSpewHooks;
 
 bool g_bStopOnExit = false;
 void (*g_ExtraSpewHook)(const char*) = NULL;
-
-#if defined ( POSIX )
-#include <pthread.h>
-#include <iostream>
-typedef pthread_mutex_t CRITICAL_SECTION;
-
-inline void InitializeCriticalSection(CRITICAL_SECTION* ps)
-{
-   pthread_mutex_init(ps, NULL);
-}
-
-inline void EnterCriticalSection(CRITICAL_SECTION* ps)
-{
-   pthread_mutex_lock(ps);
-}
-
-inline void LeaveCriticalSection(CRITICAL_SECTION* ps)
-{
-   pthread_mutex_unlock(ps);
-}
-
-inline int GetCurrentProcess()
-{
-	return pthread_self();
-}
-
-inline int TerminateProcess(int pid, int x)
-{
-	return pthread_cancel(pid);
-}
-
-inline void OutputDebugString(const char * msg)
-{
-	std::cerr << "Debug message: " << msg << std::endl;
-}
-#endif
-
-//#if defined( _WIN32 ) || defined( WIN32 )
 
 void CmdLib_FPrintf( FileHandle_t hFile, const char *pFormat, ... )
 {
@@ -164,13 +128,11 @@ char* CmdLib_FGets( char *pOut, int outSize, FileHandle_t hFile )
 	return pOut;
 }
 
-#if !defined( _X360 ) && defined ( _WIN32 )
+#if defined( _WIN32 ) || defined( WIN32 )
+
+#if !defined( _X360 )
 #include <wincon.h>
 #endif
-
-#if defined ( POSIX )
-#include <termios.h>
-#endif 
 
 // This pauses before exiting if they use -StopOnExit. Useful for debugging.
 class CExitStopper
@@ -181,13 +143,7 @@ public:
 		if ( g_bStopOnExit )
 		{
 			Warning( "\nPress any key to quit.\n" );
-#ifdef _WIN32
 			getch();
-#endif
-
-#if defined ( POSIX )
-			getchar();
-#endif
 		}
 	}
 } g_ExitStopper;
@@ -199,7 +155,7 @@ static unsigned short g_BadColor = 0xFFFF;
 static WORD g_BackgroundFlags = 0xFFFF;
 static void GetInitialColors( )
 {
-#if !defined( _X360 ) && defined ( _WIN32 )
+#if !defined( _X360 )
 	// Get the old background attributes.
 	CONSOLE_SCREEN_BUFFER_INFO oldInfo;
 	GetConsoleScreenBufferInfo( GetStdHandle( STD_OUTPUT_HANDLE ), &oldInfo );
@@ -221,7 +177,7 @@ static void GetInitialColors( )
 WORD SetConsoleTextColor( int red, int green, int blue, int intensity )
 {
 	WORD ret = g_LastColor;
-#if !defined( _X360 ) && defined ( _WIN32 )
+#if !defined( _X360 )
 	
 	g_LastColor = 0;
 	if( red )	g_LastColor |= FOREGROUND_RED;
@@ -240,12 +196,43 @@ WORD SetConsoleTextColor( int red, int green, int blue, int intensity )
 
 void RestoreConsoleTextColor( WORD color )
 {
-#if !defined( _X360 ) && defined ( _WIN32 )
+#if !defined( _X360 )
 	SetConsoleTextAttribute( GetStdHandle( STD_OUTPUT_HANDLE ), color | g_BackgroundFlags );
 	g_LastColor = color;
 #endif
 }
 
+#endif
+
+#if defined(POSIX)
+
+// This pauses before exiting if they use -StopOnExit. Useful for debugging.
+class CExitStopper
+{
+public:
+	~CExitStopper()
+	{
+		if ( g_bStopOnExit )
+		{
+			// TODO: Unix programs normally don't do this.
+		}
+	}
+} g_ExitStopper;
+
+static void GetInitialColors( )
+{
+}
+
+WORD SetConsoleTextColor( int /*red*/, int /*green*/, int /*blue*/, int /*intensity*/ )
+{
+	return 0;
+}
+
+void RestoreConsoleTextColor( WORD /*color*/ )
+{
+}
+
+#endif
 
 #if defined( CMDLIB_NODBGLIB )
 
@@ -262,23 +249,33 @@ void Error( char const *pMsg, ... )
 
 #else
 
+#if defined( _WIN32 ) || defined( WIN32 )
 CRITICAL_SECTION g_SpewCS;
 bool g_bSpewCSInitted = false;
+#else
+pthread_mutex_t g_SpewCS = PTHREAD_MUTEX_INITIALIZER;
+#endif
 bool g_bSuppressPrintfOutput = false;
 
 SpewRetval_t CmdLib_SpewOutputFunc( SpewType_t type, char const *pMsg )
 {
+#if defined( _WIN32 ) || defined( WIN32 )
 	// Hopefully two threads won't call this simultaneously right at the start!
 	if ( !g_bSpewCSInitted )
 	{
 		InitializeCriticalSection( &g_SpewCS );
 		g_bSpewCSInitted = true;
 	}
+#endif
 
 	WORD old;
 	SpewRetval_t retVal;
-	
+
+#if defined( _WIN32 ) || defined( WIN32 )
 	EnterCriticalSection( &g_SpewCS );
+#else
+	pthread_mutex_lock( &g_SpewCS );
+#endif
 	{
 		if (( type == SPEW_MESSAGE ) || (type == SPEW_LOG ))
 		{
@@ -340,6 +337,8 @@ SpewRetval_t CmdLib_SpewOutputFunc( SpewType_t type, char const *pMsg )
 			retVal = SPEW_CONTINUE;
 		}
 
+#if defined( _WIN32 ) || defined( WIN32 )
+
 		if ( !g_bSuppressPrintfOutput || type == SPEW_ERROR )
 			printf( "%s", pMsg );
 
@@ -350,6 +349,14 @@ SpewRetval_t CmdLib_SpewOutputFunc( SpewType_t type, char const *pMsg )
 			printf( "\n" );
 			OutputDebugString( "\n" );
 		}
+#endif
+
+#if defined(POSIX)
+		printf( "%s", pMsg );
+
+		if ( type == SPEW_ERROR )
+			printf( "\n" );
+#endif
 
 		if( g_pLogFile )
 		{
@@ -363,7 +370,11 @@ SpewRetval_t CmdLib_SpewOutputFunc( SpewType_t type, char const *pMsg )
 
 		RestoreConsoleTextColor( old );
 	}
+#if defined( _WIN32 ) || defined( WIN32 )
 	LeaveCriticalSection( &g_SpewCS );
+#else
+	pthread_mutex_unlock( &g_SpewCS );
+#endif
 
 	if ( type == SPEW_ERROR )
 	{
@@ -372,7 +383,6 @@ SpewRetval_t CmdLib_SpewOutputFunc( SpewType_t type, char const *pMsg )
 
 	return retVal;
 }
-
 
 void InstallSpewFunction()
 {
@@ -459,11 +469,9 @@ void CmdLib_Cleanup()
 
 void CmdLib_Exit( int exitCode )
 {
-#ifdef _WIN32
+#if defined(WIN32) || defined(_WIN32)
 	TerminateProcess( GetCurrentProcess(), 1 );
-#endif
-
-#if defined ( POSIX )
+#else
 	exit(exitCode);
 #endif
 }	
@@ -471,8 +479,6 @@ void CmdLib_Exit( int exitCode )
 
 
 #endif
-
-//#endif
 
 
 
@@ -772,7 +778,7 @@ void CmdLib_AddBasePath( const char *pPath )
 
 bool CmdLib_HasBasePath( const char *pFileName_, int &pathLength )
 {
-	char *pFileName = ( char * )_alloca( V_strlen( pFileName_ ) + 1 );
+	char *pFileName = ( char * )_alloca( strlen( pFileName_ ) + 1 );
 	strcpy( pFileName, pFileName_ );
 	Q_FixSlashes( pFileName );
 	pathLength = 0;
@@ -780,9 +786,9 @@ bool CmdLib_HasBasePath( const char *pFileName_, int &pathLength )
 	for( i = 0; i < g_NumBasePaths; i++ )
 	{
 		// see if we can rip the base off of the filename.
-		if( Q_strncasecmp( g_pBasePaths[i], pFileName, V_strlen( g_pBasePaths[i] ) ) == 0 )
+		if( Q_strncasecmp( g_pBasePaths[i], pFileName, strlen( g_pBasePaths[i] ) ) == 0 )
 		{
-			pathLength = V_strlen( g_pBasePaths[i] );
+			pathLength = strlen( g_pBasePaths[i] );
 			return true;
 		}
 	}
@@ -862,14 +868,14 @@ FileHandle_t SafeOpenRead( const char *filename )
 
 void SafeRead( FileHandle_t f, void *buffer, int count)
 {
-	if ( g_pFileSystem->Read (buffer, count, f) != (size_t)count)
+	if ( (size_t)g_pFileSystem->Read (buffer, count, f) != (size_t)count)
 		Error ("File read failure");
 }
 
 
 void SafeWrite ( FileHandle_t f, void *buffer, int count)
 {
-	if (g_pFileSystem->Write (buffer, count, f) != (size_t)count)
+	if ((size_t)g_pFileSystem->Write (buffer, count, f) != (size_t)count)
 		Error ("File write failure");
 }
 
@@ -1010,7 +1016,7 @@ void CreatePath (char *path)
 }
 
 //-----------------------------------------------------------------------------
-// Creates a path, path may already exist. This is kinda janky, avoid.
+// Creates a path, path may already exist
 //-----------------------------------------------------------------------------
 #if defined( _WIN32 ) || defined( WIN32 )
 void SafeCreatePath( char *path )
@@ -1037,24 +1043,6 @@ void SafeCreatePath( char *path )
 		}
 	}
 }
-#elif defined( POSIX )
-void SafeCreatePath( char *path )
-{
-	char *ptr = path;
-	// Ignore leading slashes (don't mkdir /)
-	while ( *ptr == '/' ) { ptr++; };
-
-	while ( ptr && *ptr )
-	{
-		ptr = strchr( ptr+1, '/' );
-		if ( ptr )
-		{
-			*ptr = '\0';
-			_mkdir( path );
-			*ptr = '/';
-		}
-	}
-}
 #endif
 
 /*
@@ -1074,3 +1062,5 @@ void QCopyFile (char *from, char *to)
 	SaveFile (to, buffer, length);
 	free (buffer);
 }
+
+

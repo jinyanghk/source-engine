@@ -23,8 +23,6 @@
 #include "tier1/strtools.h"
 #include "KeyValues.h"
 
-#include "strlwr.h"
-
 static void SetCurrentModel( studiohdr_t *pStudioHdr );
 static void FreeCurrentModelVertexes();
 
@@ -249,7 +247,13 @@ static CPhysCollide* GetCollisionModel( char const* pModelName )
 	// Convert to a common string
 	char* pTemp = (char*)_alloca(strlen(pModelName) + 1);
 	strcpy( pTemp, pModelName );
+#if defined(_WIN32)
 	_strlwr( pTemp );
+#else
+	for (size_t i = 0; pTemp[i]; i++)
+		if (isupper( pTemp[i] ))
+			pTemp[i] = tolower( pTemp[i] );
+#endif
 
 	char* pSlash = strchr( pTemp, '\\' );
 	while( pSlash )

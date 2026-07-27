@@ -70,9 +70,9 @@ def build(bld):
         '../common/polylib.cpp',
         '../common/scriplib.cpp',
         '../common/threads.cpp',
-        '../common/strlwr.cpp',
+        #'../common/strlwr.cpp',
         '../../filesystem/linux_support.cpp',
-        #'../common/tools_minidump.cpp',
+        '../common/tools_minidump.cpp',
     ]
 
 	includes = [

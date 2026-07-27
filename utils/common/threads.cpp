@@ -13,63 +13,12 @@
 
 #define	USED
 
-#ifdef _WIN32
+#if defined(_WIN32)
 #include <windows.h>
 #endif
-
-#if defined ( POSIX )
-#include <thread>
-
+#if defined(POSIX)
 #include <pthread.h>
-#include <sched.h>
-
-#define IDLE_PRIORITY_CLASS SCHED_IDLE
-#define THREAD_PRIORITY_LOWEST 0
-#define THREAD_PRIORITY_IDLE 0
-
-typedef pthread_mutex_t CRITICAL_SECTION;
-
-inline void InitializeCriticalSection(CRITICAL_SECTION* ps)
-{
-   pthread_mutex_init(ps, NULL);
-}
-
-inline void DeleteCriticalSection(CRITICAL_SECTION* ps)
-{
-   pthread_mutex_destroy(ps);
-}
-
-inline void EnterCriticalSection(CRITICAL_SECTION* ps)
-{
-   pthread_mutex_lock(ps);
-}
-
-inline void LeaveCriticalSection(CRITICAL_SECTION* ps)
-{
-   pthread_mutex_unlock(ps);
-}
-
-inline int GetCurrentProcess()
-{
-	return pthread_self();
-}
-
-inline void SetPriorityClass(int pid, int policy)
-{
-	//int policy = SCHED_IDLE;
-    struct sched_param param;
-	param.sched_priority = 0; // Priority must be 0 for SCHED_IDLE
-
-	pthread_setschedparam(pid, policy, &param);
-}
-
-inline void SetThreadPriority(int pid, int priority)
-{
-	pthread_setschedprio(pid, priority);
-}
-
 #endif
-
 #include "cmdlib.h"
 #define NO_THREAD_NAMES
 #include "threads.h"
@@ -96,13 +45,14 @@ qboolean		pacifier;
 qboolean	threaded;
 bool g_bLowPriorityThreads = false;
 
-#ifdef _WIN32
+#if defined(_WIN32)
 HANDLE g_ThreadHandles[MAX_THREADS];
 #endif
-
-#if defined ( POSIX )
+#if defined(POSIX)
 pthread_t g_ThreadHandles[MAX_THREADS];
 #endif
+
+
 
 
 /*
@@ -159,6 +109,7 @@ void RunThreadsOnIndividual (int workcnt, qboolean showpacifier, ThreadWorkerFn 
 }
 
 
+#if defined(WIN32)
 /*
 ===================================================================
 
@@ -191,7 +142,6 @@ void SetLowPriority()
 
 void ThreadSetDefault (void)
 {
-#ifdef _WIN32
 	SYSTEM_INFO info;
 
 	if (numthreads == -1)	// not set manually
@@ -201,12 +151,7 @@ void ThreadSetDefault (void)
 		if (numthreads < 1 || numthreads > 32)
 			numthreads = 1;
 	}
-#endif
 
-#if defined ( POSIX )
-	// numthreads = 16;
-	numthreads = std::thread::hardware_concurrency();
-#endif
 	Msg ("%i threads\n", numthreads);
 }
 
@@ -231,13 +176,9 @@ void ThreadUnlock (void)
 	LeaveCriticalSection (&crit);
 }
 
-#ifdef _WIN32
+
 // This runs in the thread and dispatches a RunThreadsFn call.
 DWORD WINAPI InternalRunThreadsFn( LPVOID pParameter )
-#endif
-#if defined ( POSIX )
-void* InternalRunThreadsFn( void* pParameter )
-#endif
 {
 	CRunThreadsData *pData = (CRunThreadsData*)pParameter;
 	pData->m_Fn( pData->m_iThread, pData->m_pUserData );
@@ -259,7 +200,6 @@ void RunThreads_Start( RunThreadsFn fn, void *pUserData, ERunThreadsPriority ePr
 		g_RunThreadsData[i].m_pUserData = pUserData;
 		g_RunThreadsData[i].m_Fn = fn;
 
-#ifdef _WIN32
 		DWORD dwDummy;
 		g_ThreadHandles[i] = CreateThread(
 		   NULL,	// LPSECURITY_ATTRIBUTES lpsa,
@@ -268,11 +208,6 @@ void RunThreads_Start( RunThreadsFn fn, void *pUserData, ERunThreadsPriority ePr
 		   &g_RunThreadsData[i],	// LPVOID lpvThreadParm,
 		   0,			// DWORD fdwCreate,
 		   &dwDummy );
-#endif
-
-#if defined ( POSIX )
-		pthread_create( &g_ThreadHandles[i], NULL, InternalRunThreadsFn, &g_RunThreadsData[i]);
-#endif
 
 		if ( ePriority == k_eRunThreadsPriority_UseGlobalState )
 		{
@@ -289,14 +224,101 @@ void RunThreads_Start( RunThreadsFn fn, void *pUserData, ERunThreadsPriority ePr
 
 void RunThreads_End()
 {
-#ifdef _WIN32
 	WaitForMultipleObjects( numthreads, g_ThreadHandles, TRUE, INFINITE );
 	for ( int i=0; i < numthreads; i++ )
 		CloseHandle( g_ThreadHandles[i] );
-#endif
+
 	threaded = false;
 }
-	
+#endif
+
+#if defined(POSIX)
+/*
+===================================================================
+
+POSIX
+
+===================================================================
+*/
+
+int		numthreads = -1;
+pthread_mutex_t		crit = PTHREAD_MUTEX_INITIALIZER;
+static int enter;
+
+void SetLowPriority()
+{
+}
+
+
+void ThreadSetDefault (void)
+{
+	if (numthreads == -1)	// not set manually
+	{
+		if ((numthreads = (int) sysconf(_SC_NPROCESSORS_ONLN)) < 1)
+			numthreads = 1;
+	}
+
+	Msg ("%i threads\n", numthreads);
+}
+
+
+void ThreadLock (void)
+{
+	if (!threaded)
+		return;
+	pthread_mutex_lock (&crit);
+	if (enter)
+		Error ("Recursive ThreadLock\n");
+	enter = 1;
+}
+
+void ThreadUnlock (void)
+{
+	if (!threaded)
+		return;
+	if (!enter)
+		Error ("ThreadUnlock without lock\n");
+	enter = 0;
+	pthread_mutex_unlock (&crit);
+}
+
+
+// This runs in the thread and dispatches a RunThreadsFn call.
+void* InternalRunThreadsFn( void* pParameter )
+{
+	CRunThreadsData *pData = (CRunThreadsData*)pParameter;
+	pData->m_Fn( pData->m_iThread, pData->m_pUserData );
+	return NULL;
+}
+
+
+void RunThreads_Start( RunThreadsFn fn, void *pUserData, ERunThreadsPriority ePriority )
+{
+	Assert( numthreads > 0 );
+	threaded = true;
+
+	if ( numthreads > MAX_TOOL_THREADS )
+		numthreads = MAX_TOOL_THREADS;
+
+	for ( int i=0; i < numthreads ;i++ )
+	{
+		g_RunThreadsData[i].m_iThread = i;
+		g_RunThreadsData[i].m_pUserData = pUserData;
+		g_RunThreadsData[i].m_Fn = fn;
+
+		pthread_create(&g_ThreadHandles[i], NULL, InternalRunThreadsFn, &g_RunThreadsData[i]);
+	}
+}
+
+
+void RunThreads_End()
+{
+	for ( int i=0; i < numthreads; i++ )
+		pthread_join( g_ThreadHandles[i], NULL );
+
+	threaded = false;
+}
+#endif
 
 /*
 =============
@@ -331,5 +353,4 @@ void RunThreadsOn( int workcnt, qboolean showpacifier, RunThreadsFn fn, void *pU
 		printf (" (%i)\n", end-start);
 	}
 }
-
 
