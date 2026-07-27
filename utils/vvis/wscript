@@ -34,6 +34,7 @@ def build(bld):
 		'WaterDist.cpp',
 		'../../public/zip_utils.cpp',
 		'../../filesystem/linux_support.cpp',
+		'../common/tools_minidump.cpp',
 	]
 
 	includes = [

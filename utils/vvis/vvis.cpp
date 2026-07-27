@@ -7,7 +7,7 @@
 //=============================================================================//
 // vis.c
 
-#ifdef _WIN32
+#if defined( _WIN32 )
 #include <windows.h>
 #endif
 #include "vis.h"
@@ -23,9 +23,7 @@
 #include "tier0/icommandline.h"
 #include "vmpi_tools_shared.h"
 #include "ilaunchabledll.h"
-#ifdef _WIN32
 #include "tools_minidump.h"
-#endif
 #include "loadcmdline.h"
 #include "byteswap.h"
 
@@ -308,7 +306,7 @@ void CalcPortalVis (void)
 	}
 
 
-#ifdef _WIN32
+#if defined( _WIN32 )
     if (g_bUseMPI) 
 	{
  		RunMPIPortalFlow();
@@ -339,7 +337,7 @@ void CalcVis (void)
 {
 	int		i;
 
-#ifdef _WIN32
+#if defined( _WIN32 )
 	if (g_bUseMPI) 
 	{
 		RunMPIBasePortalVis();
@@ -390,6 +388,7 @@ void SetPortalSphere (portal_t *p)
 		VectorAdd (total, w->points[i], total);
 	}
 	
+
 	for (i=0 ; i<3 ; i++)
 		total[i] /= w->numpoints;
 
@@ -423,12 +422,13 @@ void LoadPortals (char *name)
 
 	FILE *f;
 
+#if defined( _WIN32 )
 	// Open the portal file.
-#ifdef _WIN32
 	if ( g_bUseMPI )
 	{
 		// If we're using MPI, copy off the file to a temporary first. This will download the file
 		// from the MPI master, then we get to use nice functions like fscanf on it.
+#if defined( _WIN32 )
 		char tempPath[MAX_PATH], tempFile[MAX_PATH];
 		if ( GetTempPath( sizeof( tempPath ), tempPath ) == 0 )
 		{
@@ -439,6 +439,7 @@ void LoadPortals (char *name)
 		{
 			Error( "LoadPortals: GetTempFileName failed.\n" );
 		}
+#endif
 
 		// Read all the data from the network file into memory.
 		FileHandle_t hFile = g_pFileSystem->Open(name, "r");
@@ -450,6 +451,7 @@ void LoadPortals (char *name)
 		g_pFileSystem->Read( data.Base(), data.Count(), hFile );
 		g_pFileSystem->Close( hFile );
 
+#if defined( _WIN32 )
 		// Dump it into a temp file.
 		f = fopen( tempFile, "wt" );
 		fwrite( data.Base(), 1, data.Count(), f );
@@ -457,6 +459,13 @@ void LoadPortals (char *name)
 
 		// Open the temp file up.
 		f = fopen( tempFile, "rSTD" ); // read only, sequential, temporary, delete on close
+#endif
+
+#if defined( POSIX )
+		f = tmpfile();
+		fwrite( data.Base(), 1, data.Count(), f );
+		fseeko(f, 0, SEEK_CUR);
+#endif
 	}
 	else
 #endif
@@ -510,8 +519,8 @@ void LoadPortals (char *name)
 			Error ("LoadPortals: reading portal %i", i);
 		if (numpoints > MAX_POINTS_ON_WINDING)
 			Error ("LoadPortals: portal %i has too many points", i);
-		if ( (unsigned)leafnums[0] > portalclusters
-		|| (unsigned)leafnums[1] > portalclusters)
+		if ( leafnums[0] > portalclusters
+		|| leafnums[1] > portalclusters)
 			Error ("LoadPortals: reading portal %i", i);
 		
 		w = p->winding = NewWinding (numpoints);
@@ -967,7 +976,7 @@ int ParseCommandLine( int argc, char **argv )
 		}
 		else if ( !Q_stricmp( argv[i], "-FullMinidumps" ) )
 		{
-			//EnableFullMinidumps( true );
+			EnableFullMinidumps( true );
 		}
 		else if ( !Q_stricmp( argv[i], CMDLINEOPTION_NOVCONFIG ) )
 		{
@@ -980,19 +989,20 @@ int ParseCommandLine( int argc, char **argv )
 		{
 			// nothing to do here, but don't bail on this option
 		}
+#if defined( _WIN32 )
 		// NOTE: the -mpi checks must come last here because they allow the previous argument 
 		// to be -mpi as well. If it game before something else like -game, then if the previous
 		// argument was -mpi and the current argument was something valid like -game, it would skip it.
 		else if ( !Q_strncasecmp( argv[i], "-mpi", 4 ) || !Q_strncasecmp( argv[i-1], "-mpi", 4 ) )
 		{
-#ifdef _WIN32
 			if ( stricmp( argv[i], "-mpi" ) == 0 )
 				g_bUseMPI = true;
-#endif
+		
 			// Any other args that start with -mpi are ok too.
 			if ( i == argc - 1 )
 				break;
 		}
+#endif
 		else if (argv[i][0] == '-')
 		{
 			Warning("VBSP: Unknown option \"%s\"\n\n", argv[i]);
@@ -1123,7 +1133,7 @@ int RunVVis( int argc, char **argv )
 	start = Plat_FloatTime();
 
 
-#ifdef _WIN32
+#if defined( _WIN32 )
 	if (!g_bUseMPI)
 	{
 		// Setup the logfile.
@@ -1138,7 +1148,7 @@ int RunVVis( int argc, char **argv )
 	{
 		SetLowPriority();
 	}
-
+	
 	ThreadSetDefault ();
 
 	Msg ("reading %s\n", mapFile);
@@ -1173,7 +1183,7 @@ int RunVVis( int argc, char **argv )
 		Q_StripExtension( portalfile, portalfile, sizeof( portalfile ) );
 	}
 	strcat (portalfile, ".prt");
-
+	
 	Msg ("reading %s\n", portalfile);
 	LoadPortals (portalfile);
 
@@ -1202,7 +1212,7 @@ int RunVVis( int argc, char **argv )
 		{
 			Error("Invalid cluster trace: %d to %d, valid range is 0 to %d\n", g_TraceClusterStart, g_TraceClusterStop, portalclusters-1 );
 		}
-#ifdef _WIN32
+#if defined( _WIN32 )
 		if ( g_bUseMPI )
 		{
 			Warning("Can't compile trace in MPI mode\n");
@@ -1211,9 +1221,9 @@ int RunVVis( int argc, char **argv )
 		CalcVisTrace ();
 		WritePortalTrace(source);
 	}
-
+	
 	end = Plat_FloatTime();
-
+	
 	char str[512];
 	GetHourMinuteSecondsString( (int)( end - start ), str, sizeof( str ) );
 	Msg( "%s elapsed\n", str );
@@ -1238,15 +1248,17 @@ int main (int argc, char **argv)
 	InstallAllocationFunctions();
 	InstallSpewFunction();
 
-#ifdef _WIN32
+#if defined( _WIN32 )
 	VVIS_SetupMPI( argc, argv );
+#endif
 
 	// Install an exception handler.
+#if defined( _WIN32 )
 	if ( g_bUseMPI && !g_bMPIMaster )
 		SetupToolsMinidumpHandler( VMPI_ExceptionFilter );
 	else
-		SetupDefaultToolsMinidumpHandler();
 #endif
+		SetupDefaultToolsMinidumpHandler();
 
 	return RunVVis( argc, argv );
 }

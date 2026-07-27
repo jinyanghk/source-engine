@@ -556,7 +556,16 @@ void qprintf (const char *format, ...)
 #if defined( CMDLIB_NODBGLIB )
 	printf( "%s", str );
 #else
-	Msg( "%s", str );
+	//Msg( "%s", str ); 
+	// tier0/dbg.cpp bug in void CDbgLogger::Write(const char *data)
+	// 	else if( iMsg < MAX_MSGS )
+	//  {
+	//  	pMsgs[iMsg] = new char[len+8]; // this fails sometimes ...
+	//  	memcpy(pMsgs[iMsg], data, len);
+	//  	pMsgs[iMsg][len] = 0;
+	//  	iMsg++;
+	}
+	printf( "%s", str );
 #endif
 
 	va_end (argptr);

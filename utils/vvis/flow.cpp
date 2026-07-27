@@ -414,7 +414,7 @@ Vector ClusterCenter( int cluster )
 
 void DumpPortalTrace( pstack_t *pStack )
 {
-	AUTO_LOCK(g_PortalTrace.m_mutex);
+	AUTO_LOCK_FM(g_PortalTrace.m_mutex);
 	if ( g_PortalTrace.m_list.Count() )
 		return;
 
@@ -487,7 +487,7 @@ void RecursiveLeafFlow (int leafnum, threaddata_t *thread, pstack_t *prevstack)
 	long		*test, *might, *vis, more;
 	int			pnum;
 
-#ifdef _WIN32
+#if defined(_WIN32)
 	// Early-out if we're a VMPI worker that's told to exit. If we don't do this here, then the
 	// worker might spin its wheels for a while on an expensive work unit and not be available to the pool.
 	// This is pretty common in vis.
