@@ -1205,7 +1205,7 @@ void ComputeDirectLightingAtPoint( Vector &position, Vector &normal, Vector &out
 		                      static_prop_id_to_skip, flEpsilon );
 
 #if !USE_STDC_FOR_SIMD
-		VectorMA( outColor, sampleOutput.m_flFalloff[0] * sampleOutput.m_flDot[0][0], dl->light.intensity, outColor );
+		VectorMA( outColor, ((float*) &sampleOutput.m_flFalloff)[0] * ((float*) &sampleOutput.m_flDot[0])[0], dl->light.intensity, outColor );
 #else
 		VectorMA( outColor, sampleOutput.m_flFalloff.m128_f32[0] * sampleOutput.m_flDot[0].m128_f32[0], dl->light.intensity, outColor );
 #endif
@@ -1581,7 +1581,7 @@ void CVradStaticPropMgr::SerializeLighting()
 			pMesh->m_nOffset   = (unsigned int)pVertexData - (unsigned int)pVhvHdr; 
 
 			// construct vertexes
-			for (int k=0; k<pMesh->m_nVertexes; k++)
+			for (unsigned int k=0; k<pMesh->m_nVertexes; k++)
 			{
 				Vector &vertexColor = m_StaticProps[i].m_MeshData[n].m_VertexColors[k];
 

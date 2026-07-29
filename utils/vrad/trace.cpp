@@ -134,7 +134,7 @@ public:
 			if ( ( sign >> s) & 0x1 )
 			{
 #if !USE_STDC_FOR_SIMD
-				addedCoverage[s] = ComputeCoverageFromTexture( (*b0)[s], (*b1)[s], (*b2)[s], hitID );
+				addedCoverage[s] = ComputeCoverageFromTexture( ((float*) b0)[s], ((float*) b1)[s], ((float*) b2)[s], hitID );
 #else
 				addedCoverage[s] = ComputeCoverageFromTexture( b0->m128_f32[s], b1->m128_f32[s], b2->m128_f32[s], hitID );
 #endif
@@ -174,7 +174,7 @@ void TestLine( const FourVectors& start, const FourVectors& stop,
 		visibility[i] = 1.0f;
 		if ( ( rt_result.HitIds[i] != -1 ) &&
 #if !USE_STDC_FOR_SIMD
-			 ( rt_result.HitDistance[i] < len[i] ) )
+			 ( ((float*) &rt_result.HitDistance)[i] < ((float*) &len)[i] ) )
 #else
 		     ( rt_result.HitDistance.m128_f32[i] < len.m128_f32[i] ) )
 #endif
@@ -382,7 +382,7 @@ void TestLine_DoesHitSky( FourVectors const& start, FourVectors const& stop,
 		aOcclusion[i] = 0.0f;
 		if ( ( rt_result.HitIds[i] != -1 ) &&
 #if !USE_STDC_FOR_SIMD
-			 ( rt_result.HitDistance[i] < len[i] ) )
+			 ( ((float*) &rt_result.HitDistance)[i] < ((float*) &len)[i] ) )
 #else
 		     ( rt_result.HitDistance.m128_f32[i] < len.m128_f32[i] ) )
 #endif
@@ -637,7 +637,7 @@ void AddBrushesForRayTrace( void )
 			if ( j >= MAX_POINTS_ON_WINDING )
 				Error( "***** ERROR! MAX_POINTS_ON_WINDING reached!" );
 
-			if ( face->firstedge + j >= ARRAYSIZE( dsurfedges ) )
+			if ( face->firstedge + j >= (int) ARRAYSIZE( dsurfedges ) )
 				Error( "***** ERROR! face->firstedge + j >= ARRAYSIZE( dsurfedges )!" );
 
 			int surfEdge = dsurfedges[face->firstedge + j];
