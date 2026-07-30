@@ -11,6 +11,11 @@
 #include "tier0/icommandline.h"
 #include "utlbuffer.h"
 
+#if defined ( POSIX )
+#include <sys/stat.h>
+#include <sys/types.h>
+#endif
+
 int CopyVariableLump( int lump, void **dest, int size );
 
 void StripPath( const char* pPath, char* pBuf, int nBufLen )
@@ -177,7 +182,13 @@ int main( int argc, char **argv )
 				V_strncat( targetName, relativeName, sizeof(targetName) );
 				Q_FixSlashes( targetName, '\\' );
 
+#ifdef _WIN32
 				SafeCreatePath( targetName );
+#endif
+
+#if defined ( POSIX )
+				mkdir( targetName, 0755 );
+#endif
 
 				printf( "Writing file: %s\n", targetName );
 				FILE *fp = fopen( targetName, "wb" );
@@ -236,7 +247,13 @@ int main( int argc, char **argv )
 				V_strncat( targetName, relativeName, sizeof( targetName ) );
 				Q_FixSlashes( targetName, '\\' );
 
+#ifdef _WIN32
 				SafeCreatePath( targetName );
+#endif
+
+#if defined ( POSIX )
+				mkdir( targetName, 0755 );
+#endif
 
 				printf( "Writing vtf file: %s\n", targetName );
 				FILE *fp = fopen( targetName, "wb" );

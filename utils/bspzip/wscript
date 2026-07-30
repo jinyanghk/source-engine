@@ -5,34 +5,33 @@ from waflib import Utils
 import os
 
 top = '.'
-PROJECT_NAME = 'bsppack'
+PROJECT_NAME = 'bspzip'
 
 def options(opt):
 	# stub
 	return
 
 def configure(conf):
-	conf.define('PROTECTED_THINGS_DISABLE',1)
+	conf.define('ZIP_SUPPORT_LZMA_ENCODE',1)
 
 def build(bld):
 	source = [
         '../common/bsplib.cpp',
-        'bsppack.cpp',
-		'../common/cmdlib.cpp',
-		'../../public/filesystem_helpers.cpp',
+        'bspzip.cpp',
+        '../common/cmdlib.cpp',
+        '../../public/filesystem_helpers.cpp',
         '../../public/filesystem_init.cpp',
         '../common/filesystem_tools.cpp',
-		'../../public/lumpfiles.cpp',
-		'../common/scriplib.cpp',
-		'../../public/zip_utils.cpp',
-		'../../filesystem/linux_support.cpp',
+        '../../public/lumpfiles.cpp',
+        '../common/scriplib.cpp',
+        '../../public/zip_utils.cpp',
     ]
 	includes = ['.', '../../public', '../../public/tier0', '../../public/tier1', '../common']
-	defines = []
+	defines = ['MACRO_MATHLIB', 'PROTECTED_THINGS_DISABLE', 'ZIP_SUPPORT_LZMA_ENCODE']
 	libs = ['lzma', 'mathlib', 'vstdlib', 'tier2', 'tier1', 'tier0']
 
 	install_path = bld.env.BINDIR
-	bld.shlib(
+	bld(
 		source   = source,
 		target   = PROJECT_NAME,
 		name     = PROJECT_NAME,
