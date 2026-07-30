@@ -134,7 +134,8 @@ public:
 			if ( ( sign >> s) & 0x1 )
 			{
 #if !USE_STDC_FOR_SIMD
-				addedCoverage[s] = ComputeCoverageFromTexture( ((float*) b0)[s], ((float*) b1)[s], ((float*) b2)[s], hitID );
+				//addedCoverage[s] = ComputeCoverageFromTexture( ((float*) b0)[s], ((float*) b1)[s], ((float*) b2)[s], hitID );
+				addedCoverage[s] = ComputeCoverageFromTexture(SubFloat(*b0, s), SubFloat(*b1, s), SubFloat(*b2, s), hitID );
 #else
 				addedCoverage[s] = ComputeCoverageFromTexture( b0->m128_f32[s], b1->m128_f32[s], b2->m128_f32[s], hitID );
 #endif
@@ -174,7 +175,8 @@ void TestLine( const FourVectors& start, const FourVectors& stop,
 		visibility[i] = 1.0f;
 		if ( ( rt_result.HitIds[i] != -1 ) &&
 #if !USE_STDC_FOR_SIMD
-			 ( ((float*) &rt_result.HitDistance)[i] < ((float*) &len)[i] ) )
+			 //( ((float*) &rt_result.HitDistance)[i] < ((float*) &len)[i] ) )
+			 ( SubFloat( rt_result.HitDistance, i ) < SubFloat( len, i ) ) )
 #else
 		     ( rt_result.HitDistance.m128_f32[i] < len.m128_f32[i] ) )
 #endif
@@ -382,7 +384,8 @@ void TestLine_DoesHitSky( FourVectors const& start, FourVectors const& stop,
 		aOcclusion[i] = 0.0f;
 		if ( ( rt_result.HitIds[i] != -1 ) &&
 #if !USE_STDC_FOR_SIMD
-			 ( ((float*) &rt_result.HitDistance)[i] < ((float*) &len)[i] ) )
+			 //( ((float*) &rt_result.HitDistance)[i] < ((float*) &len)[i] ) )
+			 ( SubFloat( rt_result.HitDistance, i ) < SubFloat( len, i ) ) )
 #else
 		     ( rt_result.HitDistance.m128_f32[i] < len.m128_f32[i] ) )
 #endif

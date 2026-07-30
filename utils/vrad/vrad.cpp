@@ -2617,7 +2617,7 @@ int ParseCommandLine( int argc, char **argv, bool *onlydetail )
 		}
 		else if ( !Q_stricmp( argv[i], "-FullMinidumps" ) )
 		{
-			//EnableFullMinidumps( true );
+			EnableFullMinidumps( true );
 		}
 		else if ( !Q_stricmp( argv[i], "-hdr" ) )
 		{
@@ -2966,7 +2966,7 @@ int VRAD_Main(int argc, char **argv)
 #endif
 	{
 		LoadCmdLineFromFile( argc, argv, source, "vrad" ); // Don't do this if we're a VMPI worker..
-		//SetupDefaultToolsMinidumpHandler();
+		SetupDefaultToolsMinidumpHandler();
 	}
 	
 	return RunVRAD( argc, argv );

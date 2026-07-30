@@ -1,0 +1,67 @@
+#! /usr/bin/env python
+# encoding: utf-8
+
+from waflib import Utils
+import os
+
+top = '.'
+PROJECT_NAME = 'elementviewer'
+
+def options(opt):
+	# stub
+	return
+
+def configure(conf):
+	conf.define('DONT_PROTECT_FILEIO_FUNCTIONS',1)
+
+def build(bld):
+	source = [
+        'elementviewer.cpp',
+        'elementviewerpanel.cpp',
+        '../../public/interpolatortypes.cpp',
+        '../../public/movieobjects/movieobjects.cpp',
+        '../../public/vgui_controls/vgui_controls.cpp',
+        '../../public/lumpfiles.cpp',
+        '../../public/scratchpad3d.cpp',
+        '../common/scriplib.cpp',
+        '../../public/zip_utils.cpp',
+    ]
+	includes = [
+        '.', 
+        '../../vgui2/include', 
+        '../../public', 
+        '../../public/tier0', 
+        '../../public/tier1', 
+        '../common'
+    ]
+	defines = []
+	libs = [
+        'appframework', 
+        'datamodel', 
+        'dmxloader', 
+        'dme_controls', 
+        'dmserializers', 
+        'mathlib', 
+        'matsys_controls',
+        'movieobjects',
+        'sfmobjects',
+        'tier3',
+        'tier2',
+        'vgui_controls',
+        'tier1',
+        'tier0',
+    ]
+
+	install_path = bld.env.BINDIR
+	bld(
+		source   = source,
+		target   = PROJECT_NAME,
+		name     = PROJECT_NAME,
+		features = 'c cxx cxxprogram',
+		includes = includes,
+		defines  = defines,
+		use      = libs,
+		install_path = install_path,
+		subsystem = bld.env.MSVC_SUBSYSTEM,
+		idx      = bld.get_taskgen_count()
+	)

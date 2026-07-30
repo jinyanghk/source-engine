@@ -25,8 +25,11 @@
 #include "bitmap/imageformat.h"
 #include "coordsize.h"
 
-#if defined ( POSIX )
-#include <algorithm>
+#ifndef min
+	#define min(a,b)  (((a) < (b)) ? (a) : (b))
+#endif
+#ifndef max
+	#define max(a,b)  (((a) > (b)) ? (a) : (b))
 #endif
 
 enum
@@ -96,8 +99,8 @@ int CNormalList::FindOrAddNormal( Vector const &vNormal )
 	for( int iDim=0; iDim < 3; iDim++ )
 	{
 		gi[iDim] = (int)( ((vNormal[iDim] + 1.0f) * 0.5f) * NUM_SUBDIVS - 0.000001f );
-		gi[iDim] = std::min<int>( gi[iDim], NUM_SUBDIVS );
-		gi[iDim] = std::max<int>( gi[iDim], 0 );
+		gi[iDim] = min( gi[iDim], NUM_SUBDIVS );
+		gi[iDim] = max( gi[iDim], 0 );
 	}
 
 	// Look for a matching vector in there.
@@ -2541,7 +2544,8 @@ static void GatherSampleLightAt4Points( SSE_SampleInfo_t& info, int sampleIdx, i
 			{
 				Warning ("\nWARNING: Too many light styles on a face at (%f, %f, %f)\n",
 #if !USE_STDC_FOR_SIMD
-					((float*) &info.m_Points.x)[0], ((float*) &info.m_Points.y)[0], ((float*) &info.m_Points.z)[0] );
+					//((float*) &info.m_Points.x)[0], ((float*) &info.m_Points.y)[0], ((float*) &info.m_Points.z)[0] );
+					SubFloat(info.m_Points.x, 0), SubFloat(info.m_Points.y, 0), SubFloat(info.m_Points.z, 0) );
 #else
 					info.m_Points.x.m128_f32[0], info.m_Points.y.m128_f32[0], info.m_Points.z.m128_f32[0] );
 #endif

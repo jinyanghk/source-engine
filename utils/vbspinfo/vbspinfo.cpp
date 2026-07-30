@@ -13,7 +13,7 @@
 #include "filesystem_tools.h"
 #include "tier2/fileutils.h"
 #include "gamebspfile.h"
-#include "tier1/utlstringmap.h"
+#include "tier1/UtlStringMap.h"
 #include "tools_minidump.h"
 #include "cmdlib.h"
 
@@ -110,7 +110,7 @@ void CalcTreeDepth_R( int iNode, int iLevel, int &iMaxDepth )
 	CalcTreeDepth_R( dnodes[iNode].children[1], iLevel+1, iMaxDepth );
 }
 
-
+#ifdef _WIN32
 void DrawTreeToScratchPad()
 {
 	IScratchPad3D *pPad = ScratchPad3D_Create();
@@ -131,6 +131,7 @@ void DrawTreeToScratchPad()
 	
 	pPad->Release();
 }
+#endif
 
 struct WorldTextureStats_t
 {
@@ -319,7 +320,7 @@ void PrintCommandLine( int argc, char **argv )
 	Warning( "\n\n" );
 }
 
-void main (int argc, char **argv)
+int main (int argc, char **argv)
 {
 	// Install an exception handler.
 	SetupDefaultToolsMinidumpHandler();
@@ -440,7 +441,11 @@ void main (int argc, char **argv)
 
 			// If the filename doesn't have a path, prepend with the current directory
 			char fullbspname[MAX_PATH];
+#ifdef _WIN32
 			_fullpath( fullbspname, source, sizeof( fullbspname ) );
+#else
+			realpath( source, fullbspname );
+#endif
 
 			for ( int extract = 0; extract < HEADER_LUMPS; extract++ )
 			{
@@ -550,7 +555,7 @@ void main (int argc, char **argv)
 		
 		if ( g_bDrawTree )
 		{
-			DrawTreeToScratchPad();
+			//DrawTreeToScratchPad();
 		}
 		
 		if( !bWorldTextureStats && !bModelStats && !bListStaticProps )
@@ -558,4 +563,6 @@ void main (int argc, char **argv)
 			printf ("---------------------\n");
 		}
 	}
+
+	return 0;
 }

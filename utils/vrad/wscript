@@ -56,6 +56,7 @@ def build(bld):
 		'../../public/scratchpadutils.cpp',
 		'../common/filesystem_tools.cpp',
 		'../../public/filesystem_init.cpp',
+		'../common/tools_minidump.cpp',
 	]
 
 	includes = [

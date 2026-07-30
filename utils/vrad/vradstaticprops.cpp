@@ -41,7 +41,12 @@
 #include "vmpi_distribute_work.h"
 #endif
 
-#include <algorithm>
+#ifndef min
+	#define min(a,b)  (((a) < (b)) ? (a) : (b))
+#endif
+#ifndef max
+	#define max(a,b)  (((a) > (b)) ? (a) : (b))
+#endif
 
 #define ALIGN_TO_POW2(x,y) (((x)+(y-1))&~(y-1))
 
@@ -158,20 +163,20 @@ void Rasterizer::Build()
 	const float baseY = mUvStepY / 2.0f;
 
 
-	float fMinX = std::min<float>(std::min<float>(mT0.x, mT1.x), mT2.x);
-	float fMinY = std::min<float>(std::min<float>(mT0.y, mT1.y), mT2.y);
-	float fMaxX = std::max<float>(std::max<float>(mT0.x, mT1.x), mT2.x);
-	float fMaxY = std::max<float>(std::max<float>(mT0.y, mT1.y), mT2.y);
+	float fMinX = min(min(mT0.x, mT1.x), mT2.x);
+	float fMinY = min(min(mT0.y, mT1.y), mT2.y);
+	float fMaxX = max(max(mT0.x, mT1.x), mT2.x);
+	float fMaxY = max(max(mT0.y, mT1.y), mT2.y);
 
 	// Degenerate. Consider warning about these, but otherwise no problem.
 	if (fMinX == fMaxX || fMinY == fMaxY)
 		return;
 
 	// Clamp to 0..1
-	fMinX = std::max<float>(0, fMinX);
-	fMinY = std::max<float>(0, fMinY);
-	fMaxX = std::min<float>(1.0f, fMaxX);
-	fMaxY = std::min<float>(1.0f, fMaxY);
+	fMinX = max(0, fMinX);
+	fMinY = max(0, fMinY);
+	fMaxX = min(1.0f, fMaxX);
+	fMaxY = min(1.0f, fMaxY);
 
 	// We puff the interesting area up by 1 so we can hit an inflated region for the necessary bilerp data.
 	// If we wanted to support better texturing (almost definitely unnecessary), we'd change this to a larger size.
@@ -183,10 +188,10 @@ void Rasterizer::Build()
 	int iMaxY = GetRow(fMaxY) + 1 + kFilterSampleRadius;
 
 	// Clamp to valid texture (integer) locations
-	iMinX = std::max<int>(0, iMinX);
-	iMinY = std::max<int>(0, iMinY);
-	iMaxX = std::min<int>(iMaxX, mResX - 1);
-	iMaxY = std::min<int>(iMaxY, mResY - 1);
+	iMinX = max(0, iMinX);
+	iMinY = max(0, iMinY);
+	iMaxX = min(iMaxX, mResX - 1);
+	iMaxY = min(iMaxY, mResY - 1);
 
 	// Set the size to be as expected. 
 	// TODO: Pass this in from outside to minimize allocations
@@ -498,8 +503,8 @@ bool LoadStudioModel( char const* pModelName, CUtlBuffer& buf )
 	}
 
 	// ensure reset
-	pHdr->unused_pVertexBase = NULL;
-	pHdr->unused_pIndexBase  = NULL;
+	pHdr->SetVertexBase( NULL );
+	pHdr->SetIndexBase( NULL );
 
 	return true;
 }
@@ -782,15 +787,15 @@ public:
 	// HACKHACK: Compute the average coverage for this triangle by sampling the AABB of its texture space
 	float ComputeCoverageForTriangle( int shadowTextureIndex, const Vector2D &t0, const Vector2D &t1, const Vector2D &t2 )
 	{
-		float umin = std::min<float>(t0.x, t1.x);
-		umin = std::min<float>(umin, t2.x);
-		float umax = std::max<float>(t0.x, t1.x);
-		umax = std::max<float>(umax, t2.x);
+		float umin = min(t0.x, t1.x);
+		umin = min(umin, t2.x);
+		float umax = max(t0.x, t1.x);
+		umax = max(umax, t2.x);
 
-		float vmin = std::min<float>(t0.y, t1.y);
-		vmin = std::min<float>(vmin, t2.y);
-		float vmax = std::max<float>(t0.y, t1.y);
-		vmax = std::max<float>(vmax, t2.y);
+		float vmin = min(t0.y, t1.y);
+		vmin = min(vmin, t2.y);
+		float vmax = max(t0.y, t1.y);
+		vmax = max(vmax, t2.y);
 
 		// UNDONE: Do something about tiling
 		umin = clamp(umin, 0, 1);
@@ -1113,9 +1118,9 @@ void CVradStaticPropMgr::Shutdown()
 		studiohdr_t *pStudioHdr = m_StaticPropDict[i].m_pStudioHdr;
 		if ( pStudioHdr )
 		{
-			if ( pStudioHdr->unused_pVertexBase )
+			if ( pStudioHdr->VertexBase() )
 			{
-				free( pStudioHdr->unused_pVertexBase );
+				free( pStudioHdr->VertexBase() );
 			}
 			free( pStudioHdr );
 		}
@@ -1205,7 +1210,9 @@ void ComputeDirectLightingAtPoint( Vector &position, Vector &normal, Vector &out
 		                      static_prop_id_to_skip, flEpsilon );
 
 #if !USE_STDC_FOR_SIMD
-		VectorMA( outColor, ((float*) &sampleOutput.m_flFalloff)[0] * ((float*) &sampleOutput.m_flDot[0])[0], dl->light.intensity, outColor );
+		//VectorMA( outColor, ((float*) &sampleOutput.m_flFalloff)[0] * ((float*) &sampleOutput.m_flDot[0])[0], dl->light.intensity, outColor );
+		float scale = SubFloat( sampleOutput.m_flFalloff, 0 ) * SubFloat( sampleOutput.m_flDot[0], 0 );
+		VectorMA( outColor, scale, dl->light.intensity, outColor );
 #else
 		VectorMA( outColor, sampleOutput.m_flFalloff.m128_f32[0] * sampleOutput.m_flDot[0].m128_f32[0], dl->light.intensity, outColor );
 #endif
@@ -2181,9 +2188,9 @@ const vertexFileHeader_t * mstudiomodel_t::CacheVertexData( void *pModelData )
 	studiohdr_t *pActiveStudioHdr = static_cast<studiohdr_t *>(pModelData);
 	Assert( pActiveStudioHdr );
 
-	if ( pActiveStudioHdr->unused_pVertexBase )
+	if ( pActiveStudioHdr->VertexBase() )
 	{
-		return (vertexFileHeader_t *)pActiveStudioHdr->unused_pVertexBase;
+		return (vertexFileHeader_t *)pActiveStudioHdr->VertexBase();
 	}
 
 	// mandatory callback to make requested data resident
@@ -2242,7 +2249,7 @@ const vertexFileHeader_t * mstudiomodel_t::CacheVertexData( void *pModelData )
 	free( pVvdHdr );
 	pVvdHdr = pNewVvdHdr;
 
-	pActiveStudioHdr->unused_pVertexBase = (void*)pVvdHdr;
+	pActiveStudioHdr->SetVertexBase( (void*)pVvdHdr );
 	return pVvdHdr;
 }
 
@@ -2467,8 +2474,8 @@ static int GetTexelCount(unsigned int _resX, unsigned int _resY, bool _mipmaps)
 	while (_resX > 1 || _resY > 1) 
 	{
 		retVal += _resX * _resY;
-		_resX = std::max<int>(1, _resX >> 1);
-		_resY = std::max<int>(1, _resY >> 1);
+		_resX = max(1, _resX >> 1);
+		_resY = max(1, _resY >> 1);
 	}
 
 	// Add in the 1x1 mipmap level, which wasn't hit above. This could be done in the initializer of 
@@ -2594,8 +2601,8 @@ static void FilterCoarserMipmaps(unsigned int _resX, unsigned int _resY, CUtlVec
 
 	int srcResX = _resX;
 	int srcResY = _resY;
-	int dstResX = std::max<int>(1, (srcResX >> 1));
-	int dstResY = std::max<int>(1, (srcResY >> 1));
+	int dstResX = max(1, (srcResX >> 1));
+	int dstResY = max(1, (srcResY >> 1));
 	int dstOffset = GetTexelCount(srcResX, srcResY, false);
 
 	// Build mipmaps here, after being converted to linear space. 
@@ -2630,8 +2637,8 @@ static void FilterCoarserMipmaps(unsigned int _resX, unsigned int _resY, CUtlVec
 
 		srcResX = dstResX;
 		srcResY = dstResY;
-		dstResX = std::max<int>(1, (srcResX >> 1));
-		dstResY = std::max<int>(1, (srcResY >> 1));
+		dstResX = max(1, (srcResX >> 1));
+		dstResY = max(1, (srcResY >> 1));
 		dstOffset += GetTexelCount(srcResX, srcResY, false);
 	}
 }
@@ -2662,8 +2669,8 @@ static void ConvertToDestinationFormat(unsigned int _resX, unsigned int _resY, I
 			srcOffset += GetTexelCount(srcResX, srcResY, false);
 			dstOffset += ImageLoader::GetMemRequired(srcResX, srcResY, 1, _destFmt, false);
 
-			srcResX = std::max<int>(1, (srcResX >> 1));
-			srcResY = std::max<int>(1, (srcResY >> 1));
+			srcResX = max(1, (srcResX >> 1));
+			srcResY = max(1, (srcResY >> 1));
 		}
 
 		// Do the 1x1 level also.
