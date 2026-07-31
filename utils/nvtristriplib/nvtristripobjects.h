@@ -3,10 +3,15 @@
 #define NV_TRISTRIP_OBJECTS_H
 
 #include <assert.h>
+#ifdef _WIN32
 #include <windows.h>
+#else
+typedef unsigned int UINT;
+typedef unsigned short WORD;
+#endif
 #include <vector>
 #include <list>
-#include "VertexCache.h"
+#include "vertexcache.h"
 
 /////////////////////////////////////////////////////////////////////////////////
 //

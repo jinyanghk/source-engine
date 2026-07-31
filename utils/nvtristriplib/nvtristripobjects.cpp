@@ -3,11 +3,18 @@
 
 #include <assert.h>
 #include <set>
-#include "NvTriStripObjects.h"
-#include "VertexCache.h"
+#include "nvtristripobjects.h"
+#include "vertexcache.h"
 #include "tier0/platform.h"
 
 #define CACHE_INEFFICIENCY 6
+
+#ifndef min
+	#define min(a,b)  (((a) < (b)) ? (a) : (b))
+#endif
+#ifndef max
+	#define max(a,b)  (((a) > (b)) ? (a) : (b))
+#endif
 
 NvStripifier::NvStripifier()
 {
