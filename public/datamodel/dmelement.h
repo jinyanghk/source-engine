@@ -546,9 +546,9 @@ int DmeEstimateMemorySize( T* pElement )
 			return IsA( typeSymbol );				\
 		}											\
 													\
-		template< class T > bool IsA() const		\
+		template< class U > bool IsA() const		\
 		{											\
-			return IsA( T::GetStaticTypeSymbol() ); \
+			return IsA( U::GetStaticTypeSymbol() ); \
 		}											\
 													\
 		virtual int GetInheritanceDepth( UtlSymId_t typeSymbol ) const	\
@@ -607,8 +607,8 @@ int DmeEstimateMemorySize( T* pElement )
 																								\
 	private:																					\
 		typedef baseClassName BaseClass; 														\
-		template <class T> friend class CDmElementFactory;										\
-		template <class T> friend class CDmAbstractElementFactory;										\
+		template <class V> friend class CDmElementFactory;										\
+		template <class W> friend class CDmAbstractElementFactory;										\
 		static CUtlSymbol m_classType
 
 #define IMPLEMENT_ELEMENT( className ) \

@@ -759,16 +759,27 @@ Quaternion Add( const Quaternion& v1, const Quaternion& v2 )
 
 IMPLEMENT_ABSTRACT_ELEMENT( DmeLogLayer,			CDmeLogLayer );
 
+template <>
 IMPLEMENT_ELEMENT_FACTORY( DmeIntLogLayer,			CDmeIntLogLayer );
+template <>
 IMPLEMENT_ELEMENT_FACTORY( DmeFloatLogLayer,		CDmeFloatLogLayer );
+template <>
 IMPLEMENT_ELEMENT_FACTORY( DmeBoolLogLayer,			CDmeBoolLogLayer );
+template <>
 IMPLEMENT_ELEMENT_FACTORY( DmeColorLogLayer,		CDmeColorLogLayer );
+template <>
 IMPLEMENT_ELEMENT_FACTORY( DmeVector2LogLayer,		CDmeVector2LogLayer );
+template <>
 IMPLEMENT_ELEMENT_FACTORY( DmeVector3LogLayer,		CDmeVector3LogLayer );
+template <>
 IMPLEMENT_ELEMENT_FACTORY( DmeVector4LogLayer,		CDmeVector4LogLayer );
+template <>
 IMPLEMENT_ELEMENT_FACTORY( DmeQAngleLogLayer,		CDmeQAngleLogLayer );
+template <>
 IMPLEMENT_ELEMENT_FACTORY( DmeQuaternionLogLayer,	CDmeQuaternionLogLayer );
+template <>
 IMPLEMENT_ELEMENT_FACTORY( DmeVMatrixLogLayer,		CDmeVMatrixLogLayer );
+template <>
 IMPLEMENT_ELEMENT_FACTORY( DmeStringLogLayer,		CDmeStringLogLayer );
 
 //-----------------------------------------------------------------------------
@@ -789,16 +800,27 @@ template class CDmeTypedLogLayer<CUtlString>;
 
 IMPLEMENT_ABSTRACT_ELEMENT( DmeCurveInfo,			CDmeCurveInfo );
 
+template <>
 IMPLEMENT_ELEMENT_FACTORY( DmeIntCurveInfo,			CDmeIntCurveInfo );
+template <>
 IMPLEMENT_ELEMENT_FACTORY( DmeFloatCurveInfo,		CDmeFloatCurveInfo );
+template <>
 IMPLEMENT_ELEMENT_FACTORY( DmeBoolCurveInfo,		CDmeBoolCurveInfo );
+template <>
 IMPLEMENT_ELEMENT_FACTORY( DmeColorCurveInfo,		CDmeColorCurveInfo );
+template <>
 IMPLEMENT_ELEMENT_FACTORY( DmeVector2CurveInfo,		CDmeVector2CurveInfo );
+template <>
 IMPLEMENT_ELEMENT_FACTORY( DmeVector3CurveInfo,		CDmeVector3CurveInfo );
+template <>
 IMPLEMENT_ELEMENT_FACTORY( DmeVector4CurveInfo,		CDmeVector4CurveInfo );
+template <>
 IMPLEMENT_ELEMENT_FACTORY( DmeQAngleCurveInfo,		CDmeQAngleCurveInfo );
+template <>
 IMPLEMENT_ELEMENT_FACTORY( DmeQuaternionCurveInfo,	CDmeQuaternionCurveInfo );
+template <>
 IMPLEMENT_ELEMENT_FACTORY( DmeVMatrixCurveInfo,		CDmeVMatrixCurveInfo );
+template <>
 IMPLEMENT_ELEMENT_FACTORY( DmeStringCurveInfo,		CDmeStringCurveInfo );
 
 //-----------------------------------------------------------------------------
@@ -822,16 +844,27 @@ template class CDmeTypedCurveInfo<CUtlString>;
 //-----------------------------------------------------------------------------
 IMPLEMENT_ABSTRACT_ELEMENT( DmeLog,				CDmeLog );
 
+template <>
 IMPLEMENT_ELEMENT_FACTORY( DmeIntLog,			CDmeIntLog );
+template <>
 IMPLEMENT_ELEMENT_FACTORY( DmeFloatLog,			CDmeFloatLog );
+template <>
 IMPLEMENT_ELEMENT_FACTORY( DmeBoolLog,			CDmeBoolLog );
+template <>
 IMPLEMENT_ELEMENT_FACTORY( DmeColorLog,			CDmeColorLog );
+template <>
 IMPLEMENT_ELEMENT_FACTORY( DmeVector2Log,		CDmeVector2Log );
+template <>
 IMPLEMENT_ELEMENT_FACTORY( DmeVector3Log,		CDmeVector3Log );
+template <>
 IMPLEMENT_ELEMENT_FACTORY( DmeVector4Log,		CDmeVector4Log );
+template <>
 IMPLEMENT_ELEMENT_FACTORY( DmeQAngleLog,		CDmeQAngleLog );
+template <>
 IMPLEMENT_ELEMENT_FACTORY( DmeQuaternionLog,	CDmeQuaternionLog );
+template <>
 IMPLEMENT_ELEMENT_FACTORY( DmeVMatrixLog,		CDmeVMatrixLog );
+template <>
 IMPLEMENT_ELEMENT_FACTORY( DmeStringLog,		CDmeStringLog );
 
 
@@ -854,16 +887,27 @@ template class CDmeTypedLog<CUtlString>;
 //-----------------------------------------------------------------------------
 // instantiate and initialize static vars
 //-----------------------------------------------------------------------------
+template <>
 float CDmeIntLog::s_defaultThreshold = 0.0f;
+template <>
 float CDmeFloatLog::s_defaultThreshold = 0.0f;
+template <>
 float CDmeBoolLog::s_defaultThreshold = 0.0f;
+template <>
 float CDmeColorLog::s_defaultThreshold = 0.0f;
+template <>
 float CDmeVector2Log::s_defaultThreshold = 0.0f;
+template <>
 float CDmeVector3Log::s_defaultThreshold = 0.0f;
+template <>
 float CDmeVector4Log::s_defaultThreshold = 0.0f;
+template <>
 float CDmeQAngleLog::s_defaultThreshold = 0.0f;
+template <>
 float CDmeQuaternionLog::s_defaultThreshold = 0.0f;
+template <>
 float CDmeVMatrixLog::s_defaultThreshold = 0.0f;
+template <>
 float CDmeStringLog::s_defaultThreshold = 0.0f;
 
 
@@ -2565,7 +2609,7 @@ void CDmeTypedLogLayer< T >::CopyPartialLayer( const CDmeLogLayer *src, DmeTime_
 // Creates a log of a specific type
 //-----------------------------------------------------------------------------
 template< class T >
-CDmeLogLayer *CreateLayer< T >( CDmeTypedLog< T > *pOwnerLog )
+CDmeLogLayer *CreateLayer( CDmeTypedLog< T > *pOwnerLog )
 {
 	DmFileId_t fileid = pOwnerLog ? pOwnerLog->GetFileId() : DMFILEID_INVALID;
 	CDmeLogLayer *layer = NULL;

@@ -16,7 +16,7 @@
 #include "datamodel/dmattributevar.h"
 #include "datamodel/dmehandle.h"
 #include "movieobjects/timeutils.h"
-
+#include "dmeclip.h"
 
 //-----------------------------------------------------------------------------
 // Forward declarations

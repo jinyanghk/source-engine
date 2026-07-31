@@ -10,7 +10,9 @@
 
 
 // Standard includes
+#ifdef _WIN32
 #include <io.h>
+#endif
 #include <algorithm>
 #include <deque>
 #include <fstream>
@@ -472,6 +474,7 @@ bool CQcData::ParseQc(
 //-----------------------------------------------------------------------------
 //
 //-----------------------------------------------------------------------------
+#ifdef _WIN32
 bool CQcData::GetQcData(
 	const CUtlString &smdPath )
 {
@@ -567,7 +570,7 @@ bool CQcData::GetQcData(
 
 	return false;
 }
-
+#endif
 
 //-----------------------------------------------------------------------------
 //

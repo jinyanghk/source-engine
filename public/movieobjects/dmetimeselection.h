@@ -13,6 +13,7 @@
 #include "datamodel/dmelement.h"
 #include "movieobjects/timeutils.h"
 #include "movieobjects/dmetimeselectiontimes.h"
+#include "dme_controls/RecordingState.h"
 
 enum RecordingState_t;
 

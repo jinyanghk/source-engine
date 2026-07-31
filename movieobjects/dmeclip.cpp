@@ -1028,10 +1028,13 @@ void CDmeFilmClip::OnElementUnserialized( )
 		if ( !pOverlayAttribute )
 			goto cleanUp;
 
+		{
+
 		const char *pName = pOverlayAttribute->GetValueString();
+
 		if ( !pName || !pName[0] )
 			goto cleanUp;
-
+		
 		// If we don't yet have a material overlay, create one
 		if ( m_MaterialOverlayEffect.GetElement() == NULL )
 		{
@@ -1048,6 +1051,7 @@ void CDmeFilmClip::OnElementUnserialized( )
 			m_MaterialOverlayEffect->SetAlpha( alpha );
 		}
 
+		}
 cleanUp:
 		// Always strip out the old overlay attribute
 		RemoveAttribute( "overlay" );							

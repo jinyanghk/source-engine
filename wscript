@@ -97,6 +97,7 @@ projects={
 		'fgdlib',
 		'raytrace',
 		'dmserializers',
+		'movieobjects',
 		#'utils/elementviewer',
 		'utils/bsppack',
 		'utils/bspzip',
@@ -174,8 +175,11 @@ projects={
 		'fgdlib',
 		'vtf',
 		'materialsystem/shaderapiempty',
+		'appframework',
 		'raytrace',
+		'datamodel',
 		'dmserializers',
+		'movieobjects',
 		#'utils/elementviewer',
 		'utils/bsppack',
 		'utils/bspzip',
@@ -253,6 +257,9 @@ def define_platform(conf):
 
 	if conf.options.TESTS:
 		conf.define('UNITTESTS', 1)
+
+	if conf.options.UTILS:
+		conf.define('DX_TO_GL_ABSTRACTION', 1)
 
 	if conf.options.SDL and not conf.options.TESTS:
 		conf.env.SDL = 1

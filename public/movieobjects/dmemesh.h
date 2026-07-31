@@ -380,40 +380,6 @@ private:
 		virtual inline float operator()( float x ) { return 1 - x; }
 	};
 
-	template<>
-	class CFalloff< CDmeMesh::LINEAR >
-	{
-	public:
-		virtual inline float operator()( float x ) { return 1 - x; }
-	};
-
-	template<>
-	class CFalloff< CDmeMesh::SMOOTH >
-	{
-	public:
-		virtual inline float operator()( float x ) {
-			return ( cosf( x * M_PI ) + 1.0f ) / 2.0f;
-		}
-	};
-
-	template<>
-	class CFalloff< CDmeMesh::DOME >
-	{
-	public:
-		virtual inline float operator()( float x ) {
-			return ( cosf( x * M_PI / 2.0 ) );
-		}
-	};
-
-	template<>
-	class CFalloff< CDmeMesh::SPIKE >
-	{
-	public:
-		virtual inline float operator()( float x ) {
-			return ( 1.0f - cosf( ( 1.0f - x ) * M_PI / 2.0 ) );
-		}
-	};
-
 	// Feather's the selection by a specified amount, creates a new CDmeSingleIndexedComponent or NULL if error
 	template < int T >
 	CDmeSingleIndexedComponent *FeatherSelection( float fFalloffDistance, Distance_t distanceType, CDmeSingleIndexedComponent *pSelection, CDmMeshComp *pPassedMeshComp );
@@ -471,6 +437,41 @@ private:
 #endif // ndef SWIG
 };
 
+// fix for g++ error: explicit specialization in non-namespace scope
+
+template<>
+class CDmeMesh::CFalloff< CDmeMesh::LINEAR >
+{
+public:
+	virtual inline float operator()( float x ) { return 1 - x; }
+};
+
+template<>
+class CDmeMesh::CFalloff< CDmeMesh::SMOOTH >
+{
+public:
+	virtual inline float operator()( float x ) {
+		return ( cosf( x * M_PI ) + 1.0f ) / 2.0f;
+	}
+};
+
+template<>
+class CDmeMesh::CFalloff< CDmeMesh::DOME >
+{
+public:
+	virtual inline float operator()( float x ) {
+		return ( cosf( x * M_PI / 2.0 ) );
+	}
+};
+
+template<>
+class CDmeMesh::CFalloff< CDmeMesh::SPIKE >
+{
+public:
+	virtual inline float operator()( float x ) {
+		return ( 1.0f - cosf( ( 1.0f - x ) * M_PI / 2.0 ) );
+	}
+};
 
 //-----------------------------------------------------------------------------
 // Inline methods

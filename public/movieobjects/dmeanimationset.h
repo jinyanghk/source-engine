@@ -16,6 +16,7 @@
 #include "movieobjects/dmephonememapping.h"
 #include "movieobjects/timeutils.h"
 #include "movieobjects/proceduralpresets.h"
+#include "dmeoperator.h"
 
 class CDmeBookmark;
 
