@@ -15,7 +15,9 @@
 #pragma warning( disable : 4305 )
 
 
+#ifdef _WIN32
 #include <io.h>
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/stat.h>
@@ -1735,6 +1737,7 @@ static void WriteBoneTransforms( studiohdr2_t *phdr, mstudiobone_t *pBone )
 
 		pLinearBone->numbones = g_numbones;
 
+/*
 #define WRITE_BONE_BLOCK( type, srcfield, dest, destindex ) \
 		type *##dest = (type *)pData; \
 		pLinearBone->##destindex = pData - (byte *)pLinearBone; \
@@ -1742,6 +1745,19 @@ static void WriteBoneTransforms( studiohdr2_t *phdr, mstudiobone_t *pBone )
 		ALIGN4( pData ); \
 		for ( int i = 0; i < g_numbones; i++) \
 			dest##[i] = pBone[i].##srcfield;
+*/
+#define CAST_DATA(type, dest) type *dest = (type *)(pData)
+#define ASSIGN_INDEX(destindex) pLinearBone->destindex = pData - (byte *)pLinearBone
+#define INC_DATA(dest) pData += g_numbones * sizeof( *dest )
+#define ASSIGN_DEST(dest, srcfield) dest[i] = pBone[i].srcfield
+
+#define WRITE_BONE_BLOCK( type, srcfield, dest, destindex ) \
+		CAST_DATA(type, dest); \
+		ASSIGN_INDEX(destindex); \
+		INC_DATA(dest); \
+		ALIGN4( pData ); \
+		for ( int i = 0; i < g_numbones; i++) \
+			ASSIGN_DEST(dest, srcfield);
 
 		WRITE_BONE_BLOCK( int, flags, pFlags, flagsindex );
 		WRITE_BONE_BLOCK( int, parent, pParent, parentindex );

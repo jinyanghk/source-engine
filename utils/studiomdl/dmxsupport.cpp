@@ -1145,6 +1145,7 @@ int Load_DMX( s_source_t *pSource )
 	if ( !pSkeleton )
 		goto dmxError;
 
+	{
 	// BoneRemap[bone index in file] == bone index in studiomdl
 	BoneTransformMap_t boneMap;
 	pSource->numbones = LoadSkeleton( pSkeleton, pModel, pSource->localBone, boneMap );
@@ -1185,6 +1186,7 @@ int Load_DMX( s_source_t *pSource )
 	g_pDataModel->RemoveFileId( fileId );
 	return 1;
 
+	}
 dmxError:
 	fileId = pRoot->GetFileId();
 	g_pDataModel->RemoveFileId( fileId );

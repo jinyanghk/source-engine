@@ -5,8 +5,12 @@
 // $NoKeywords: $
 //=============================================================================//
 
+#ifdef _WIN32
 #include <windows.h>
-#include "HardwareMatrixState.h"
+#else
+#define OutputDebugString printf
+#endif
+#include "hardwarematrixstate.h"
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>

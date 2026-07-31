@@ -17,17 +17,29 @@
 #pragma warning( disable : 4237 )
 #pragma warning( disable : 4305 )
 
+#ifdef _WIN32
 #include <windows.h>
+#else
+#include <stdio.h>
+#include <sys/stat.h>
+typedef long LONG;
+#define InterlockedIncrement(long_ptr) __atomic_add_fetch((long_ptr), 1, __ATOMIC_SEQ_CST)
+#define InterlockedDecrement(long_ptr) __atomic_sub_fetch((long_ptr), 1, __ATOMIC_SEQ_CST)
+#endif
 #undef GetCurrentDirectory
 
+#ifdef _WIN32
 #include <Shlwapi.h> // PathCanonicalize
 #pragma comment( lib, "shlwapi" )
+#endif
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <math.h>
+#ifdef _WIN32
 #include <direct.h>
+#endif
 #include "istudiorender.h"
 #include "filesystem_tools.h"
 #include "tier2/fileutils.h"
@@ -45,9 +57,9 @@
 #include "bspflags.h"
 #include "tier0/icommandline.h"
 #include "utldict.h"
-#include "tier1/utlsortvector.h"
+#include "tier1/UtlSortVector.h"
 #include "bitvec.h"
-#include "appframework/appframework.h"
+#include "appframework/AppFramework.h"
 #include "datamodel/idatamodel.h"
 #include "materialsystem/materialsystem_config.h"
 #include "vstdlib/cvar.h"
@@ -204,7 +216,11 @@ void EnsureDependencyFileCheckedIn( const char *pFileName )
 
 	Q_FixSlashes( pFullPath );
 	char bufCanonicalPath[ MAX_PATH ] = {0};
+#ifdef _WIN32
 	PathCanonicalize( bufCanonicalPath, pFullPath );
+#else
+	realpath( bufCanonicalPath, pFullPath );
+#endif
 	CP4AutoAddFile p4_add_dep_file( bufCanonicalPath );
 }
 
@@ -407,7 +423,7 @@ void MdlHandleCrash( const char *pMessage, bool bAssert )
 	InterlockedDecrement( &crashHandlerCount );
 }
 
-
+#ifdef _WIN32
 // This is called if we crash inside our crash handler. It just terminates the process immediately.
 LONG __stdcall MdlSecondExceptionFilter( struct _EXCEPTION_POINTERS *ExceptionInfo )
 {
@@ -470,6 +486,7 @@ void MdlExceptionFilter( unsigned long code )
 
 	TerminateProcess( GetCurrentProcess(), 1 );
 }
+#endif
 
 #endif
 
@@ -2294,7 +2311,7 @@ int Option_Activity( s_sequence_t *psequence )
 	return 0;
 }
 
-
+#ifdef _WIN32
 int Option_ActivityModifier( s_sequence_t *psequence )
 {
 	GetToken(false);
@@ -2302,7 +2319,7 @@ int Option_ActivityModifier( s_sequence_t *psequence )
 
 	return 0;
 }
-
+#endif
 
 /*
 ===============
@@ -4161,7 +4178,7 @@ int ParseSequence( s_sequence_t *pseq, bool isAppend )
 		}
 		else if (stricmp("activitymodifier", token ) == 0)
 		{
-			Option_ActivityModifier( pseq );
+			//Option_ActivityModifier( pseq );
 		}
 		else if (strnicmp( token, "ACT_", 4 ) == 0)
 		{
@@ -8364,6 +8381,7 @@ bool GetGlobalFilePath( const char *pSrc, char *pFullPath, int nMaxLen )
 			V_strcpy_safe( tmp, CmdLib_GetBasePath( i ) );
 			V_strcat_safe( tmp, pFileName + nPathLength );
 
+#ifdef _WIN32
 			struct _stat buf;
 			int rt = _stat( tmp, &buf );
 			if ( rt != -1 && ( buf.st_size > 0 ) && ( ( buf.st_mode & _S_IFDIR ) == 0 ) )
@@ -8371,10 +8389,22 @@ bool GetGlobalFilePath( const char *pSrc, char *pFullPath, int nMaxLen )
 				Q_strncpy( pFullPath, tmp, nMaxLen );
 				return true;
 			}
+#else
+			struct stat buf;
+			int rt = stat( tmp, &buf );
+			if(rt)
+				return false;
+			if(S_ISDIR(buf.st_mode))
+			{
+				Q_strncpy( pFullPath, tmp, nMaxLen );
+				return true;
+			}
+#endif
 		}
 		return false;
 	}
 
+#ifdef _WIN32
 	struct _stat buf;
 	int rt = _stat( pFileName, &buf );
 	if ( rt != -1 && ( buf.st_size > 0 ) && ( ( buf.st_mode & _S_IFDIR ) == 0 )	)
@@ -8382,6 +8412,17 @@ bool GetGlobalFilePath( const char *pSrc, char *pFullPath, int nMaxLen )
 		Q_strncpy( pFullPath, pFileName, nMaxLen );
 		return true;
 	}
+#else
+	struct stat buf;
+	int rt = stat( pFileName, &buf );
+	if(rt)
+		return false;
+	if(S_ISDIR(buf.st_mode))
+	{
+		Q_strncpy( pFullPath, pFileName, nMaxLen );
+		return true;
+	}
+#endif
 	return false;
 }
 
@@ -9465,11 +9506,13 @@ void UsageAndExit()
 
 #ifndef _DEBUG
 
+#ifdef _WIN32
 LONG __stdcall VExceptionFilter( struct _EXCEPTION_POINTERS *ExceptionInfo )
 {
 	MdlExceptionFilter( ExceptionInfo->ExceptionRecord->ExceptionCode );
 	return EXCEPTION_EXECUTE_HANDLER; // (never gets here anyway)
 }
+#endif
 
 #endif
 /*
@@ -9546,7 +9589,9 @@ bool CStudioMDLApp::Create()
  	MathLib_Init( 2.2f, 2.2f, 0.0f, 2.0f, false, false, false, false );
 
 #ifndef _DEBUG
+#ifdef _WIN32
 	SetUnhandledExceptionFilter( VExceptionFilter );
+#endif
 #endif
 
 	if ( CommandLine()->ParmCount() == 1 )
