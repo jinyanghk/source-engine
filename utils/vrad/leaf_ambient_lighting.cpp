@@ -31,7 +31,7 @@ static TableVector g_BoxDirections[6] =
 
 
 
-static void ComputeAmbientFromSurface( dface_t *surfID, dworldlight_t* pSkylight, 
+static void ComputeAmbientFromSurface( dface_t *surfID, dworldlight_version0_t* pSkylight, 
 									   Vector& radcolor )
 {
 	if ( !surfID )
@@ -57,7 +57,7 @@ static void ComputeAmbientFromSurface( dface_t *surfID, dworldlight_t* pSkylight
 
 
 // TODO: it's CRAZY how much lighting code we share with the engine. It should all be shared code.
-float Engine_WorldLightAngle( const dworldlight_t *wl, const Vector& lnormal, const Vector& snormal, const Vector& delta )
+float Engine_WorldLightAngle( const dworldlight_version0_t *wl, const Vector& lnormal, const Vector& snormal, const Vector& delta )
 {
 	float dot, dot2;
 
@@ -76,7 +76,7 @@ float Engine_WorldLightAngle( const dworldlight_t *wl, const Vector& lnormal, co
 
 
 // TODO: it's CRAZY how much lighting code we share with the engine. It should all be shared code.
-float Engine_WorldLightDistanceFalloff( const dworldlight_t *wl, const Vector& delta )
+float Engine_WorldLightDistanceFalloff( const dworldlight_version0_t *wl, const Vector& delta )
 {
 	Assert( wl->type == emit_surface );
 
@@ -100,7 +100,7 @@ void AddEmitSurfaceLights( const Vector &vStart, Vector lightBoxColor[6] )
 
 	for ( int iLight=0; iLight < *pNumworldlights; iLight++ )
 	{
-		dworldlight_t *wl = &dworldlights[iLight];
+		dworldlight_version0_t *wl = &dworldlights[iLight];
 
 		// Should this light even go in the ambient cubes?
 		if ( !( wl->flags & DWL_FLAGS_INAMBIENTCUBE ) )
@@ -182,7 +182,7 @@ void ComputeAmbientFromSphericalSamples( int iThread, const Vector &vStart, Vect
 }
 
 
-bool IsLeafAmbientSurfaceLight( dworldlight_t *wl )
+bool IsLeafAmbientSurfaceLight( dworldlight_version0_t *wl )
 {
 	static const float g_flWorldLightMinEmitSurface = 0.005f;
 	static const float g_flWorldLightMinEmitSurfaceDistanceRatio = ( InvRSquared( Vector( 0, 0, 512 ) ) );
@@ -628,7 +628,7 @@ void ComputePerLeafAmbientLighting()
 	int nSurfaceLights = 0;
 	for ( int i=0; i < *pNumworldlights; i++ )
 	{
-		dworldlight_t *wl = &dworldlights[i];
+		dworldlight_version0_t *wl = &dworldlights[i];
 		
 		if ( IsLeafAmbientSurfaceLight( wl ) )
 			wl->flags |= DWL_FLAGS_INAMBIENTCUBE;

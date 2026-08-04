@@ -17,7 +17,7 @@ static bool g_bFileError = false;
 // Static helpers.
 // -------------------------------------------------------------------------------- //
 
-static bool CompareLights( dworldlight_t *a, dworldlight_t *b )
+static bool CompareLights( dworldlight_version0_t *a, dworldlight_version0_t *b )
 {
 	static float flEpsilon = 1e-7;
 

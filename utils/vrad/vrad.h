@@ -72,7 +72,7 @@ struct directlight_t
 	int		index;
 
 	directlight_t *next;
-	dworldlight_t light;
+	dworldlight_version0_t light;
 
 	byte	*pvs;		// accumulated domain of the light
 	int		facenum;	// domain of attached lights
@@ -403,7 +403,7 @@ void AddBrushesForRayTrace ( void );
 void BaseLightForFace( dface_t *f, Vector& light, float *parea, Vector& reflectivity );
 void CreateDirectLights (void);
 void GetPhongNormal( int facenum, Vector const& spot, Vector& phongnormal );
-int LightForString( const char *pLight, Vector& intensity );
+int LightForString( char *pLight, Vector& intensity );
 void MakeTransfer( int ndxPatch1, int ndxPatch2, transfer_t *all_transfers );
 void MakeScales( int ndxPatch, transfer_t *all_transfers );
 

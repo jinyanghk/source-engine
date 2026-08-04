@@ -268,7 +268,7 @@ BEGIN_BYTESWAP_DATADESC( dareaportal_t )
 	DEFINE_FIELD( planenum, FIELD_INTEGER ),
 END_BYTESWAP_DATADESC()
 
-BEGIN_BYTESWAP_DATADESC( dworldlight_t )
+BEGIN_BYTESWAP_DATADESC( dworldlight_version0_t )
 	DEFINE_FIELD( origin, FIELD_VECTOR ),
 	DEFINE_FIELD( intensity, FIELD_VECTOR ),
 	DEFINE_FIELD( normal, FIELD_VECTOR ),
@@ -659,13 +659,13 @@ int			numareaportals;
 dareaportal_t	dareaportals[MAX_MAP_AREAPORTALS];
 
 int			numworldlightsLDR;
-dworldlight_t dworldlightsLDR[MAX_MAP_WORLDLIGHTS];
+dworldlight_version0_t dworldlightsLDR[MAX_MAP_WORLDLIGHTS];
 
 int			numworldlightsHDR;
-dworldlight_t dworldlightsHDR[MAX_MAP_WORLDLIGHTS];
+dworldlight_version0_t dworldlightsHDR[MAX_MAP_WORLDLIGHTS];
 
 int			*pNumworldlights = &numworldlightsLDR;
-dworldlight_t *dworldlights = dworldlightsLDR;
+dworldlight_version0_t *dworldlights = dworldlightsLDR;
 
 int			numleafwaterdata = 0;
 dleafwaterdata_t dleafwaterdata[MAX_MAP_LEAFWATERDATA]; 
@@ -4836,14 +4836,14 @@ bool SwapBSPFile( const char *pInFilename, const char *pOutFilename, bool bSwapO
 		SwapLumpToDisk<dface_t>( LUMP_FACES );
 	}
 
-	if ( SwapLumpToDisk<dworldlight_t>( LUMP_WORLDLIGHTS_HDR ) )
+	if ( SwapLumpToDisk<dworldlight_version0_t>( LUMP_WORLDLIGHTS_HDR ) )
 	{
 		g_pBSPHeader->lumps[LUMP_WORLDLIGHTS].filelen = 0;
 	}
 	else
 	{
 		// no HDR, keep LDR version
-		SwapLumpToDisk<dworldlight_t>( LUMP_WORLDLIGHTS );
+		SwapLumpToDisk<dworldlight_version0_t>( LUMP_WORLDLIGHTS );
 	}
 
 	// Simple lump swaps

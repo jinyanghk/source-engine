@@ -156,7 +156,7 @@ extern	int			    numbrushsides;
 extern	dbrushside_t	dbrushsides[MAX_MAP_BRUSHSIDES];
 
 extern  int			    *pNumworldlights;
-extern  dworldlight_t   *dworldlights;
+extern  dworldlight_version0_t   *dworldlights;
 
 extern Vector			g_ClipPortalVerts[MAX_MAP_PORTALVERTS];
 extern int				g_nClipPortalVerts;

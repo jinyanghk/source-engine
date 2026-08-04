@@ -61,7 +61,7 @@ public:
 
 	CThreadMutex		m_CS;
 	// This is the light for which m_LightFaces was built.
-	dworldlight_t	m_Light;
+	dworldlight_version0_t	m_Light;
 
 	CLightFace		*m_pCachedFaces[MAX_TOOL_THREADS+1];
 

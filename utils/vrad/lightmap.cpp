@@ -85,7 +85,7 @@ static directlight_t *gAmbient = NULL;
 
 CNormalList::CNormalList() : m_Normals( 128 )
 {
-	for( size_t i=0; i < sizeof(m_NormalGrid)/sizeof(m_NormalGrid[0][0][0]); i++ )
+	for( int i=0; i < sizeof(m_NormalGrid)/sizeof(m_NormalGrid[0][0][0]); i++ )
 	{
 		(&m_NormalGrid[0][0][0] + i)->SetGrowSize( 16 );
 	}
@@ -305,7 +305,7 @@ void PairEdges (void)
 					// add to neighbor list
 					tmpneighbor[m] = vertexface[n][k];
 					numneighbors++;
-					if ( numneighbors > (int) ARRAYSIZE(tmpneighbor) )
+					if ( numneighbors > ARRAYSIZE(tmpneighbor) )
 					{
 						Error("Stack overflow in neighbors\n");
 					}
@@ -1053,16 +1053,16 @@ void MergeDLightVis( directlight_t *dl, int cluster )
   LightForKey
   =============
 */
-int LightForKey (entity_t *ent, const char *key, Vector& intensity )
+int LightForKey (entity_t *ent, char *key, Vector& intensity )
 {
-	const char *pLight;
+	char *pLight;
 
 	pLight = ValueForKey( ent, key );
 
 	return LightForString( pLight, intensity );
 }
 
-int LightForString( const char *pLight, Vector& intensity )
+int LightForString( char *pLight, Vector& intensity )
 {
 	double r, g, b, scaler;
 	int argCnt;
@@ -1471,7 +1471,7 @@ void BuildVisForLightEnvironment( void )
 	}
 }
 
-static char *ValueForKeyWithDefault (entity_t *ent, const char *key, char *default_value = NULL)
+static char *ValueForKeyWithDefault (entity_t *ent, char *key, char *default_value = NULL)
 {
 	epair_t	*ep;
 	
@@ -1641,7 +1641,7 @@ void ExportDirectLightsToWorldLights()
 
 	for (dl = activelights; dl != NULL; dl = dl->next )
 	{
-		dworldlight_t *wl = &dworldlights[(*pNumworldlights)++];
+		dworldlight_version0_t *wl = &dworldlights[(*pNumworldlights)++];
 
 		if (*pNumworldlights > MAX_MAP_WORLDLIGHTS)
 		{
@@ -3188,7 +3188,9 @@ void BuildFacelights (int iThread, int facenum)
 		}
 	}
 
-	//if (!g_bUseMPI) 
+#ifdef MPI
+	if (!g_bUseMPI) 
+#endif
 	{
 		//
 		// This is done on the master node when MPI is used
