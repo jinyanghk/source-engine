@@ -67,6 +67,8 @@ projects={
 		'launcher_main',
 		'materialsystem',
 		'materialsystem/shaderapiempty',
+		'materialsystem/shaderapigl',
+		'materialsystem/shaderapivk',
 		'materialsystem/shaderapidx9',
 		'materialsystem/shaderlib',
 		'materialsystem/stdshaders',
@@ -368,6 +370,12 @@ def options(opt):
 	grp.add_option('--build-games', action = 'store', dest = 'GAMES', type = 'string', default = 'hl2',
 		help = 'build games [default: %default]')
 
+	grp.add_option('--backend-gl', action = 'store_true', dest = 'BACKENDGL', default = False,
+		help = 'use opengl backend [default: %default]')
+
+	grp.add_option('--backend-vk', action = 'store_true', dest = 'BACKENDVK', default = False,
+		help = 'use vulkan backend [default: %default]')
+
 	grp.add_option('--use-ccache', action = 'store_true', dest = 'CCACHE', default = False,
 		help = 'build using ccache [default: %default]')
 
@@ -525,7 +533,8 @@ def configure(conf):
 	if conf.env.TOGLES:
 		projects['game'] += ['togles']
 	elif conf.env.GL:
-		projects['game'] += ['togl']
+		if not (conf.options.BACKENDGL or conf.options.BACKENDVK):
+			projects['game'] += ['togl']
 
 	if conf.env.DEST_OS == 'win32':
 		projects['game'] += ['utils/bzip2']
