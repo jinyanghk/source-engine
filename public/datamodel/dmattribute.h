@@ -204,10 +204,10 @@ private:
 	// Called by elements after unserialization of their attributes is complete
 	void OnUnserializationFinished();
 
-	template< class T > bool IsTypeConvertable() const;
+	template< class T > bool IsTypeConvertable() const __attribute__((used));
 	template< class T > bool ShouldModify( const T& src );
 	template< class T > void CopyData( const T& src );
-	template< class T > void CopyDataOut( T& dest ) const;
+	template< class T > void CopyDataOut( T& dest ) const __attribute__((used));
 
 private:
 	CDmAttribute *m_pNext;
