@@ -67,23 +67,23 @@ Studio models are position independent, so the cache manager can move them.
 ==============================================================================
 */
 
-#define STUDIO_VERSION		49
+#define STUDIO_VERSION		48
 
 #ifndef _XBOX
 #define MAXSTUDIOTRIANGLES	65536	// TODO: tune this
 #define MAXSTUDIOVERTS		65536	// TODO: tune this
 #define	MAXSTUDIOFLEXVERTS	10000	// max number of verts that can be flexed per mesh.  TODO: tune this
 #else
-#define MAXSTUDIOTRIANGLES	65536
-#define MAXSTUDIOVERTS		32768
-#define	MAXSTUDIOFLEXVERTS	5000
+#define MAXSTUDIOTRIANGLES	25000
+#define MAXSTUDIOVERTS		10000
+#define	MAXSTUDIOFLEXVERTS	1000
 #endif
 #define MAXSTUDIOSKINS		32		// total textures
 #define MAXSTUDIOBONES		128		// total bones actually used
 #define MAXSTUDIOFLEXDESC	1024	// maximum number of low level flexes (actual morph targets)
 #define MAXSTUDIOFLEXCTRL	96		// maximum number of flexcontrollers (input sliders)
 #define MAXSTUDIOPOSEPARAM	24
-#define MAXSTUDIOBONECTRLS	5
+#define MAXSTUDIOBONECTRLS	4
 #define MAXSTUDIOANIMBLOCKS 256
 
 #define MAXSTUDIOBONEBITS	7		// NOTE: MUST MATCH MAXSTUDIOBONES
@@ -672,7 +672,6 @@ struct mstudioanim_t
 	byte				bone;
 	byte				flags;		// weighing options
 
-
 	// valid for animating data only
 	inline byte				*pData( void ) const { return (((byte *)this) + sizeof( struct mstudioanim_t )); };
 	inline mstudioanim_valueptr_t	*pRotV( void ) const { return (mstudioanim_valueptr_t *)(pData()); };
@@ -684,9 +683,8 @@ struct mstudioanim_t
 	inline Vector48			*pPos( void ) const { return (Vector48 *)(pData() + ((flags & STUDIO_ANIM_RAWROT) != 0) * sizeof( *pQuat48() ) + ((flags & STUDIO_ANIM_RAWROT2) != 0) * sizeof( *pQuat64() ) ); };
 
 	short				nextoffset;
-
 	inline mstudioanim_t	*pNext( void ) const { if (nextoffset != 0) return  (mstudioanim_t *)(((byte *)this) + nextoffset); else return NULL; };
-} ALIGN16;
+};
 
 struct mstudiomovement_t
 {
@@ -700,7 +698,6 @@ struct mstudiomovement_t
 	Vector				position;	// relative to start of animation???
 
 	mstudiomovement_t() = default;
-
 private:
 	// No copy constructors allowed
 	mstudiomovement_t(const mstudiomovement_t& vOther);
@@ -1228,14 +1225,13 @@ struct mstudiotexture_t
 	int						flags;
 	int						used;
     int						unused1;
-#if PLATFORM_64BITS
-    mutable IMaterial		*material;
-    mutable void			*clientmaterial;
-    int						unused[8];
-#else
+
 	mutable IMaterial		*material;  // fixme: this needs to go away . .isn't used by the engine, but is used by studiomdl
 	mutable void			*clientmaterial;	// gary, replace with client material pointer if used
 	
+#ifdef PLATFORM_64BITS
+	int						unused[8];
+#else
 	int						unused[10];
 #endif
 };
@@ -1326,17 +1322,9 @@ struct mstudio_modelvertexdata_t
 	int					GetGlobalTangentIndex( int i ) const;
 
 	// base of external vertex data stores
-	serializedstudioptr_t<const void> pVertexData;
-	serializedstudioptr_t<const void> pTangentData;
-
-    const void	*GetVertexData() const {
-        return pVertexData;
-    }
-    const void	*GetTangentData() const {
-        return pTangentData;
-    }
+	const void			*pVertexData;
+	const void			*pTangentData;
 };
-
 #ifdef PLATFORM_64BITS
 // 64b - match 32-bit packing
 #pragma pack( push, 4 )
@@ -1355,24 +1343,20 @@ struct mstudio_meshvertexdata_t
 	int					GetModelVertexIndex( int i ) const;
 	int					GetGlobalVertexIndex( int i ) const;
 
-#ifdef PLATFORM_64BITS
-    // MoeMod : fix 64bit ptr size
-    int         	    index_ptr_modelvertexdata;
-#else
 	// indirection to this mesh's model's vertex data
+#ifndef PLATFORM_64BITS
 	const mstudio_modelvertexdata_t	*modelvertexdata;
+#else
+	int unused_modelvertexdata;
 #endif
+
 	// used for fixup calcs when culling top level lods
 	// expected number of mesh verts at desired lod
 	int					numLODVertexes[MAX_NUM_LODS];
 
-    const mstudio_modelvertexdata_t	*pModelVertexData() const {
 #ifdef PLATFORM_64BITS
-        return *(const mstudio_modelvertexdata_t **)((byte *)this + index_ptr_modelvertexdata);
-#else
-        return modelvertexdata;
+	serializedstudioptr_t< const mstudio_modelvertexdata_t >	modelvertexdata;
 #endif
-    }
 };
 
 struct mstudiomesh_t
@@ -1403,11 +1387,10 @@ struct mstudiomesh_t
 
 	Vector				center;
 
-    mstudio_meshvertexdata_t vertexdata;
+	mstudio_meshvertexdata_t vertexdata;
 
 #ifdef PLATFORM_64BITS
-    int					unused[6]; // remove as appropriate
-    const mstudio_modelvertexdata_t	*real_modelvertexdata;
+	int					unused[6]; // remove as appropriate
 #else
 	int					unused[8]; // remove as appropriate
 #endif
@@ -1452,9 +1435,13 @@ struct mstudiomodel_t
 	int					eyeballindex;
 	inline  mstudioeyeball_t *pEyeball( int i ) { return (mstudioeyeball_t *)(((byte *)this) + eyeballindex) + i; };
 
-    mstudio_modelvertexdata_t vertexdata; // sizeof(mstudio_modelvertexdata_t) == 16
+	mstudio_modelvertexdata_t vertexdata;
 
-	int					unused[6];		// remove as appropriate
+#ifdef PLATFORM_64BITS
+	int					unused[6];		// mstudio_modelvertexdata_t has 2 naked ptrs
+#else
+	int					unused[8];		// remove as appropriate
+#endif
 };
 
 #ifdef PLATFORM_64BITS
@@ -1463,13 +1450,12 @@ struct mstudiomodel_t
 
 inline bool mstudio_modelvertexdata_t::HasTangentData( void ) const 
 {
-	return (GetTangentData() != NULL);
+	return (pTangentData != NULL);
 }
 
 inline int mstudio_modelvertexdata_t::GetGlobalVertexIndex( int i ) const
 {
 	mstudiomodel_t *modelptr = (mstudiomodel_t *)((byte *)this - offsetof(mstudiomodel_t, vertexdata));
-    Assert(&modelptr->vertexdata == this);
 	Assert( ( modelptr->vertexindex % sizeof( mstudiovertex_t ) ) == 0 );
 	return ( i + ( modelptr->vertexindex / sizeof( mstudiovertex_t ) ) );
 }
@@ -1477,14 +1463,13 @@ inline int mstudio_modelvertexdata_t::GetGlobalVertexIndex( int i ) const
 inline int mstudio_modelvertexdata_t::GetGlobalTangentIndex( int i ) const
 {
 	mstudiomodel_t *modelptr = (mstudiomodel_t *)((byte *)this - offsetof(mstudiomodel_t, vertexdata));
-    Assert(&modelptr->vertexdata == this);
 	Assert( ( modelptr->tangentsindex % sizeof( Vector4D ) ) == 0 );
 	return ( i + ( modelptr->tangentsindex / sizeof( Vector4D ) ) );
 }
 
 inline mstudiovertex_t *mstudio_modelvertexdata_t::Vertex( int i ) const 
 {
-	return (mstudiovertex_t *)GetVertexData() + GetGlobalVertexIndex( i );
+	return (mstudiovertex_t *)pVertexData + GetGlobalVertexIndex( i );
 }
 
 inline Vector *mstudio_modelvertexdata_t::Position( int i ) const 
@@ -1502,7 +1487,7 @@ inline Vector4D *mstudio_modelvertexdata_t::TangentS( int i ) const
 	// NOTE: The tangents vector is 16-bytes in a separate array
 	// because it only exists on the high end, and if I leave it out
 	// of the mstudiovertex_t, the vertex is 64-bytes (good for low end)
-	return (Vector4D *)GetTangentData() + GetGlobalTangentIndex( i );
+	return (Vector4D *)pTangentData + GetGlobalTangentIndex( i );
 }
 
 inline Vector2D *mstudio_modelvertexdata_t::Texcoord( int i ) const 
@@ -1522,7 +1507,7 @@ inline mstudiomodel_t *mstudiomesh_t::pModel() const
 
 inline bool mstudio_meshvertexdata_t::HasTangentData( void ) const
 {
-	return pModelVertexData()->HasTangentData();
+	return modelvertexdata->HasTangentData();
 }
 
 inline const mstudio_meshvertexdata_t *mstudiomesh_t::GetVertexData( void *pModelData )
@@ -1530,14 +1515,9 @@ inline const mstudio_meshvertexdata_t *mstudiomesh_t::GetVertexData( void *pMode
 	// get this mesh's model's vertex data (allow for mstudiomodel_t::GetVertexData
 	// returning NULL if the data has been converted to 'thin' vertices)
 	this->pModel()->GetVertexData( pModelData );
-#ifdef PLATFORM_64BITS
-	real_modelvertexdata = &( this->pModel()->vertexdata );
-	vertexdata.index_ptr_modelvertexdata = (byte *)&real_modelvertexdata - (byte *)&vertexdata;
-#else
 	vertexdata.modelvertexdata = &( this->pModel()->vertexdata );
-#endif
 
-	if ( !vertexdata.pModelVertexData()->GetVertexData() )
+	if ( !vertexdata.modelvertexdata->pVertexData )
 		return NULL;
 
 	return &vertexdata;
@@ -1551,44 +1531,43 @@ inline const thinModelVertices_t * mstudiomesh_t::GetThinVertexData( void *pMode
 
 inline int mstudio_meshvertexdata_t::GetModelVertexIndex( int i ) const
 {
-	mstudiomesh_t *meshptr = (mstudiomesh_t *)((byte *)this - offsetof(mstudiomesh_t,vertexdata));
-    Assert(&meshptr->vertexdata == this);
+	mstudiomesh_t *meshptr = (mstudiomesh_t *)((byte *)this - offsetof(mstudiomesh_t,vertexdata)); 
 	return meshptr->vertexoffset + i;
 }
 
 inline int mstudio_meshvertexdata_t::GetGlobalVertexIndex( int i ) const
 {
-	return pModelVertexData()->GetGlobalVertexIndex( GetModelVertexIndex( i ) );
+	return modelvertexdata->GetGlobalVertexIndex( GetModelVertexIndex( i ) );
 }
 
 inline Vector *mstudio_meshvertexdata_t::Position( int i ) const 
 {
-	return pModelVertexData()->Position( GetModelVertexIndex( i ) );
+	return modelvertexdata->Position( GetModelVertexIndex( i ) ); 
 };
 
 inline Vector *mstudio_meshvertexdata_t::Normal( int i ) const 
 {
-	return pModelVertexData()->Normal( GetModelVertexIndex( i ) );
+	return modelvertexdata->Normal( GetModelVertexIndex( i ) ); 
 };
 
 inline Vector4D *mstudio_meshvertexdata_t::TangentS( int i ) const
 {
-	return pModelVertexData()->TangentS( GetModelVertexIndex( i ) );
+	return modelvertexdata->TangentS( GetModelVertexIndex( i ) );
 }
 
 inline Vector2D *mstudio_meshvertexdata_t::Texcoord( int i ) const 
 {
-	return pModelVertexData()->Texcoord( GetModelVertexIndex( i ) );
+	return modelvertexdata->Texcoord( GetModelVertexIndex( i ) ); 
 };
 
 inline mstudioboneweight_t *mstudio_meshvertexdata_t::BoneWeights( int i ) const 
 {
-	return pModelVertexData()->BoneWeights( GetModelVertexIndex( i ) );
+	return modelvertexdata->BoneWeights( GetModelVertexIndex( i ) ); 
 };
 
 inline mstudiovertex_t *mstudio_meshvertexdata_t::Vertex( int i ) const
 {
-	return pModelVertexData()->Vertex( GetModelVertexIndex( i ) );
+	return modelvertexdata->Vertex( GetModelVertexIndex( i ) );
 }
 
 // a group of studio model data
@@ -2016,7 +1995,7 @@ inline const mstudio_modelvertexdata_t * mstudiomodel_t::GetVertexData( void *pM
 	vertexdata.pVertexData  = pVertexHdr->GetVertexData();
 	vertexdata.pTangentData = pVertexHdr->GetTangentData();
 
-	if ( !vertexdata.GetVertexData() )
+	if ( !vertexdata.pVertexData )
 		return NULL;
 
 	return &vertexdata;
@@ -2139,20 +2118,22 @@ struct studiohdr2_t
 	int m_nBoneFlexDriverIndex;
 	inline mstudioboneflexdriver_t *pBoneFlexDriver( int i ) const { Assert( i >= 0 && i < m_nBoneFlexDriverCount ); return (mstudioboneflexdriver_t *)(((byte *)this) + m_nBoneFlexDriverIndex) + i; }
 
+#ifdef PLATFORM_64BITS
 	mutable serializedstudioptr_t< void	> virtualModel;
 	mutable serializedstudioptr_t< void	> animblockModel;
 
 	serializedstudioptr_t< void> pVertexBase;
 	serializedstudioptr_t< void> pIndexBase;
 
-	int reserved[48];
+	int reserved[56 - 4 * sizeof( serializedstudioptr_t< void > ) / sizeof( int ) ];
+#else
+	int reserved[56];
+#endif
 };
 
 struct studiohdr_t
 {
 	DECLARE_BYTESWAP_DATADESC();
-	studiohdr_t() = default;
-
 	int					id;
 	int					version;
 
@@ -2168,10 +2149,10 @@ struct studiohdr_t
 	Vector				illumposition;	// illumination center
 	
 	Vector				hull_min;		// ideal movement hull size
-	Vector				hull_max;
+	Vector				hull_max;			
 
 	Vector				view_bbmin;		// clipping bounding box
-	Vector				view_bbmax;
+	Vector				view_bbmax;		
 
 	int					flags;
 
@@ -2350,7 +2331,12 @@ struct studiohdr_t
 	const studiohdr_t	*FindModel( void **cache, char const *modelname ) const;
 
 	// implementation specific back pointer to virtual data
-	int                 unused_virtualModel;
+#ifdef PLATFORM_64BITS
+	// implementation specific back pointer to virtual data. Relocated to studiohdr2_t
+	int					unused_virtualModel;
+#else
+	mutable void		*virtualModel;
+#endif
 	virtualmodel_t		*GetVirtualModel( void ) const;
 
 	// for demand loaded animation blocks
@@ -2359,8 +2345,12 @@ struct studiohdr_t
 	int					numanimblocks;
 	int					animblockindex;
 	inline mstudioanimblock_t *pAnimBlock( int i ) const { Assert( i > 0 && i < numanimblocks); return (mstudioanimblock_t *)(((byte *)this) + animblockindex) + i; };
-
-    int                 unused_animblockModel;
+#ifdef PLATFORM_64BITS
+	// implementation specific back pointer to virtual data. Relocated to studiohdr2_t
+	int					unused_animblockModel;
+#else
+	mutable void		*animblockModel;
+#endif
 	byte *				GetAnimBlock( int i ) const;
 
 	int					bonetablebynameindex;
@@ -2368,8 +2358,14 @@ struct studiohdr_t
 
 	// used by tools only that don't cache, but persist mdl's peer data
 	// engine uses virtualModel to back link to cache pointers
-    int                 unused_pVertexBase;
-    int                 unused_pIndexBase;
+#ifdef PLATFORM_64BITS
+	// implementation specific back pointer to virtual data. Relocated to studiohdr2_t
+	int					unused_pVertexBase;
+	int					unused_pIndexBase;
+#else
+	mutable void		*pVertexBase;
+	mutable void		*pIndexBase;
+#endif
 
 	// if STUDIOHDR_FLAGS_CONSTANT_DIRECTIONAL_LIGHT_DOT is set,
 	// this value is used to calculate directional components of lighting 
@@ -2415,25 +2411,41 @@ struct studiohdr_t
 	inline mstudiolinearbone_t *pLinearBones() const { return studiohdr2index ? pStudioHdr2()->pLinearBones() : NULL; }
 
 	inline int			BoneFlexDriverCount() const { return studiohdr2index ? pStudioHdr2()->m_nBoneFlexDriverCount : 0; }
-	inline const mstudioboneflexdriver_t* BoneFlexDriver( int i ) const { Assert( i >= 0 && i < BoneFlexDriverCount() ); return studiohdr2index > 0 ? pStudioHdr2()->pBoneFlexDriver( i ) : NULL; }
+	inline const mstudioboneflexdriver_t* BoneFlexDriver( int i ) const { Assert( i >= 0 && i < BoneFlexDriverCount() ); return studiohdr2index ? pStudioHdr2()->pBoneFlexDriver( i ) : NULL; }
 
+#ifdef PLATFORM_64BITS
 	void* 				VirtualModel() const { return studiohdr2index ? (void *)( pStudioHdr2()->virtualModel ) : nullptr; }
-	void				SetVirtualModel( void* ptr ) { Assert( studiohdr2index ); if ( studiohdr2index ) { pStudioHdr2()->virtualModel = ptr; } else { Msg("go fuck urself!\n"); } }
+	void				SetVirtualModel( void* ptr ) { Assert( studiohdr2index ); if ( studiohdr2index ) { pStudioHdr2()->virtualModel = ptr; } }
+
 	void*				VertexBase() const { return studiohdr2index ? (void *)( pStudioHdr2()->pVertexBase ) : nullptr; }
 	void				SetVertexBase( void* pVertexBase ) const { Assert( studiohdr2index ); if ( studiohdr2index ) { pStudioHdr2()->pVertexBase = pVertexBase; } }
 	void*				IndexBase() const { return studiohdr2index ? ( void * ) ( pStudioHdr2()->pIndexBase ) : nullptr; }
 	void				SetIndexBase( void* pIndexBase ) const { Assert( studiohdr2index ); if ( studiohdr2index ) { pStudioHdr2()->pIndexBase  = pIndexBase; } }
+#else
+	void* 				VirtualModel() const { return virtualModel; }
+	void				SetVirtualModel( void* ptr ) { virtualModel = ptr; }
+
+	void*				VertexBase() const { return pVertexBase; }
+	void				SetVertexBase( void* _pVertexBase ) const { pVertexBase = _pVertexBase; }
+	void*				IndexBase() const { return pIndexBase; }
+	void				SetIndexBase( void* _pIndexBase ) const { pIndexBase = _pIndexBase; }
+#endif
 
 	// NOTE: No room to add stuff? Up the .mdl file format version 
 	// [and move all fields in studiohdr2_t into studiohdr_t and kill studiohdr2_t],
 	// or add your stuff to studiohdr2_t. See NumSrcBoneTransforms/SrcBoneTransform for the pattern to use.
 	int					unused2[1];
+
+	studiohdr_t() = default;
+
 private:
 	// No copy constructors allowed
 	studiohdr_t(const studiohdr_t& vOther);
 
 	friend struct virtualmodel_t;
 };
+
+
 
 //-----------------------------------------------------------------------------
 // Purpose:
@@ -2460,12 +2472,12 @@ public:
 	inline const studiohdr_t	*GetRenderHdr( void ) const { return m_pStudioHdr; };
 	const studiohdr_t *pSeqStudioHdr( int sequence );
 	const studiohdr_t *pAnimStudioHdr( int animation );
+	const virtualmodel_t * ResetVModel( const virtualmodel_t *pVModel ) const;
 
 private:
 	mutable const studiohdr_t		*m_pStudioHdr;
 	mutable virtualmodel_t	*m_pVModel;
 
-	const virtualmodel_t * ResetVModel( const virtualmodel_t *pVModel ) const;
 	const studiohdr_t *GroupStudioHdr( int group );
 	mutable CUtlVector< const studiohdr_t * > m_pStudioHdrCache;
 
@@ -3101,14 +3113,13 @@ inline const mstudioflexcontroller_t *mstudioflexcontrollerui_t::pController( in
 // If we only support the current version, this function should be empty.
 inline bool Studio_ConvertStudioHdrToNewVersion( studiohdr_t *pStudioHdr )
 {
-	COMPILE_TIME_ASSERT( STUDIO_VERSION == 49 ); //  put this to make sure this code is updated upon changing version.
+	COMPILE_TIME_ASSERT( STUDIO_VERSION == 48 ); //  put this to make sure this code is updated upon changing version.
 
 	int version = pStudioHdr->version;
 	if ( version == STUDIO_VERSION )
 		return true;
 
 	bool bResult = true;
-
 	if (version < 46)
 	{
 		// some of the anim index data is incompatible
@@ -3143,7 +3154,7 @@ inline bool Studio_ConvertStudioHdrToNewVersion( studiohdr_t *pStudioHdr )
 			pAnim->zeroframeindex = 0;
 			pAnim->zeroframespan = 0;
 		}
-	}
+	} 
 	else if (version == 47)
 	{
 		for (int i = 0; i < pStudioHdr->numlocalanim; i++)
@@ -3159,9 +3170,7 @@ inline bool Studio_ConvertStudioHdrToNewVersion( studiohdr_t *pStudioHdr )
 	}
 
 	// for now, just slam the version number since they're compatible
-
-	// nillerusr: that's stupid, comment this shit
-	//pStudioHdr->version = STUDIO_VERSION;
+	pStudioHdr->version = STUDIO_VERSION;
 
 	return bResult;
 }
@@ -3299,20 +3308,24 @@ inline int Studio_LoadVertexes( const vertexFileHeader_t *pTempVvdHdr, vertexFil
 			continue;
 		}
 
-		// copy vertexes
+		if ( ( pFixupTable[ i ].numVertexes < 0 ) || ( target + pFixupTable[ i ].numVertexes > numVertexes ) )
+		{
+			Assert( !"Malicious map attempting to write off the end of our fixup verts. Sad face." );
+			Error( "Unable to load corrupted map." );
+		}
 
-		// TODO(nillerusr): That sucks and needs to be fixed
+		// copy vertexes
 		memcpy(
-			(byte*)((mstudiovertex_t *)((byte *)pNewVvdHdr+pNewVvdHdr->vertexDataStart) + target),
-			(byte*)((mstudiovertex_t *)((byte *)pTempVvdHdr+pTempVvdHdr->vertexDataStart) + pFixupTable[i].sourceVertexID),
+			(mstudiovertex_t *)((byte *)pNewVvdHdr+pNewVvdHdr->vertexDataStart) + target,
+			(mstudiovertex_t *)((byte *)pTempVvdHdr+pTempVvdHdr->vertexDataStart) + pFixupTable[i].sourceVertexID,
 			pFixupTable[i].numVertexes*sizeof(mstudiovertex_t) );
 
 		if (bNeedsTangentS)
 		{
 			// copy tangents
 			memcpy(
-				(byte*)((Vector4D *)((byte *)pNewVvdHdr+pNewVvdHdr->tangentDataStart) + target),
-				(byte*)((Vector4D *)((byte *)pTempVvdHdr+pTempVvdHdr->tangentDataStart) + pFixupTable[i].sourceVertexID),
+				(Vector4D *)((byte *)pNewVvdHdr+pNewVvdHdr->tangentDataStart) + target,
+				(Vector4D *)((byte *)pTempVvdHdr+pTempVvdHdr->tangentDataStart) + pFixupTable[i].sourceVertexID,
 				pFixupTable[i].numVertexes*sizeof(Vector4D) );
 		}
 

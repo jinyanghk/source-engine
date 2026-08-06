@@ -994,7 +994,7 @@ int ByteswapIKRules( studiohdr_t *&pHdrSrc, int numikrules, int numFrames, byte 
 			if ( pIKRule->szattachmentindex )
 			{
 				SET_INDEX_POINTERS( pData, pIKRule, szattachmentindex )
-				int size = strlen( (char*)pDataSrc ) + 1;
+				int size = V_strlen( (char*)pDataSrc ) + 1;
 				WriteBuffer<char>( pDataDest, pDataSrc, size );
 			}
 		}
@@ -1580,7 +1580,7 @@ int ByteswapMDLFile( void *pDestBase, void *pSrcBase, const int fileSize )
 					if ( pIKRule->szattachmentindex )
 					{
 						SET_INDEX_POINTERS( pData, pIKRule, szattachmentindex )
-						int size = strlen( (char*)pDataSrc ) + 1;
+						int size = V_strlen( (char*)pDataSrc ) + 1;
 						WriteBuffer<char>( pDataDest, pDataSrc, size );
 					}
 				}
@@ -1957,7 +1957,7 @@ int ByteswapMDLFile( void *pDestBase, void *pSrcBase, const int fileSize )
 	for ( int i = 0; i < numCdTextures; ++i )
 	{
 		char *pPath = (char*)pHdrDest + SrcNative( &((int *)pDataSrc)[i] );
-		int len = strlen( pPath );
+		int len = V_strlen( pPath );
 		if ( len >= 2 && ( pPath[len-1] == '\\' || pPath[len-1] == '/' ) && ( pPath[len-2] == '\\' || pPath[len-2] == '/' ) )
 		{
 			pPath[len-1] = '\0';
@@ -2522,14 +2522,27 @@ BEGIN_BYTESWAP_DATADESC( studiohdr_t )
 	DEFINE_FIELD( contents, FIELD_INTEGER ),
 	DEFINE_FIELD( numincludemodels, FIELD_INTEGER ),
 	DEFINE_INDEX( includemodelindex, FIELD_INTEGER ),
+#ifdef PLATFORM_64BITS
 	DEFINE_FIELD( unused_virtualModel, FIELD_INTEGER ),				// void*
+#else
+	DEFINE_FIELD( virtualModel, FIELD_INTEGER ),				// void*
+#endif
 	DEFINE_INDEX( szanimblocknameindex, FIELD_INTEGER ),	
 	DEFINE_FIELD( numanimblocks, FIELD_INTEGER ),
 	DEFINE_INDEX( animblockindex, FIELD_INTEGER ),
+#ifdef PLATFORM_64BITS
 	DEFINE_FIELD( unused_animblockModel, FIELD_INTEGER ),				// void*
+#else
+	DEFINE_FIELD( animblockModel, FIELD_INTEGER ),				// void*
+#endif
 	DEFINE_INDEX( bonetablebynameindex, FIELD_INTEGER ),
+#ifdef PLATFORM_64BITS
 	DEFINE_FIELD( unused_pVertexBase, FIELD_INTEGER ),					// void*
 	DEFINE_FIELD( unused_pIndexBase, FIELD_INTEGER ),					// void*
+#else
+	DEFINE_FIELD( pVertexBase, FIELD_INTEGER ),					// void*
+	DEFINE_FIELD( pIndexBase, FIELD_INTEGER ),					// void*
+#endif
 	DEFINE_FIELD( constdirectionallightdot, FIELD_CHARACTER ),	// byte
 	DEFINE_FIELD( rootLOD, FIELD_CHARACTER ),					// byte
 	DEFINE_FIELD( numAllowedRootLODs, FIELD_CHARACTER ),		// byte
@@ -2985,11 +2998,7 @@ BEGIN_BYTESWAP_DATADESC( mstudiomesh_t )
 END_BYTESWAP_DATADESC()
 
 BEGIN_BYTESWAP_DATADESC( mstudio_meshvertexdata_t )
-#ifdef PLATFORM_64BITS
-	DEFINE_FIELD( index_ptr_modelvertexdata, FIELD_INTEGER ),	// mstudio_modelvertexdata_t*
-#else
 	DEFINE_FIELD( modelvertexdata, FIELD_INTEGER ),	// mstudio_modelvertexdata_t*
-#endif
 	DEFINE_ARRAY( numLODVertexes, FIELD_INTEGER, MAX_NUM_LODS ),
 END_BYTESWAP_DATADESC()
 
