@@ -9,7 +9,8 @@
 ```sh
 nano ~/.gdbninit
 ```
-add
+
 ```
+set debuginfod enabled off
 handle SIGPIPE nostop noprint
 ```

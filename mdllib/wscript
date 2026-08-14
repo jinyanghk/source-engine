@@ -1,0 +1,42 @@
+#! /usr/bin/env python
+# encoding: utf-8
+
+from waflib import Utils
+import os
+
+top = '.'
+PROJECT_NAME = 'mdllib'
+
+def options(opt):
+	# stub
+	return
+
+def configure(conf):
+	return
+
+def build(bld):
+	source = [
+		'mdllib.cpp',
+        'mdllib_stripinfo.cpp',
+        'mdllib_stripmodel.cpp',
+        'mdllib_utils.cpp',
+	]
+
+	includes = ['.', '../public', '../public/tier0', '../public/tier1', '../utils/common']
+	defines = []
+	libs = ['tier1', 'tier0']
+
+	install_path = bld.env.LIBDIR
+
+	bld.shlib(
+		source   = source,
+		target   = PROJECT_NAME,
+		name     = PROJECT_NAME,
+		features = 'c cxx',
+		includes = includes,
+		defines  = defines,
+		use      = libs,
+		install_path = install_path,
+		subsystem = bld.env.MSVC_SUBSYSTEM,
+		idx      = bld.get_taskgen_count()
+	)

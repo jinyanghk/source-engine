@@ -1,0 +1,46 @@
+#! /usr/bin/env python
+# encoding: utf-8
+
+from waflib import Utils
+import os
+
+top = '.'
+PROJECT_NAME = 'imgui'
+
+def options(opt):
+	# stub
+	return
+
+def configure(conf):
+	# stub
+	return
+
+def build(bld):
+	source = [
+        '../../imgui/imgui.cpp',
+        '../../imgui/imgui_draw.cpp',
+        '../../imgui/imgui_tables.cpp',
+        '../../imgui/imgui_widgets.cpp',
+        '../../imgui/imgui_demo.cpp',
+	]
+
+	includes = [
+		'../../imgui',
+	]
+
+	defines = []
+
+	libs = []
+		
+	bld.stlib(
+		source   = source,
+		target   = PROJECT_NAME,
+		name     = PROJECT_NAME,
+		features = 'c cxx',
+		includes = includes,
+		defines  = defines,
+		use      = libs,
+		subsystem = bld.env.MSVC_SUBSYSTEM,
+		idx      = bld.get_taskgen_count()
+	)
+
