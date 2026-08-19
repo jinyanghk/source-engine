@@ -5,7 +5,7 @@ from waflib import Utils
 import os
 
 top = '.'
-PROJECT_NAME = 'hammer'
+PROJECT_NAME = 'imhammer'
 
 def options(opt):
 	# stub
@@ -24,12 +24,15 @@ def build(bld):
         '.',
 		'../../imgui',
         '../libgizmo',
-        '../thirdparty/stb',
+        #'../../thirdparty/stb',
+		'../../public',
+		'../../public/tier0',
+		'../../public/tier1',
 	]
 
 	defines = []
 
-	libs = ['imgui', 'gizmo', 'X11', 'GL']
+	libs = ['fgdlib', 'tier1', 'tier0', 'imgui', 'gizmo', 'X11', 'GL']
 
 	install_path = bld.env.BINDIR
 	bld(

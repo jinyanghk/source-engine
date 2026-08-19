@@ -1375,7 +1375,7 @@ namespace ImApp
          vi->depth, InputOutput, vi->visual,
          CWColormap | CWEventMask, &swa);
 
-      XStoreName(mDisplay, mWindow, "ImGuizmo");
+      XStoreName(mDisplay, mWindow, "Hammer");
       XMapWindow(mDisplay, mWindow);
 
       mWmDeleteMessage = XInternAtom(mDisplay, "WM_DELETE_WINDOW", False);
@@ -1747,9 +1747,9 @@ namespace ImApp
       // [window setDelegate:delegate]
       ((msg_void_id)objc_msgSend)(mAppWindow, objc_sel("setDelegate:"), mWindowDelegate);
 
-      // [window setTitle:@"ImGuizmo"]
+      // [window setTitle:@"Hammer"]
       id title = ((msg_id_id)objc_msgSend)(objc_cls("NSString"),
-         objc_sel("stringWithUTF8String:"), (id)"ImGuizmo");
+         objc_sel("stringWithUTF8String:"), (id)"Hammer");
       ((msg_void_id)objc_msgSend)(mAppWindow, objc_sel("setTitle:"), title);
 
       // Create NSOpenGLPixelFormat
