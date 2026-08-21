@@ -11,7 +11,7 @@ def options(opt):
 	opt.load('compiler_cxx qt5')
 
 def configure(conf):
-	#conf.want_qt6 = True
+	conf.want_qt6 = True
 	conf.load('compiler_cxx qt5')
 
 def build(bld):
@@ -43,7 +43,7 @@ def build(bld):
 		'widgets/PrefSlider.cpp',
 		# Everything else
 		'main.cpp',
-		'Zoo.cpp',
+		'mainwindow.cpp',
     ]
 
 	headers = [
@@ -70,7 +70,7 @@ def build(bld):
 		'dialogs/ActionsBar.h',
 		'widgets/FileSelector.h',
 		'widgets/PrefSlider.h',
-		'Zoo.h',
+		'mainwindow.h',
 	]
 
 	includes = [

@@ -1,4 +1,4 @@
-#include "Zoo.h"
+#include "mainwindow.h"
 
 #include "dialogs/GoTo.h"
 #include "dialogs/Options.h"

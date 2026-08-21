@@ -1007,46 +1007,14 @@ static void ShowVectorEditorDemo()
     ImGui::TextWrapped("Select: drag anchors/handles, Shift-click or box-select anchors, Delete removes selection. Mouse wheel zooms, middle mouse pans. Pen: click anchors, click-drag handles, hold Shift while dragging to snap handles to 45 degrees, click first anchor to close.");
 }
 
-void LoadFGD(){
+int main(int, char **)
+{
     GameData GD;
     GD.ClearData();
     GD.Load("halflife2.fgd");
 
     int nClassCount = GD.GetClassCount();
 
-    for (int i = 0; i < nClassCount; i++)
-    {
-        GDclass *pClass = GD.GetClass(i);
-        if (!pClass)
-            continue;
-
-        if (pClass->IsBaseClass()) 
-        {
-            // This is an @BaseClass template, skip it if you only want real entities
-            continue; 
-        }
-
-        // Filter or process the entity class definition
-        const char* pszClassName = pClass->GetName();
-        const char* pszDescription = pClass->GetDescription();
-
-        // Alternatively, check explicit types
-        if (pClass->IsPointClass())
-        {
-            // Entity is a 3D point entity (e.g., npc_citizen, light, info_player_start)
-            printf("3D point Entity: %s (%s)\n", pszClassName, pszDescription);
-        }
-        else if (pClass->IsSolidClass())
-        {
-            // Entity is a brush/geometry entity (e.g., trigger_once, func_breakable)
-            printf("brush/geometry Entity: %s (%s)\n", pszClassName, pszDescription);
-        }
-
-    }
-}
-
-int main(int, char **)
-{
     ImApp::ImApp imApp;
 
     ImApp::Config config;
@@ -1054,8 +1022,6 @@ int main(int, char **)
     config.mHeight = 720;
 
     imApp.Init(config);
-
-    LoadFGD();
 
     int lastUsing = 0;
 
@@ -1151,7 +1117,9 @@ int main(int, char **)
             ImGui::End();
             ImGui::Begin("Editor", nullptr, ImGuiWindowFlags_None);
             ImGui::End();
-            ImGui::Begin("Other controls", nullptr, ImGuiWindowFlags_None);
+            //ImGui::Begin("Other controls", nullptr, ImGuiWindowFlags_None);
+            //ImGui::End();
+            ImGui::Begin("Entities", nullptr, ImGuiWindowFlags_None);
             ImGui::End();
             ImGui::Begin("Sequencer", nullptr, ImGuiWindowFlags_None);
             ImGui::End();
@@ -1173,8 +1141,8 @@ int main(int, char **)
             // allocate windows to dock space
             ImGui::DockBuilderDockWindow("Camera", dock_main);
 
-            ImGui::DockBuilderDockWindow("Dear ImGui Demo", dock_right);
-            ImGui::DockBuilderDockWindow("Other controls", dock_right);
+            ImGui::DockBuilderDockWindow("Entities", dock_right);
+            //ImGui::DockBuilderDockWindow("Other controls", dock_right);
             ImGui::DockBuilderDockWindow("Editor", dock_right);
 
             ImGui::DockBuilderDockWindow("Vector Editor", dock_bottom);
@@ -1183,8 +1151,6 @@ int main(int, char **)
 
             ImGui::DockBuilderFinish(dockspace_id);
         }
-
-        ImGui::ShowDemoWindow();
 
         bool rightHanded = (handedness == 0);
         if (isPerspective)
@@ -1338,6 +1304,69 @@ int main(int, char **)
         }
         ImGui::End();
 
+        ImGui::Begin("Entities");
+        if (ImGui::CollapsingHeader("3D Point"))
+        {
+            int n = 0;
+            for (int i = 0; i < nClassCount; i++){
+                GDclass *pClass = GD.GetClass(i);
+                if (!pClass)
+                    continue;
+
+                if (pClass->IsBaseClass()) 
+                {
+                    // This is an @BaseClass template, skip it if you only want real entities
+                    continue; 
+                }
+                // Filter or process the entity class definition
+                const char* pszClassName = pClass->GetName();
+                const char* pszDescription = pClass->GetDescription();
+
+                // Alternatively, check explicit types
+                if (pClass->IsPointClass())
+                {
+                    // Entity is a 3D point entity (e.g., npc_citizen, light, info_player_start)
+                    //ImGui::Text("%s (%s)", pszClassName, pszDescription);
+                    if ((n % 5) != 0)
+                        ImGui::SameLine();
+                    ImGui::Button(pszClassName, ImVec2(60, 60));
+                    ImGui::SetItemTooltip(pszDescription);
+                    n++;
+                }
+            }
+        }
+        if (ImGui::CollapsingHeader("Brush/Geometry"))
+        {
+            int n = 0;
+            for (int i = 0; i < nClassCount; i++){
+                GDclass *pClass = GD.GetClass(i);
+                if (!pClass)
+                    continue;
+
+                if (pClass->IsBaseClass()) 
+                {
+                    // This is an @BaseClass template, skip it if you only want real entities
+                    continue; 
+                }
+                // Filter or process the entity class definition
+                const char* pszClassName = pClass->GetName();
+                const char* pszDescription = pClass->GetDescription();
+
+                // Alternatively, check explicit types
+                if (pClass->IsSolidClass())
+                {
+                    // Entity is a 3D point entity (e.g., npc_citizen, light, info_player_start)
+                    //ImGui::Text("%s (%s)", pszClassName, pszDescription);
+                    if ((n % 5) != 0)
+                        ImGui::SameLine();
+                    ImGui::Button(pszClassName, ImVec2(60, 60));
+                    ImGui::SetItemTooltip(pszDescription);
+                    n++;
+                }
+            }
+        }
+        ImGui::End();
+/*
         ImGui::Begin("Other controls");
         if (ImGui::CollapsingHeader("Zoom Slider"))
         {
@@ -1357,14 +1386,14 @@ int main(int, char **)
                 ImGui::PopID();
             }
         }
-
+*/
         // Graph Editor
         static GraphEditor::Options options;
         static GraphEditorDelegate delegate;
         static GraphEditor::ViewState viewState;
         static GraphEditor::FitOnScreen fit = GraphEditor::Fit_None;
         static bool showGraphEditor = true;
-
+/*
         if (ImGui::CollapsingHeader("Graph Editor"))
         {
             ImGui::Checkbox("Show GraphEditor", &showGraphEditor);
@@ -1391,8 +1420,8 @@ int main(int, char **)
         }
 
         ImGui::End();
-
-        if (showGraphEditor)
+*/
+//        if (showGraphEditor)
         {
             ImGui::Begin("Graph Editor", NULL, 0);
             if (ImGui::Button("Fit all nodes"))
