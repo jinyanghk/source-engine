@@ -1,0 +1,98 @@
+#! /usr/bin/env python
+# encoding: utf-8
+
+from waflib import Utils
+import os
+
+top = '.'
+PROJECT_NAME = 'qthammer'
+
+def options(opt):
+	opt.load('compiler_cxx qt5')
+
+def configure(conf):
+	#conf.want_qt6 = True
+	conf.load('compiler_cxx qt5')
+
+def build(bld):
+	source = [
+		# Dialogs
+		'dialogs/Options.cpp',
+		'dialogs/GoTo.cpp',
+		'dialogs/RunMapNormal.cpp',
+		'dialogs/MapInformation.cpp',
+		'dialogs/EntityReport.cpp',
+		'dialogs/CheckForProblems.cpp',
+		'dialogs/PasteSpecial.cpp',
+		'dialogs/FindEntities.cpp',
+		'dialogs/Sprinkle.cpp',
+		'dialogs/MakeHollow.cpp',
+		'dialogs/Transform.cpp',
+		'dialogs/SmoothingGroups.cpp',
+		'dialogs/EntityHelp.cpp',
+		'dialogs/EditVisgroups.cpp',
+		'dialogs/FaceEditSheet.cpp',
+		'dialogs/Replace.cpp',
+		'dialogs/MapDiff.cpp',
+		'dialogs/MoveToVisgroup.cpp',
+		'dialogs/SoundBrowser.cpp',
+		'dialogs/RightHandUtils.cpp',
+		'dialogs/ActionsBar.cpp',
+		# Widgets 
+		'widgets/FileSelector.cpp',
+		'widgets/PrefSlider.cpp',
+		# Everything else
+		'main.cpp',
+		'Zoo.cpp',
+    ]
+
+	headers = [
+		'dialogs/Options.h',
+		'dialogs/GoTo.h',
+		'dialogs/RunMapNormal.h',
+		'dialogs/MapInformation.h',
+		'dialogs/EntityReport.h',
+		'dialogs/CheckForProblems.h',
+		'dialogs/PasteSpecial.h',
+		'dialogs/FindEntities.h',
+		'dialogs/Sprinkle.h',
+		'dialogs/MakeHollow.h',
+		'dialogs/Transform.h',
+		'dialogs/SmoothingGroups.h',
+		'dialogs/EntityHelp.h',
+		'dialogs/EditVisgroups.h',
+		'dialogs/FaceEditSheet.h',
+		'dialogs/Replace.h',
+		'dialogs/MapDiff.h',
+		'dialogs/MoveToVisgroup.h',
+		'dialogs/SoundBrowser.h',
+		'dialogs/RightHandUtils.h',
+		'dialogs/ActionsBar.h',
+		'widgets/FileSelector.h',
+		'widgets/PrefSlider.h',
+		'Zoo.h',
+	]
+
+	includes = [
+        '.',
+
+	]
+
+	defines = []
+
+	libs = ['QT6CORE', 'QT6WIDGETS', 'QT6GUI']
+
+	install_path = bld.env.BINDIR
+	bld(
+		source   = source,
+		moc  = headers,
+		target   = PROJECT_NAME,
+		name     = PROJECT_NAME,
+		features = 'cxx cxxprogram qt6',
+		includes = includes,
+		defines  = defines,
+		use      = libs,
+		install_path = install_path,
+		subsystem = bld.env.MSVC_SUBSYSTEM,
+		idx      = bld.get_taskgen_count()
+	)

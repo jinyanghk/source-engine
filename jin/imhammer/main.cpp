@@ -9,6 +9,10 @@
 #undef None
 #endif
 
+#include "fgdlib/ieditortexture.h"
+#include "fgdlib/gamedata.h"
+#include "fgdlib/gdclass.h"
+
 #include "ImGuizmo.h"
 #include "ImSequencer.h"
 #include "ImZoomSlider.h"
@@ -1003,6 +1007,44 @@ static void ShowVectorEditorDemo()
     ImGui::TextWrapped("Select: drag anchors/handles, Shift-click or box-select anchors, Delete removes selection. Mouse wheel zooms, middle mouse pans. Pen: click anchors, click-drag handles, hold Shift while dragging to snap handles to 45 degrees, click first anchor to close.");
 }
 
+void LoadFGD(){
+    GameData GD;
+    GD.ClearData();
+    GD.Load("halflife2.fgd");
+
+    int nClassCount = GD.GetClassCount();
+
+    for (int i = 0; i < nClassCount; i++)
+    {
+        GDclass *pClass = GD.GetClass(i);
+        if (!pClass)
+            continue;
+
+        if (pClass->IsBaseClass()) 
+        {
+            // This is an @BaseClass template, skip it if you only want real entities
+            continue; 
+        }
+
+        // Filter or process the entity class definition
+        const char* pszClassName = pClass->GetName();
+        const char* pszDescription = pClass->GetDescription();
+
+        // Alternatively, check explicit types
+        if (pClass->IsPointClass())
+        {
+            // Entity is a 3D point entity (e.g., npc_citizen, light, info_player_start)
+            printf("3D point Entity: %s (%s)\n", pszClassName, pszDescription);
+        }
+        else if (pClass->IsSolidClass())
+        {
+            // Entity is a brush/geometry entity (e.g., trigger_once, func_breakable)
+            printf("brush/geometry Entity: %s (%s)\n", pszClassName, pszDescription);
+        }
+
+    }
+}
+
 int main(int, char **)
 {
     ImApp::ImApp imApp;
@@ -1012,6 +1054,8 @@ int main(int, char **)
     config.mHeight = 720;
 
     imApp.Init(config);
+
+    LoadFGD();
 
     int lastUsing = 0;
 

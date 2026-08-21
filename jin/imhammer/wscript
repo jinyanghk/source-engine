@@ -32,7 +32,7 @@ def build(bld):
 
 	defines = []
 
-	libs = ['fgdlib', 'tier1', 'tier0', 'imgui', 'gizmo', 'X11', 'GL']
+	libs = ['fgdlib', 'mathlib', 'tier1', 'tier0', 'imgui', 'gizmo', 'X11', 'GL']
 
 	install_path = bld.env.BINDIR
 	bld(

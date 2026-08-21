@@ -120,6 +120,7 @@ projects={
 		'jin/libimgui',
 		'jin/libgizmo',
 		'jin/imhammer',
+		'jin/qthammer',
 	],
 	'tests': [
 		'appframework',
@@ -211,6 +212,7 @@ projects={
 		'jin/libimgui',
 		'jin/libgizmo',
 		'jin/imhammer',
+		'jin/qthammer',
 	]
 }
 

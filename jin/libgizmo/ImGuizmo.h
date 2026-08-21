@@ -313,9 +313,9 @@ namespace IMGUIZMO_NAMESPACE
       DIRECTION_X,      // directionColor[0]
       DIRECTION_Y,      // directionColor[1]
       DIRECTION_Z,      // directionColor[2]
-      PLANE_X,          // planeColor[0]
-      PLANE_Y,          // planeColor[1]
-      PLANE_Z,          // planeColor[2]
+      _PLANE_X,          // planeColor[0]
+      _PLANE_Y,          // planeColor[1]
+      _PLANE_Z,          // planeColor[2]
       SELECTION,        // selectionColor
       INACTIVE,         // inactiveColor
       TRANSLATION_LINE, // translationLineColor

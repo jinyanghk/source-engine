@@ -643,9 +643,9 @@ namespace IMGUIZMO_NAMESPACE
       Colors[DIRECTION_X]           = ImVec4(0.666f, 0.000f, 0.000f, 1.000f);
       Colors[DIRECTION_Y]           = ImVec4(0.000f, 0.666f, 0.000f, 1.000f);
       Colors[DIRECTION_Z]           = ImVec4(0.000f, 0.000f, 0.666f, 1.000f);
-      Colors[PLANE_X]               = ImVec4(0.666f, 0.000f, 0.000f, 0.380f);
-      Colors[PLANE_Y]               = ImVec4(0.000f, 0.666f, 0.000f, 0.380f);
-      Colors[PLANE_Z]               = ImVec4(0.000f, 0.000f, 0.666f, 0.380f);
+      Colors[_PLANE_X]               = ImVec4(0.666f, 0.000f, 0.000f, 0.380f);
+      Colors[_PLANE_Y]               = ImVec4(0.000f, 0.666f, 0.000f, 0.380f);
+      Colors[_PLANE_Z]               = ImVec4(0.000f, 0.000f, 0.666f, 0.380f);
       Colors[SELECTION]             = ImVec4(1.000f, 0.500f, 0.062f, 0.541f);
       Colors[INACTIVE]              = ImVec4(0.600f, 0.600f, 0.600f, 0.600f);
       Colors[TRANSLATION_LINE]      = ImVec4(0.666f, 0.666f, 0.666f, 0.666f);
@@ -1246,7 +1246,7 @@ namespace IMGUIZMO_NAMESPACE
             for (int i = 0; i < 3; i++)
             {
                colors[i + 1] = (type == (int)(MT_MOVE_X + i)) ? selectionColor : GetColorU32(DIRECTION_X + i);
-               colors[i + 4] = (type == (int)(MT_MOVE_YZ + i)) ? selectionColor : GetColorU32(PLANE_X + i);
+               colors[i + 4] = (type == (int)(MT_MOVE_YZ + i)) ? selectionColor : GetColorU32(_PLANE_X + i);
                colors[i + 4] = (type == MT_MOVE_SCREEN) ? selectionColor : colors[i + 4];
             }
             break;
