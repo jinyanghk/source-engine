@@ -1,22 +1,60 @@
-#pragma once
+#ifndef MAINWINDOW_H
+#define MAINWINDOW_H
 
-#include <QDialog>
-#include <QPushButton>
-#include <QLineEdit>
+#include <QMainWindow>
+#include <QMenuBar>
+#include <QToolBar>
+#include <QStatusBar>
+#include <QDockWidget>
+#include <QTreeView>
+#include <QListWidget>
+#include <QTableWidget>
+#include <QTextEdit>
 #include <QLabel>
-#include <QHBoxLayout>
+#include <QGridLayout>
+#include <QStandardItemModel>
+#include <QSplitter>
 
 namespace ui {
 
-//-------------------------------------------//
-// Launches every dialog window in this repo //
-//-------------------------------------------//
-class CZoo : public QDialog
+class MainWindow : public QMainWindow
 {
-Q_OBJECT;
+    Q_OBJECT
+
 public:
-    CZoo(QWidget *pParent);
+    explicit MainWindow(QWidget *parent = nullptr);
+    ~MainWindow();
+
+private:
+    void createMenuBar();
+    void createToolBars();
+    void createDockWidgets();
+    void createCentralWidget();
+    void createStatusBar();
+    void applyStyleSheet();
+
+    QMenuBar *m_menuBar;
+    QToolBar *m_mainToolBar;
+    QToolBar *m_viewToolBar;
+    QStatusBar *m_statusBar;
+
+    QDockWidget *m_hierarchyDock;
+    QDockWidget *m_textureDock;
+    QDockWidget *m_propertyDock;
+    QDockWidget *m_consoleDock;
+
+    QWidget *m_centralWidget;
+    QGridLayout *m_viewLayout;
+    QLabel *m_view3D;
+    QLabel *m_viewTop;
+    QLabel *m_viewFront;
+    QLabel *m_viewSide;
+
+    QSplitter *m_mainSplitter;
+    QSplitter *m_leftSplitter;
+    QSplitter *m_rightSplitter;
+};
 
 };
 
-}
+#endif // MAINWINDOW_H
