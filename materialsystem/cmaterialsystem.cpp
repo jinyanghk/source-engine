@@ -672,7 +672,9 @@ bool CMaterialSystem::Connect( CreateInterfaceFn factory )
 	g_pLauncherMgr = (ILauncherMgr *)factory( "SDLMgrInterface001" /*SDL_MGR_INTERFACE_VERSION*/, NULL );		
 	if ( !g_pLauncherMgr )
 	{
-		return false;
+		//return false;
+		// studiomdl loads libmaterialsystem.so too, but doesn't need SDLMgrInterface001
+		Warning("SDLMgrInterface001 not loaded!\n");
 	}
 #endif // USE_SDL
 #endif // !DEDICATED
