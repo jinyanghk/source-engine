@@ -4,10 +4,8 @@
 //
 //===========================================================================//
 
-#if !defined( _X360 ) && defined(_WIN32)
+#if !defined( _X360 )
 #include <windows.h>
-#endif
-#if defined(POSIX)
 #endif
 #include "vstdlib/iprocessutils.h"
 #include "tier1/utllinkedlist.h"

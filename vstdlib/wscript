@@ -23,6 +23,7 @@ def build(bld):
 		'KeyValuesSystem.cpp',
 		'random.cpp',
 		'vcover.cpp',
+		'processutils_posix.cpp',
 		'../public/tier0/memoverride.cpp'
 	]
 	
