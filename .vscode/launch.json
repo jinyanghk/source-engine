@@ -12,7 +12,7 @@
         //"program": "${workspaceFolder}/hl2/hl2_launcher",
         //"args": ["-game", "hl2", "-console", "-window", "-height", "768", "-width", "1024"],
         //"args": [],
-        "args": ["-nop4", "../../Scout.qc"],
+        "args": ["-game", "hl2", "-nop4", "../../Scout.qc"],
         "stopAtEntry": false,
         "cwd": "${workspaceFolder}/hl2",
         //"cwd": "${workspaceFolder}/portal",

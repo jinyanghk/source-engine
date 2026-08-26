@@ -185,6 +185,8 @@ projects={
 		'vstdlib',
 		'fgdlib',
 		'vtf',
+		'materialsystem',
+		'materialsystem/shaderlib',
 		'materialsystem/shaderapiempty',
 		'appframework',
 		'raytrace',
