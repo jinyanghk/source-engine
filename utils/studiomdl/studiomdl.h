@@ -118,7 +118,7 @@ extern void WriteModelFiles(void);
 void *kalloc( int num, int size );
 
 // --------------------------------------------------------------------
-
+/*
 template< class T >
 class CUtlVectorAuto : public CUtlVector< T >
 {
@@ -134,6 +134,38 @@ inline T& CUtlVectorAuto<T>::operator[]( int i )
 	Assert( IsValidIndex(i) );
 	return Base()[i];
 }
+*/
+
+// 在 studiomdl.h 中找到 CUtlVectorAuto 类定义
+template< class T >
+class CUtlVectorAuto : public CUtlVector< T >
+{
+public:
+    // 使用 this-> 来调用基类方法
+    T& operator[]( int i )
+    {
+        // 确保索引在有效范围内
+        if (i >= this->Count())
+        {
+            this->EnsureCount( i + 1 );
+        }
+        return CUtlVector<T>::operator[](i);
+    }
+    
+    const T& operator[]( int i ) const
+    {
+        // 确保索引在有效范围内
+        if (i >= this->Count())
+        {
+            // const 版本不能修改，返回最后一个元素或触发断言
+            static T defaultVal = T();
+            if (this->Count() > 0)
+                return CUtlVector<T>::operator[](this->Count() - 1);
+            return defaultVal;
+        }
+        return CUtlVector<T>::operator[](i);
+    }
+};
 
 // --------------------------------------------------------------------
 

@@ -185,6 +185,7 @@ projects={
 		'vstdlib',
 		'fgdlib',
 		'vtf',
+		'filesystem',
 		'materialsystem',
 		'materialsystem/shaderlib',
 		'materialsystem/shaderapiempty',

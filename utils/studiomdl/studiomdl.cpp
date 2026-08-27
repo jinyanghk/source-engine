@@ -494,8 +494,10 @@ void MdlExceptionFilter( unsigned long code )
 =================
 =================
 */
-#ifdef _WIN32
 int k_memtotal;
+
+#ifdef _WIN32
+
 void *kalloc( int num, int size )
 {
 	// printf( "calloc( %d, %d )\n", num, size );
@@ -510,23 +512,22 @@ void *kalloc( int num, int size )
 	ptr = (byte *)((int)((byte *)ptr + 511) & ~511);
 	return ptr;
 }
+
 #endif
 
 #if defined ( POSIX )
 
-int k_memtotal;
 void *kalloc( int num, int size )
 {
 	int nMemSize = num * size;
 	k_memtotal += nMemSize;
-
-	// ensure memory alignment on maximum of ALIGN
 	nMemSize += 511;
 	void *ptr = malloc( nMemSize );
 	memset( ptr, 0, nMemSize );
 	
-	// FIX: Cast to uintptr_t instead of int to preserve the full 64-bit address space
-	ptr = (byte *)((uintptr_t)((byte *)ptr + 511) & ~(uintptr_t)511);
+	// FIX: Use uintptr_t to safely preserve full 64-bit memory addresses
+	ptr = (byte *)((uintptr_t)((byte *)ptr + 511) & ~(uintptr_t)511); 
+	
 	return ptr;
 }
 
