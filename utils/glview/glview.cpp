@@ -1,20 +1,24 @@
 //========= Copyright Valve Corporation, All rights reserved. ============//
 //
-// Purpose: 
-//
-// $NoKeywords: $
+// Purpose: Fully working Linux-native port of glview using X11 and GLX.
+//          Bypasses the legacy Win32 glaux library completely.
 //
 //=============================================================================//
 #include "glos.h"
-#include <gl/gl.h>
-#if _MSC_VER < 1600
-#include <gl/glaux.h>
-#endif
-#include <gl/glu.h>
+
 #include <stdarg.h>
 #include <string.h>
 #include <stdio.h>
 #include <math.h>
+#include <unistd.h>
+#include <sys/time.h>
+#include <X11/Xlib.h>
+#include <X11/Xutil.h>
+#include <X11/keysym.h>
+#include <GL/gl.h>
+#include <GL/glu.h>
+#include <GL/glx.h>
+
 #include "cmdlib.h"
 #include "mathlib/mathlib.h"
 #include "cmodel.h"
@@ -25,37 +29,27 @@
 #include "tier0/icommandline.h"
 #include "tier0/vprof.h"
 
-HDC		camdc;
-HGLRC	baseRC;
-HWND	camerawindow;
-HANDLE	main_instance;
+// X11 / GLX Native Window Loop Variables
+Display             *g_pDisplay = NULL;
+Window              g_Window = 0;
+GLXContext          g_GlxContext = NULL; 
 
-/*	YWB:  3/13/98
-	You run the program like normal with any file.  If you want to read portals for the
-	file type, you type:  glview -portal filename.gl0 (or whatever).  glview will then
-	try to read in the .prt file filename.prt.
+Vector origin(32.0f, 32.0f, 48.0f);
+QAngle angles(0.0f, 0.0f, 0.0f);
+Vector forward_v, right_v, vup, vpn, vright;
+float	width = 1024;
+float	height = 768;
 
-	The portals are shown as white lines superimposed over your image.  You can toggle the 
-	view between showing portals or not by hitting the '2' key.  The '1' key toggles 
-	world polygons.
+float g_flMovementSpeed	= 320.f;		// Units / second (run speed of HL)
+#define	SPEED_TURN	90		// Degrees / second
 
-	The 'b' key toggles blending modes.
-
-	If you don't want to depth buffer the portals, hit 'p'.
-
-    The command line parsing is inelegant but functional.
-
-    I sped up the KB movement and turn speed, too.
- */
-
-// Vars added by YWB
 Vector g_Center;               // Center of all read points, so camera is in a sensible place
 int g_nTotalPoints	   = 0;    // Total points read, for calculating center
 int g_UseBlending      = 0;	   // Toggle to use blending mode or not
 BOOL g_bReadPortals    = 0;	   // Did we read in a portal file?
 BOOL g_bNoDepthPortals = 0;    // Do we zbuffer the lines of the portals?
-int g_nPortalHighlight = -1;	// The leaf we're viewing
-int g_nLeafHighlight = -1;	// The leaf we're viewing
+int g_nPortalHighlight = -1;   // The leaf we're viewing
+int g_nLeafHighlight = -1;     // The leaf we're viewing
 BOOL g_bShowList1      = 1;	   // Show regular polygons?
 BOOL g_bShowList2      = 1;	   // Show portals?
 BOOL g_bShowLines      = 0;    // Show outlines of faces
@@ -63,24 +57,21 @@ BOOL g_Active = TRUE;
 BOOL g_Update = TRUE;
 BOOL g_bDisp = FALSE;
 IPhysicsCollision *physcollision = NULL;
-// -----------
-static int g_Keys[256];
-void AppKeyDown( int key );
-void AppKeyUp( int key );
 
+static int g_Keys[65536]; 
+void KeyDown(int key);
 
 BOOL ReadDisplacementFile( const char *filename );
 void DrawDisplacementData( void );
+void Draw(void);
 
-#define BENCHMARK_PHY 0
+unsigned int GetLinuxTimeMilliseconds()
+{
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    return (tv.tv_sec * 1000) + (tv.tv_usec / 1000);
+}
 
-/*
-=================
-Error
-
-For abnormal program terminations
-=================
-*/
 void Error (char *error, ...)
 {
 	va_list argptr;
@@ -90,53 +81,42 @@ void Error (char *error, ...)
 	vsprintf (text, error,argptr);
 	va_end (argptr);
 
-    MessageBox(NULL, text, "Error", 0 /* MB_OK */ );
-
+	printf("\n########################################\n");
+	printf("GLVIEW CRITICAL ERROR: %s\n", text);
+	printf("########################################\n\n");
 	exit (1);
 }
-
-float	origin[3] = {32, 32, 48};
-float	angles[3];
-float	forward[3], right[3], vup[3], vpn[3], vright[3];
-float	width = 1024;
-float	height = 768;
-
-float g_flMovementSpeed	= 320.f;		// Units / second (run speed of HL)
-#define	SPEED_TURN	90		// Degrees / second
-
-#define	VK_COMMA		188
-#define	VK_PERIOD		190
-
 
 void KeyDown (int key)
 {
 	switch (key)
 	{
-	case VK_ESCAPE:
+	case XK_Escape:
 		g_Active = FALSE;
 		break;
-
-	case VK_F1:
+	case XK_F1:
 		glEnable (GL_CULL_FACE);
 		glCullFace (GL_FRONT);
 		break;
+	case 'b':
 	case 'B':
 		g_UseBlending ^= 1;
 		if (g_UseBlending)
-			glEnable(GL_BLEND);// YWB TESTING
+			glEnable(GL_BLEND);
 		else
 			glDisable(GL_BLEND);
 		break;
-
 	case '1':
 		g_bShowList1 ^= 1;
 		break;
 	case '2':
 		g_bShowList2 ^= 1;
 		break;
+	case 'p':
 	case 'P':
 		g_bNoDepthPortals ^= 1;
 		break;
+	case 'l':
 	case 'L':
 		g_bShowLines ^= 1;
 		break;
@@ -144,115 +124,69 @@ void KeyDown (int key)
 	g_Update = TRUE;
 }
 
-static BOOL g_Capture = FALSE;
-
-#define	MOUSE_SENSITIVITY			0.2f
-#define MOUSE_SENSITIVITY_X			(MOUSE_SENSITIVITY*1)
-#define MOUSE_SENSITIVITY_Y			(MOUSE_SENSITIVITY*1)
-
-void Cam_MouseMoved( void )
-{
-	if ( g_Capture )
-	{
-		RECT rect;
-		int centerx, centery;
-		float deltax, deltay;
-		POINT cursorPoint;
-
-		GetWindowRect( camerawindow, &rect );
-		
-		if ( rect.top < 0)
-			rect.top = 0;
-		if ( rect.left < 0)
-			rect.left = 0;
-
-		centerx = ( rect.left + rect.right ) / 2;
-		centery = ( rect.top + rect.bottom ) / 2;
-
-		GetCursorPos( &cursorPoint );
-		SetCursorPos( centerx, centery );
-
-		deltax = (cursorPoint.x - centerx) * MOUSE_SENSITIVITY_X;
-		deltay = (cursorPoint.y - centery) * MOUSE_SENSITIVITY_Y;
-
-		angles[1] -= deltax;
-		angles[0] -= deltay;
-
-		g_Update = TRUE;
-	}
-}
-
 int Test_Key( int key )
 {
 	int r = (g_Keys[ key ] != 0);
-
 	g_Keys[ key ] &= 0x01; // clear out debounce bit
-
 	if (r)
 		g_Update = TRUE;
-
 	return r;
 }
 
-// UNDONE: Probably should change the controls to match the game - but I don't know who relies on them
-// as of now.
 void Cam_Update( float frametime )
 {
-	if ( Test_Key( 'W' ) )
+	if ( Test_Key( 'w' ) || Test_Key( 'W' ) )
 	{
-		VectorMA (origin, g_flMovementSpeed*frametime, vpn, origin);
+		VectorMA (origin.Base(), g_flMovementSpeed*frametime, vpn.Base(), origin.Base());
 	}
-	if ( Test_Key( 'S' ) )
+	if ( Test_Key( 's' ) || Test_Key( 'S' ) )
 	{
-		VectorMA (origin, -g_flMovementSpeed*frametime, vpn, origin);
+		VectorMA (origin.Base(), -g_flMovementSpeed*frametime, vpn.Base(), origin.Base());
 	}
-	if ( Test_Key( 'A' ) )
+	if ( Test_Key( 'a' ) || Test_Key( 'A' ) )
 	{
-		VectorMA (origin, -g_flMovementSpeed*frametime, vright, origin);
+		VectorMA (origin.Base(), -g_flMovementSpeed*frametime, vright.Base(), origin.Base());
 	}
-	if ( Test_Key( 'D' ) )
+	if ( Test_Key( 'd' ) || Test_Key( 'D' ) )
 	{
-		VectorMA (origin, g_flMovementSpeed*frametime, vright, origin);
+		VectorMA (origin.Base(), g_flMovementSpeed*frametime, vright.Base(), origin.Base());
 	}
-
-	if ( Test_Key( VK_UP ) )
+	if ( Test_Key( XK_Up ) )
 	{
-		VectorMA (origin, g_flMovementSpeed*frametime, forward, origin);
+		VectorMA (origin.Base(), g_flMovementSpeed*frametime, forward_v.Base(), origin.Base());
 	}
-	if ( Test_Key( VK_DOWN ) )
+	if ( Test_Key( XK_Down ) )
 	{
-		VectorMA (origin, -g_flMovementSpeed*frametime, forward, origin);
+		VectorMA (origin.Base(), -g_flMovementSpeed*frametime, forward_v.Base(), origin.Base());
 	}
-
-	if ( Test_Key( VK_LEFT ) )
+	if ( Test_Key( XK_Left ) )
 	{
 		angles[1] += SPEED_TURN * frametime;
 	}
-	if ( Test_Key( VK_RIGHT ) )
+	if ( Test_Key( XK_Right ) )
 	{
 		angles[1] -= SPEED_TURN * frametime;
 	}
-	if ( Test_Key( 'F' ) )
+	if ( Test_Key( 'f' ) || Test_Key( 'F' ) )
 	{
 		origin[2] += g_flMovementSpeed*frametime;
 	}
-	if ( Test_Key( 'C' ) )
+	if ( Test_Key( 'c' ) || Test_Key( 'C' ) )
 	{
 		origin[2] -= g_flMovementSpeed*frametime;
 	}
-	if ( Test_Key( VK_INSERT ) )
+	if ( Test_Key( XK_Insert ) )
 	{
 		angles[0] += SPEED_TURN * frametime;
 		if (angles[0] > 85)
 			angles[0] = 85;
 	}
-	if ( Test_Key( VK_DELETE ) )
+	if ( Test_Key( XK_Delete ) )
 	{
 		angles[0] -= SPEED_TURN * frametime;
 		if (angles[0] < -85)
 			angles[0] = -85;
 	}
-	Cam_MouseMoved();
 }
 
 void Cam_BuildMatrix (void)
@@ -264,12 +198,10 @@ void Cam_BuildMatrix (void)
 	xa = angles[0]/180*M_PI;
 	ya = angles[1]/180*M_PI;
 
-	// the movement matrix is kept 2d ?? do we want this?
-
-    forward[0] = cos(ya);
-    forward[1] = sin(ya);
-    right[0] = forward[1];
-    right[1] = -forward[0];
+    forward_v[0] = cos(ya);
+    forward_v[1] = sin(ya);
+    right_v[0] = forward_v[1];
+    right_v[1] = -forward_v[0];
 
 	glGetFloatv (GL_PROJECTION_MATRIX, &matrix[0][0]);
 
@@ -290,13 +222,9 @@ void Draw (void)
 	float	screenaspect;
 	float	yfov;
 
-	//glClearColor (0.5, 0.5, 0.5, 0);
-	glClearColor(0.0, 0.0, 0.0, 0);  // Black Clearing YWB
+	glClearColor(0.0, 0.0, 0.0, 0);
 	glClear (GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-	//
-	// set up viewpoint
-	//
 	glMatrixMode(GL_PROJECTION);
     glLoadIdentity ();
 
@@ -312,25 +240,20 @@ void Draw (void)
 
 	Cam_BuildMatrix ();
 
-	//
-	// set drawing parms
-	//
 	glShadeModel (GL_SMOOTH);
-
 	glPolygonMode (GL_FRONT_AND_BACK, GL_FILL);
-	glFrontFace(GL_CW);  // YWB   Carmack goes backward
-	glCullFace(GL_BACK); // Cull backfaces (qcsg used to spit out two sides, doesn't for -glview now)
-	glEnable(GL_CULL_FACE); // Enable face culling, just in case...
+	glFrontFace(GL_CW);
+	glCullFace(GL_BACK);
+	glEnable(GL_CULL_FACE);
 	glDisable(GL_TEXTURE_2D);
 
-	// Blending function if enabled..
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
 	if (g_UseBlending)
 	{
-		glEnable(GL_BLEND);// YWB TESTING
+		glEnable(GL_BLEND);
 		glDisable(GL_DEPTH_TEST);
-		glDisable(GL_CULL_FACE); // Enable face culling, just in case...
+		glDisable(GL_CULL_FACE);
 	}
 	else
 	{
@@ -345,9 +268,6 @@ void Draw (void)
 	}
 	else
 	{
-		//
-		// draw the list
-		//
 		if (g_bShowList1)
 			glCallList (1);
 		
@@ -355,7 +275,7 @@ void Draw (void)
 		{
 			if (g_bNoDepthPortals)
 				glDisable(GL_DEPTH_TEST);
-			glDisable(GL_CULL_FACE); // Disable face culling
+			glDisable(GL_CULL_FACE);
 			if (g_bShowList2)
 				glCallList(2);
 		};
@@ -369,10 +289,10 @@ void ReadPolyFileType(const char *name, int nList, BOOL drawLines)
 {
 	FILE	*f;
 	int		i, j, numverts;
-	float	v[8];
+	float	v[6];
 	int		c;
 	int		r;
-	float divisor;
+	float   divisor;
 
 	f = fopen (name, "rt");
 	if (!f)
@@ -386,10 +306,10 @@ void ReadPolyFileType(const char *name, int nList, BOOL drawLines)
 	c = 0;
 	glNewList (nList, GL_COMPILE);
 	
-	for (i = 0; i < 3; i++)  // Find the center point so we can put the viewer there by default
+	for (i = 0; i < 3; i++)
 		g_Center[i] = 0.0f;
 
-	if (drawLines)           // Slight hilite
+	if (drawLines)
 		glLineWidth(1.5);
 
 	while (1)
@@ -408,33 +328,22 @@ void ReadPolyFileType(const char *name, int nList, BOOL drawLines)
 
 		for (i=0 ; i<numverts ; i++)
 		{
-			r = fscanf( f, "%f %f %f %f %f %f\n", &v[0], &v[1],
-				&v[2], &v[3], &v[4], &v[5]);
+			r = fscanf( f, "%f %f %f %f %f %f\n", &v[0], &v[1], &v[2], &v[3], &v[4], &v[5]);
 
-			/*
-			if (!(fabs( v[0] ) < 32768.0&& fabs( v[1] ) < 32768.0 && fabs( v[2] ) < 32768.0 ) )
-				Error( "Out of range data\n");
-			*/
-
-			/*
-			if (v[3] <= 0.1 && v[4] <= 0.1 && v[5] <= 0.1 )
-				continue;
-			*/
-
-			if (drawLines)  // YELLOW OUTLINES
+			if (drawLines)
 				glColor4f(1.0, 1.0, 0.0, 0.5);
 			else
 			{
-				if (g_bReadPortals)  // Gray scale it, leave portals blue
+				if (g_bReadPortals)
 				{
-					if (fabs(fabs(v[5]) - 1.0f) < 0.01)   // Is this a detail brush (color 0,0,1 blue)
+					if (fabs(fabs(v[5]) - 1.0f) < 0.01)
 					{
 						glColor4f (v[3],v[4],v[5],0.5);   
 					}	
-					else                                  // Normal brush, gray scale it...
+					else
 					{
 						v[3] += v[4] + v[5];
-						v[3]/= 3.0f;
+						v[3] /= 3.0f;
 						glColor4f (v[3]/divisor, v[3]/divisor, v[3]/divisor, 0.6);   
 					}
 				}
@@ -444,7 +353,7 @@ void ReadPolyFileType(const char *name, int nList, BOOL drawLines)
 					v[4] = pow( v[4], (float)(1.0 / 2.2) );
 					v[5] = pow( v[5], (float)(1.0 / 2.2) );
 
-					glColor4f (v[3]/divisor, v[4]/divisor, 	v[5]/divisor, 0.6);   // divisor is one, bright colors
+					glColor4f (v[3]/divisor, v[4]/divisor, 	v[5]/divisor, 0.6);
 				};
 			};
 			glVertex3f (v[0], v[1], v[2]);
@@ -453,7 +362,6 @@ void ReadPolyFileType(const char *name, int nList, BOOL drawLines)
 			{
 				g_Center[j] += v[j];
 			}
-	
 			g_nTotalPoints++;
 		}
 		glEnd ();
@@ -465,190 +373,15 @@ void ReadPolyFileType(const char *name, int nList, BOOL drawLines)
 
 	glEndList ();
 
-	if (g_nTotalPoints > 0)  // Avoid division by zero
+	if (g_nTotalPoints > 0)
 	{
 		for (i = 0; i < 3; i++)
 		{
-			g_Center[i] = g_Center[i]/(float)g_nTotalPoints; // Calculate center...
+			g_Center[i] = g_Center[i]/(float)g_nTotalPoints;
 			origin[i] = g_Center[i];
 		}
 	}
 }
-
-#if BENCHMARK_PHY
-#define NUM_COLLISION_TESTS 2500
-#include "gametrace.h"
-#include "fmtstr.h"
-
-
-struct testlist_t
-{
-	Vector start;
-	Vector end;
-	Vector normal;
-	bool hit;
-};
-
-const float baselineTotal = 120.16f;
-const float baselineRay = 28.25f;
-const float baselineBox = 91.91f;
-#define IMPROVEMENT_FACTOR(x,baseline) (baseline/(x))
-#define IMPROVEMENT_PERCENT(x,baseline) (((baseline-(x)) / baseline) * 100.0f)
-
-testlist_t g_Traces[NUM_COLLISION_TESTS];
-void Benchmark_PHY( const CPhysCollide *pCollide )
-{
-	int i;
-	Msg( "Testing collision system\n" );
-	Vector start = vec3_origin;
-	static Vector *targets = NULL;
-	static bool first = true;
-	static float test[2] = {1,1};
-	if ( first )
-	{
-		float radius = 0;
-		float theta = 0;
-		float phi = 0;
-		for ( int i = 0; i < NUM_COLLISION_TESTS; i++ )
-		{
-			radius += NUM_COLLISION_TESTS * 123.123f;
-			radius = fabs(fmod(radius, 128));
-			theta += NUM_COLLISION_TESTS * 0.76f;
-			theta = fabs(fmod(theta, DEG2RAD(360)));
-			phi += NUM_COLLISION_TESTS * 0.16666666f;
-			phi = fabs(fmod(phi, DEG2RAD(180)));
-
-			float st, ct, sp, cp;
-			SinCos( theta, &st, &ct );
-			SinCos( phi, &sp, &cp );
-			st = sin(theta);
-			ct = cos(theta);
-			sp = sin(phi);
-			cp = cos(phi);
-
-			g_Traces[i].start.x = radius * ct * sp;
-			g_Traces[i].start.y = radius * st * sp;
-			g_Traces[i].start.z = radius * cp;
-		}
-		first = false;
-	}
-
-	float duration = 0;
-	Vector size[2];
-	size[0].Init(0,0,0);
-	size[1].Init(16,16,16);
-	unsigned int dots = 0;
-
-#if VPROF_LEVEL > 0 
-	g_VProfCurrentProfile.Reset();
-	g_VProfCurrentProfile.ResetPeaks();
-	g_VProfCurrentProfile.Start();
-#endif
-	unsigned int hitCount = 0;
-	double startTime = Plat_FloatTime();
-	trace_t tr;
-	for ( i = 0; i < NUM_COLLISION_TESTS; i++ )
-	{
-		physcollision->TraceBox( g_Traces[i].start, start, -size[0], size[0], pCollide, vec3_origin, vec3_angle, &tr );
-		if ( tr.DidHit() )
-		{
-			g_Traces[i].end = tr.endpos;
-			g_Traces[i].normal = tr.plane.normal;
-			g_Traces[i].hit = true;
-			hitCount++;
-		}
-		else
-		{
-			g_Traces[i].hit = false;
-		}
-	}
-	for ( i = 0; i < NUM_COLLISION_TESTS; i++ )
-	{
-		physcollision->TraceBox( g_Traces[i].start, start, -size[1], size[1], pCollide, vec3_origin, vec3_angle, &tr );
-	}
-	duration = Plat_FloatTime() - startTime;
-	{
-	unsigned int msSupp = physcollision->ReadStat( 100 );
-	unsigned int msGJK = physcollision->ReadStat( 101 );
-	unsigned int msMesh = physcollision->ReadStat( 102 );
-	CFmtStr str("%d ms total %d ms gjk %d mesh solve\n", msSupp, msGJK, msMesh );
-	OutputDebugStr( str.Access() );
-	}
-
-#if VPROF_LEVEL > 0 
-	g_VProfCurrentProfile.MarkFrame();
-	g_VProfCurrentProfile.Stop();
-	g_VProfCurrentProfile.Reset();
-	g_VProfCurrentProfile.ResetPeaks();
-	g_VProfCurrentProfile.Start();
-#endif
-	hitCount = 0;
-	startTime = Plat_FloatTime();
-	for ( i = 0; i < NUM_COLLISION_TESTS; i++ )
-	{
-		physcollision->TraceBox( g_Traces[i].start, start, -size[0], size[0], pCollide, vec3_origin, vec3_angle, &tr );
-		if ( tr.DidHit() )
-		{
-			g_Traces[i].end = tr.endpos;
-			g_Traces[i].normal = tr.plane.normal;
-			g_Traces[i].hit = true;
-			hitCount++;
-		}
-		else
-		{
-			g_Traces[i].hit = false;
-		}
-#if VPROF_LEVEL > 0 
-		g_VProfCurrentProfile.MarkFrame();
-#endif
-	}
-	double midTime = Plat_FloatTime();
-	for ( i = 0; i < NUM_COLLISION_TESTS; i++ )
-	{
-		physcollision->TraceBox( g_Traces[i].start, start, -size[1], size[1], pCollide, vec3_origin, vec3_angle, &tr );
-#if VPROF_LEVEL > 0 
-		g_VProfCurrentProfile.MarkFrame();
-#endif
-	}
-	double endTime = Plat_FloatTime();
-	duration = endTime - startTime;
-	{
-	CFmtStr str("%d collisions in %.2f ms [%.2f X] %d hits\n", NUM_COLLISION_TESTS, duration*1000, IMPROVEMENT_FACTOR(duration*1000.0f, baselineTotal), hitCount );
-	OutputDebugStr( str.Access() );
-	}
-	{
-		float rayTime = (midTime - startTime) * 1000.0f;
-		float boxTime = (endTime - midTime)*1000.0f;
-		CFmtStr str("%.2f ms rays [%.2f X] %.2f ms boxes [%.2f X]\n", rayTime, IMPROVEMENT_FACTOR(rayTime, baselineRay), boxTime, IMPROVEMENT_FACTOR(boxTime, baselineBox));
-		OutputDebugStr( str.Access() );
-	}
-
-	{
-	unsigned int msSupp = physcollision->ReadStat( 100 );
-	unsigned int msGJK = physcollision->ReadStat( 101 );
-	unsigned int msMesh = physcollision->ReadStat( 102 );
-	CFmtStr str("%d ms total %d ms gjk %d mesh solve\n", msSupp, msGJK, msMesh );
-	OutputDebugStr( str.Access() );
-	}
-#if VPROF_LEVEL > 0 
-	g_VProfCurrentProfile.Stop();
-	g_VProfCurrentProfile.OutputReport( VPRT_FULL & ~VPRT_HIERARCHY, NULL );
-#endif
-
-	// draw the traces in yellow
-	glColor3f( 1.0f, 1.0f, 0.0f );
-	glBegin( GL_LINES );
-	for ( int i = 0; i < NUM_COLLISION_TESTS; i++ )
-	{
-		if ( !g_Traces[i].hit )
-			continue;
-		glVertex3fv( g_Traces[i].end.Base() );
-		Vector tmp = g_Traces[i].end + g_Traces[i].normal * 10.0f;
-		glVertex3fv( tmp.Base() );
-	}
-	glEnd();
-}
-#endif
 
 struct phyviewparams_t
 { 
@@ -666,7 +399,6 @@ struct phyviewparams_t
 		angles.Init();
 	}
 };
-
 
 void AddVCollideToList( phyheader_t &header, vcollide_t &collide, phyviewparams_t &params )
 {
@@ -704,60 +436,6 @@ void AddVCollideToList( phyheader_t &header, vcollide_t &collide, phyviewparams_
 	}
 }
 
-void GL_DrawLine( const Vector &start, const Vector &dir, float length, int r, int g, int b )
-{
-	Vector end = start + (dir*length);
-	glBegin( GL_LINES );
-	glColor3ub(r,g,b);
-	glVertex3fv( start.Base() );
-	glVertex3fv( end.Base() );
-	glEnd();
-}
-
-void GL_DrawBox( Vector origin, float size, int r, int g, int b )
-{
-	Vector mins = origin - Vector(size,size,size);
-	Vector maxs = origin + Vector(size,size,size);
-	const float *v[2] = {mins.Base(), maxs.Base()};
-
-	Vector start, end;
-	{
-		for ( int i = 0; i < 3; i++ )
-		{
-			int a0 = i;
-			int a1 = (i+1)%3;
-			int a2 = (i+2)%3;
-			for ( int j = 0; j < 2; j++ )
-			{
-				for ( int k = 0; k < 2; k++ )
-				{
-					start[a0] = v[0][a0];
-					end[a0] = v[1][a0];
-					start[a1] = v[j][a1];
-					end[a1] = v[j][a1];
-					start[a2] = v[k][a2];
-					end[a2] = v[k][a2];
-					GL_DrawLine( start, end-start, 1, r, g, b );
-				}
-			}
-		}
-	}
-	for ( int axis = 0; axis < 3; axis++ )
-	{
-		int a0 = axis;
-		int a1 = (axis+1)%3;
-		int a2 = (axis+2)%3;
-		start[a0] = v[0][a0];
-		end[a0] = v[1][a0];
-		start[a1] = 0.5f *(v[0][a1]+v[1][a1]);
-		end[a1] = 0.5f *(v[0][a1]+v[1][a1]);
-		start[a2] = 0.5f *(v[0][a2]+v[1][a2]);
-		end[a2] = 0.5f *(v[0][a2]+v[1][a2]);
-		GL_DrawLine( start, end-start, 1, r, g, b );
-	}
-}
-
-
 void ReadPHYFile(const char *name, phyviewparams_t &params )
 {
 	FILE *fp = fopen (name, "rb");
@@ -765,48 +443,26 @@ void ReadPHYFile(const char *name, phyviewparams_t &params )
 		Error ("Couldn't open %s", name);
 
 	phyheader_t header;
-	
 	fread( &header, sizeof(header), 1, fp );
 	if ( header.size != sizeof(header) || header.solidCount <= 0 )
+    {
+        fclose(fp);
 		return;
+    }
 
 	int pos = ftell( fp );
 	fseek( fp, 0, SEEK_END );
 	int fileSize = ftell(fp) - pos;
 	fseek( fp, pos, SEEK_SET );
 
-	char *buf = (char *)_alloca( fileSize );
+	char *buf = (char *)malloc( fileSize );
 	fread( buf, fileSize, 1, fp );
 	fclose( fp );
 
 	vcollide_t collide;
 	physcollision->VCollideLoad( &collide, header.solidCount, (const char *)buf, fileSize );
-#if 0
-	Vector start0( -3859.1199, -2050.8674, 64.031250 );
-	Vector end0(-3859.2246, -2051.2817, 64.031250 );
-	Vector modelPosition(-3840,-2068.0000, 82.889099);
-	QAngle modelAngles(0,90,0);
-
-	{
-		Ray_t ray;
-		ray.Init( start0, end0, Vector(-16,-16,0), Vector(16,16,72));
-		trace_t tr;
-		physcollision->TraceBox( ray, collide.solids[0], modelPosition, modelAngles, &tr );
-		Assert(!tr.startsolid);
-		if ( tr.DidHit() )
-		{
-			Ray_t ray2;
-			ray2.Init( tr.endpos, tr.endpos, Vector(-16,-16,0), Vector(16,16,72));
-			trace_t tr2;
-			physcollision->TraceBox( ray2, collide.solids[0], modelPosition, modelAngles, &tr2 );
- 			Assert(!tr2.startsolid);
-		}
-	}
-#endif
-#if BENCHMARK_PHY
-	Benchmark_PHY( collide.solids[0] );
-#endif
 	AddVCollideToList( header, collide, params );
+    free(buf);
 }
 
 void ReadPolyFile (const char *name)
@@ -826,16 +482,13 @@ void ReadPolyFile (const char *name)
 			glNewList (1, GL_COMPILE);
 			ReadPHYFile( name, params );
 			Vector tmp = (params.mins + params.maxs) * 0.5;
-			tmp.CopyToArray(origin);
+			tmp.CopyToArray(origin.Base());
 			glEndList ();
 		}
 	}
 	else
 	{
-		// Read in polys...
 		ReadPolyFileType(name, 1, false);
-
-		// Make list 3 just the lines... so we can draw outlines
 		ReadPolyFileType(name, 3, true);
 	}
 }
@@ -844,11 +497,10 @@ void ReadPortalFile (char *name)
 {
 	FILE	*f;
 	int		i, numverts;
-	float	v[8];
+	float	v[3];
 	int		c;
 	int		r;
 
-	// For Portal type reading...
 	char szDummy[80];
 	int nNumLeafs;
 	int nNumPortals;
@@ -859,10 +511,8 @@ void ReadPortalFile (char *name)
 		Error ("Couldn't open %s", name);
 
 	c = 0;
-	
 	glNewList (2, GL_COMPILE);
 
-	// Read in header
 	fscanf(f, "%79s\n", szDummy);
 	fscanf(f, "%i\n", &nNumLeafs);
 	fscanf(f, "%i\n", &nNumPortals);
@@ -878,8 +528,7 @@ void ReadPortalFile (char *name)
 		glBegin(GL_LINE_LOOP);
 		for (i=0 ; i<numverts ; i++)
 		{
-			r = fscanf (f, "(%f %f %f )\n", &v[0], &v[1],
-				&v[2]);
+			r = fscanf (f, "(%f %f %f )\n", &v[0], &v[1], &v[2]);
 			if (!r || (r != 3) || r == EOF)
 				break;
 
@@ -889,11 +538,10 @@ void ReadPortalFile (char *name)
 			}
 			else
 			{
-				glColor4f (1.0f, 1.0f, 1.0f, 1.0f);   // WHITE portals
+				glColor4f (1.0f, 1.0f, 1.0f, 1.0f);
 			}
 			glVertex3f (v[0], v[1], v[2]);
 		}
-
 		glEnd ();
 		c++;
 	}
@@ -909,26 +557,17 @@ static Vector dispPoints[MAX_DISP_COUNT];
 static Vector dispNormals[MAX_DISP_COUNT];
 static int dispPointCount = 0;
 
-//-----------------------------------------------------------------------------
-//-----------------------------------------------------------------------------
 BOOL ReadDisplacementFile( const char *filename )
 {
 	FILE	*pFile;
 	int		fileCount;
 
-	//
-	// open the file
-	//
 	pFile = fopen( filename, "r" );
 	if( !pFile )
 		Error( "Couldn't open %s", filename );
 
-	//
-	// read data in file
-	//
 	while( 1 )
 	{
-		// overflow test
 		if( dispPointCount >= MAX_DISP_COUNT )
 			break;
 
@@ -937,38 +576,30 @@ BOOL ReadDisplacementFile( const char *filename )
 							&dispNormals[dispPointCount][0], &dispNormals[dispPointCount][1], &dispNormals[dispPointCount][2] );
 		dispPointCount++;
 
-		// end of file check
 		if( !fileCount || ( fileCount == EOF ) )
 			break;
 	}
 
 	fclose( pFile );
-
 	return TRUE;
 }
 
-
-//-----------------------------------------------------------------------------
-//-----------------------------------------------------------------------------
 void DrawDisplacementData( void )
 {
 	int		i, j;
-	int		width, halfCount;
+	int		width_d, halfCount;
 
 	GLUquadricObj *pObject = gluNewQuadric();
-
 	glEnable( GL_DEPTH_TEST );
 
 	for( i = 0; i < dispPointCount; i++ )
 	{
-		// draw a sphere where the point is (in red)
 		glColor3f( 1.0f, 0.0f, 0.0f );
 		glPushMatrix();
 		glTranslatef( dispPoints[i][0], dispPoints[i][1], dispPoints[i][2] );
 		gluSphere( pObject, 5, 5, 5 );
 		glPopMatrix();
 
-		// draw the normal (in yellow)
 		glColor3f( 1.0f, 1.0f, 0.0f );
 		glBegin( GL_LINES );
 		glVertex3f( dispPoints[i][0], dispPoints[i][1], dispPoints[i][2] );
@@ -977,366 +608,114 @@ void DrawDisplacementData( void )
 	}
 
 	halfCount = dispPointCount / 2;
-
-	width = sqrt( (float)halfCount );
+	width_d = sqrt( (float)halfCount );
 
 	glDisable( GL_CULL_FACE );
-
 	glColor3f( 0.0f, 0.0f, 1.0f );
-	for( i = 0; i < width - 1; i++ )
+	for( i = 0; i < width_d - 1; i++ )
 	{
-		for( j = 0; j < width - 1; j++ )
+		for( j = 0; j < width_d - 1; j++ )
 		{
 			glBegin( GL_POLYGON );
-			glVertex3f( dispPoints[i*width+j][0], dispPoints[i*width+j][1], dispPoints[i*width+j][2] );
-			glVertex3f( dispPoints[(i+1)*width+j][0], dispPoints[(i+1)*width+j][1], dispPoints[(i+1)*width+j][2] );
-			glVertex3f( dispPoints[(i+1)*width+(j+1)][0], dispPoints[(i+1)*width+(j+1)][1], dispPoints[(i+1)*width+(j+1)][2] );
-			glVertex3f( dispPoints[i*width+(j+1)][0], dispPoints[i*width+(j+1)][1], dispPoints[i*width+(j+1)][2] );
+			glVertex3f( dispPoints[i*width_d+j][0], dispPoints[i*width_d+j][1], dispPoints[i*width_d+j][2] );
+			glVertex3f( dispPoints[(i+1)*width_d+j][0], dispPoints[(i+1)*width_d+j][1], dispPoints[(i+1)*width_d+j][2] );
+			glVertex3f( dispPoints[(i+1)*width_d+(j+1)][0], dispPoints[(i+1)*width_d+(j+1)][1], dispPoints[(i+1)*width_d+(j+1)][2] );
+			glVertex3f( dispPoints[i*width_d+(j+1)][0], dispPoints[i*width_d+(j+1)][1], dispPoints[i*width_d+(j+1)][2] );
 			glEnd();
 		}
 	}
-
-#if 0
-	for( i = 0; i < width - 1; i++ )
-	{
-		for( j = 0; j < width - 1; j++ )
-		{
-			glBegin( GL_POLYGON );
-			glVertex3f( dispPoints[halfCount+(i*width+j)][0], dispPoints[halfCount+(i*width+j)][1], dispPoints[halfCount+(i*width+j)][2] );
-			glVertex3f( dispPoints[halfCount+((i+1)*width+j)][0], dispPoints[halfCount+(i+1)*width+j][1], dispPoints[halfCount+((i+1)*width+j)][2] );
-			glVertex3f( dispPoints[halfCount+((i+1)*width+(j+1))][0], dispPoints[halfCount+(i+1)*width+(j+1)][1], dispPoints[halfCount+((i+1)*width+(j+1))][2] );
-			glVertex3f( dispPoints[halfCount+(i*width+(j+1))][0], dispPoints[halfCount+(i*width+(j+1))][1], dispPoints[halfCount+(i*width+(j+1))][2] );
-			glEnd();
-		}
-	}
-#endif
 
 	glColor3f( 0.0f, 1.0f, 0.0f );
-	for( i = 0; i < width - 1; i++ )
+	for( i = 0; i < width_d - 1; i++ )
 	{
-		for( j = 0; j < width - 1; j++ )
+		for( j = 0; j < width_d - 1; j++ )
 		{
 			glBegin( GL_POLYGON );
-			glVertex3f( dispPoints[i*width+j][0] + ( dispNormals[i*width+j][0] * 150.0f ), 
-				        dispPoints[i*width+j][1] + ( dispNormals[i*width+j][1] * 150.0f ), 
-						dispPoints[i*width+j][2] + ( dispNormals[i*width+j][2] * 150.0f ) );
-
-			glVertex3f( dispPoints[(i+1)*width+j][0] + ( dispNormals[(i+1)*width+j][0] * 150.0f ), 
-				        dispPoints[(i+1)*width+j][1] + ( dispNormals[(i+1)*width+j][1] * 150.0f ), 
-						dispPoints[(i+1)*width+j][2] + ( dispNormals[(i+1)*width+j][2] * 150.0f ) );
-
-			glVertex3f( dispPoints[(i+1)*width+(j+1)][0] + ( dispNormals[(i+1)*width+(j+1)][0] * 150.0f ), 
-				        dispPoints[(i+1)*width+(j+1)][1] + ( dispNormals[(i+1)*width+(j+1)][1] * 150.0f ), 
-						dispPoints[(i+1)*width+(j+1)][2] + ( dispNormals[(i+1)*width+(j+1)][2] * 150.0f ) );
-
-			glVertex3f( dispPoints[i*width+(j+1)][0] + ( dispNormals[i*width+(j+1)][0] * 150.0f ), 
-				        dispPoints[i*width+(j+1)][1] + ( dispNormals[i*width+(j+1)][1] * 150.0f ), 
-						dispPoints[i*width+(j+1)][2] + ( dispNormals[i*width+(j+1)][2] * 150.0f ) );
+			glVertex3f( dispPoints[i*width_d+j][0] + ( dispNormals[i*width_d+j][0] * 150.0f ), dispPoints[i*width_d+j][1] + ( dispNormals[i*width_d+j][1] * 150.0f ), dispPoints[i*width_d+j][2] + ( dispNormals[i*width_d+j][2] * 150.0f ) );
+			glVertex3f( dispPoints[(i+1)*width_d+j][0] + ( dispNormals[(i+1)*width_d+j][0] * 150.0f ), dispPoints[(i+1)*width_d+j][1] + ( dispNormals[(i+1)*width_d+j][1] * 150.0f ), dispPoints[(i+1)*width_d+j][2] + ( dispNormals[(i+1)*width_d+j][2] * 150.0f ) );
+			glVertex3f( dispPoints[(i+1)*width_d+(j+1)][0] + ( dispNormals[(i+1)*width_d+(j+1)][0] * 150.0f ), dispPoints[(i+1)*width_d+(j+1)][1] + ( dispNormals[(i+1)*width_d+(j+1)][1] * 150.0f ), dispPoints[(i+1)*width_d+(j+1)][2] + ( dispNormals[(i+1)*width_d+(j+1)][2] * 150.0f ) );
+			glVertex3f( dispPoints[i*width_d+(j+1)][0] + ( dispNormals[i*width_d+(j+1)][0] * 150.0f ), dispPoints[i*width_d+(j+1)][1] + ( dispNormals[i*width_d+(j+1)][1] * 150.0f ), dispPoints[i*width_d+(j+1)][2] + ( dispNormals[i*width_d+(j+1)][2] * 150.0f ) );
 			glEnd();
 		}
 	}
 
 	glDisable( GL_DEPTH_TEST );
-
-	glColor3f( 0.0f, 0.0f, 1.0f );
-	for( i = 0; i < width - 1; i++ )
-	{
-		for( j = 0; j < width - 1; j++ )
-		{
-			glBegin( GL_LINE_LOOP );
-			glVertex3f( dispPoints[i*width+j][0] + ( dispNormals[i*width+j][0] * 150.0f ), 
-				        dispPoints[i*width+j][1] + ( dispNormals[i*width+j][1] * 150.0f ), 
-						dispPoints[i*width+j][2] + ( dispNormals[i*width+j][2] * 150.0f ) );
-
-			glVertex3f( dispPoints[(i+1)*width+j][0] + ( dispNormals[(i+1)*width+j][0] * 150.0f ), 
-				        dispPoints[(i+1)*width+j][1] + ( dispNormals[(i+1)*width+j][1] * 150.0f ), 
-						dispPoints[(i+1)*width+j][2] + ( dispNormals[(i+1)*width+j][2] * 150.0f ) );
-
-			glVertex3f( dispPoints[(i+1)*width+(j+1)][0] + ( dispNormals[(i+1)*width+(j+1)][0] * 150.0f ), 
-				        dispPoints[(i+1)*width+(j+1)][1] + ( dispNormals[(i+1)*width+(j+1)][1] * 150.0f ), 
-						dispPoints[(i+1)*width+(j+1)][2] + ( dispNormals[(i+1)*width+(j+1)][2] * 150.0f ) );
-
-			glVertex3f( dispPoints[i*width+(j+1)][0] + ( dispNormals[i*width+(j+1)][0] * 150.0f ), 
-				        dispPoints[i*width+(j+1)][1] + ( dispNormals[i*width+(j+1)][1] * 150.0f ), 
-						dispPoints[i*width+(j+1)][2] + ( dispNormals[i*width+(j+1)][2] * 150.0f ) );
-			glEnd();
-		}
-	}
-
-
 	gluDeleteQuadric( pObject );
 }
 
-
-//=====================================================================
-
-BOOL bSetupPixelFormat(HDC hDC)
+void CreateLinuxGLWindow(const char* title, int w, int h)
 {
-    static PIXELFORMATDESCRIPTOR pfd = {
-	sizeof(PIXELFORMATDESCRIPTOR),	// size of this pfd
-	1,				// version number
-	PFD_DRAW_TO_WINDOW |		// support window
-	  PFD_SUPPORT_OPENGL |		// support OpenGL
-	  PFD_DOUBLEBUFFER,		// double buffered
-	PFD_TYPE_RGBA,			// RGBA type
-	24,				// 24-bit color depth
-	0, 0, 0, 0, 0, 0,		// color bits ignored
-	0,				// no alpha buffer
-	0,				// shift bit ignored
-	0,				// no accumulation buffer
-	0, 0, 0, 0, 			// accum bits ignored
-	32,				// 32-bit z-buffer	
-	0,				// no stencil buffer
-	0,				// no auxiliary buffer
-	PFD_MAIN_PLANE,			// main layer
-	0,				// reserved
-	0, 0, 0				// layer masks ignored
-    };
-
-    int pixelformat = 0;
-
-    if ( (pixelformat = ChoosePixelFormat(hDC, &pfd)) == 0 )
-        Error ("ChoosePixelFormat failed");
-
-    if (!SetPixelFormat(hDC, pixelformat, &pfd))
-        Error ("SetPixelFormat failed");
-
-    return TRUE;
-}
-
-/*
-============
-CameraWndProc
-============
-*/
-LONG WINAPI WCam_WndProc (
-    HWND    hWnd,
-    UINT    uMsg,
-    WPARAM  wParam,
-    LPARAM  lParam)
-{
-    LONG    lRet = 1;
-    RECT	rect;
-
-    GetClientRect(hWnd, &rect);
-
-    switch (uMsg)
-    {
-	case WM_CREATE:
-		{
-            camdc = GetDC(hWnd);
-	    	bSetupPixelFormat(camdc);
-
-            baseRC = wglCreateContext( camdc );
-			if (!baseRC)
-				Error ("wglCreateContext failed");
-            if (!wglMakeCurrent( camdc, baseRC ))
-				Error ("wglMakeCurrent failed");
-			glCullFace(GL_FRONT);
-			glEnable(GL_CULL_FACE);
-		}
-		break;
-	case WM_PAINT:
-        { 
-		    PAINTSTRUCT	ps;
-
-		    BeginPaint(hWnd, &ps);
-            if (!wglMakeCurrent( camdc, baseRC ))
-				Error ("wglMakeCurrent failed");
-			Draw ();
-			SwapBuffers(camdc);
-		    EndPaint(hWnd, &ps);
-        }
-		break;
-	
-		case WM_KEYDOWN:
-			KeyDown (wParam);
-			AppKeyDown( wParam );
-			break;
-			
-		case WM_KEYUP:
-			AppKeyUp( wParam );
-			break;
-
-		case WM_MBUTTONDOWN:
-		case WM_RBUTTONDOWN:
-		case WM_LBUTTONDOWN:
-			SetCapture (camerawindow);
-			ShowCursor( FALSE );
-			g_Capture = TRUE;
-			break;
-
-		case WM_MBUTTONUP:
-		case WM_RBUTTONUP:
-		case WM_LBUTTONUP:
-			if (! (wParam & (MK_LBUTTON|MK_RBUTTON|MK_MBUTTON)))
-			{
-				g_Capture = FALSE;
-				ReleaseCapture ();
-				ShowCursor( TRUE );
-			}
-			break;
-
-    	case WM_SIZE:
-			InvalidateRect(camerawindow, NULL, false);
-            break;
-		case WM_NCCALCSIZE:// don't let windows copy pixels
-			lRet = DefWindowProc (hWnd, uMsg, wParam, lParam);
-			return WVR_REDRAW;
-   	    case WM_CLOSE:
-            /* call destroy window to cleanup and go away */
-            DestroyWindow (hWnd);
-        break;
-
-   	    case WM_DESTROY:
-        {
-    	    HGLRC hRC;
-    	    HDC	  hDC;
-
-                /* release and free the device context and rendering context */
-    	    hRC = wglGetCurrentContext();
-    	    hDC = wglGetCurrentDC();
-
-    	    wglMakeCurrent(NULL, NULL);
-
-    	    if (hRC)
-    	    	wglDeleteContext(hRC);
-    	    if (hDC)
-    	        ReleaseDC(hWnd, hDC);
-
-                PostQuitMessage (0);
-        }
-        break;
-
-    	default:
-            /* pass all unhandled messages to DefWindowProc */
-            lRet = DefWindowProc (hWnd, uMsg, wParam, lParam);
-        break;
+    g_pDisplay = XOpenDisplay(NULL);
+    if (!g_pDisplay) {
+        printf("Error: Cannot connect to X server\n");
+        exit(1);
     }
 
-    /* return 1 if handled message, 0 if not */
-    return lRet;
+    int attributes[] = {
+        GLX_RGBA,
+        GLX_DEPTH_SIZE, 24,
+        GLX_DOUBLEBUFFER,
+        None
+    };
+
+    XVisualInfo *visual = glXChooseVisual(g_pDisplay, 0, attributes);
+    if (!visual) {
+        printf("Error: No appropriate visual found\n");
+        exit(1);
+    }
+    
+    Window root = DefaultRootWindow(g_pDisplay);
+    XSetWindowAttributes winAttr;
+    winAttr.colormap = XCreateColormap(g_pDisplay, root, visual->visual, AllocNone);
+    winAttr.event_mask = ExposureMask | KeyPressMask | KeyReleaseMask | StructureNotifyMask;
+
+    g_Window = XCreateWindow(g_pDisplay, root, 0, 0, w, h, 0, 
+                             visual->depth, InputOutput, visual->visual, 
+                             CWColormap | CWEventMask, &winAttr);
+
+    XMapWindow(g_pDisplay, g_Window);
+    XStoreName(g_pDisplay, g_Window, title);
+
+    g_GlxContext = glXCreateContext(g_pDisplay, visual, NULL, GL_TRUE);
+    glXMakeCurrent(g_pDisplay, g_Window, g_GlxContext);
 }
 
-
-/*
-==============
-WCam_Register
-==============
-*/
-void WCam_Register (HINSTANCE hInstance)
+void ProcessLinuxEvents()
 {
-    WNDCLASS   wc;
-
-    /* Register the camera class */
-	memset (&wc, 0, sizeof(wc));
-
-    wc.style         = 0;
-    wc.lpfnWndProc   = (WNDPROC)WCam_WndProc;
-    wc.cbClsExtra    = 0;
-    wc.cbWndExtra    = 0;
-    wc.hInstance     = hInstance;
-    wc.hIcon         = 0;
-    wc.hCursor       = LoadCursor (NULL,IDC_ARROW);
-    wc.hbrBackground = NULL;
-    wc.lpszMenuName  = 0;
-    wc.lpszClassName = "camera";
-
-    if (!RegisterClass (&wc) )
-        Error ("WCam_Register: failed");
-}
-
-
-void WCam_Create (HINSTANCE hInstance)
-{
-	// Center it
-	int nScx, nScy;
-	int w, h;
-	int x, y;
-
-	WCam_Register (hInstance);
-
-	w = ::width;
-	h = ::height;
-
-	nScx = GetSystemMetrics(SM_CXSCREEN);
-	nScy = GetSystemMetrics(SM_CYSCREEN);
-
-
-	x = (nScx - w)/2;
-	y = (nScy - h)/2;
-
-	camerawindow = CreateWindow ("camera" ,
-		"Camera View",
-		WS_OVERLAPPED |
-		WS_CAPTION |
-		WS_SYSMENU |
-		WS_THICKFRAME |
-		WS_MAXIMIZEBOX |
-		WS_CLIPSIBLINGS |
-		WS_CLIPCHILDREN,
-
-		x,
-		y,
-		w,
-		h,	// size
-
-		NULL,	// parent window
-		0,		// no menu
-		hInstance,
-		0);
-	if (!camerawindow)
-		Error ("Couldn't create camerawindow");
-
-    ShowWindow (camerawindow, SW_SHOWDEFAULT);
-}
-
-
-void AppKeyDown( int key )
-{
-	key &= 0xFF;
-
-	g_Keys[key] = 0x03; // add debounce bit
-}
-
-void AppKeyUp( int key )
-{
-	key &= 0xFF;
-
-	g_Keys[key] &= 0x02;
-}
-
-void AppRender( void )
-{
-	static double lastTime = 0;
-	double time = timeGetTime() * 0.001f;
-	double frametime = time - lastTime;
-
-	// clamp too large frames (like first frame)
-	if ( frametime > 0.2 )
-		frametime = 0.2;
-	lastTime = time;
-
-    if (!wglMakeCurrent( camdc, baseRC ))
-		Error ("wglMakeCurrent failed");
-
-	Cam_Update( frametime );
-
-	if (g_Update)
-	{
-		Draw ();
-		SwapBuffers(camdc);
-		g_Update = FALSE;
-	}
-	else
-	{
-		Sleep( 1.0 );
-	}
+    XEvent event;
+    while (XPending(g_pDisplay)) {
+        XNextEvent(g_pDisplay, &event);
+        KeySym keysym;
+        switch (event.type) {
+            case Expose:
+                g_Update = TRUE;
+                break;
+            case ConfigureNotify:
+                width = event.xconfigure.width;
+                height = event.xconfigure.height;
+                glViewport(0, 0, width, height);
+                g_Update = TRUE;
+                break;
+            case KeyPress:
+                keysym = XLookupKeysym(&event.xkey, 0);
+                if (keysym < 65536) {
+                    g_Keys[keysym] = 0x03;
+                    KeyDown(keysym);
+                }
+                break;
+            case KeyRelease:
+                keysym = XLookupKeysym(&event.xkey, 0);
+                if (keysym < 65536) {
+                    g_Keys[keysym] &= 0x02;
+                }
+                break;
+        }
+    }
 }
 
 SpewRetval_t Sys_SpewFunc( SpewType_t type, const char *pMsg )
 {
-	OutputDebugString( pMsg );
+	printf("%s", pMsg);
 	if( type == SPEW_ASSERT )
 		return SPEW_DEBUGGER;
 	else if( type == SPEW_ERROR )
@@ -1345,29 +724,16 @@ SpewRetval_t Sys_SpewFunc( SpewType_t type, const char *pMsg )
 		return SPEW_CONTINUE;
 }
 
-
-/*
-==================
-WinMain
-
-==================
-*/
-int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance
-					,LPSTR lpCmdLine, int nCmdShow)
+int main(int argc, char* argv[])
 {
-	CommandLine()->CreateCmdLine( Plat_GetCommandLine() );
-
+	CommandLine()->CreateCmdLine( argc, argv );
 	MathLib_Init( 2.2f, 2.2f, 0.0f, 2.0f );
-    MSG        msg;
 
-	if (!lpCmdLine || !lpCmdLine[0])
-		Error ("No file specified");
+	if (CommandLine()->ParmCount() < 2)
+		Error ("Usage: glview [-portal] [-disp] <filename.gl>");
 
-	main_instance = hInstance;
+	CreateLinuxGLWindow("Source Engine Geometry Viewer (GLView)", width, height);
 
-	WCam_Create (hInstance);
-
-	// Last argument is the file name
 	const char *pFileName = CommandLine()->GetParm( CommandLine()->ParmCount() - 1 );
 	CmdLib_InitFileSystem( pFileName );
 
@@ -1386,42 +752,49 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance
 	}
 	SpewOutputFunc( Sys_SpewFunc );
 
-	// Any chunk of original left is the filename.
-	if (pFileName && pFileName[0] && !g_bDisp )
+	if (pFileName && pFileName && !g_bDisp )
 	{
 		ReadPolyFile( pFileName );
 	}
 
 	if (g_bReadPortals)
 	{
-		// Copy file again and this time look for the . from .gl? so we can concatenate .prt
-		// and open the portal file.
 		char szTempCmd[MAX_PATH];
 		strcpy(szTempCmd, pFileName);
-		char *pTmp = szTempCmd;
-		while (pTmp && *pTmp && *pTmp != '.')
-		{
-			pTmp++;
-		}
-
-		*pTmp = '\0';
+		char *pTmp = strrchr(szTempCmd, '.');
+		if (pTmp) *pTmp = '\0';
 		strcat(szTempCmd, ".prt");
-
 		ReadPortalFile(szTempCmd);
-	};
-
-    /* main window message loop */
-	while (g_Active)
-	{
-        while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))
-		{
-            TranslateMessage (&msg);
-            DispatchMessage (&msg);
-		}
-		AppRender();
 	}
 
-    /* return success of application */
-    return TRUE;
-}
+	unsigned int lastTime = GetLinuxTimeMilliseconds();
 
+	while (g_Active)
+	{
+        ProcessLinuxEvents();
+
+        unsigned int currentTime = GetLinuxTimeMilliseconds();
+        float frametime = (currentTime - lastTime) * 0.001f;
+        if (frametime > 0.2f) frametime = 0.2f;
+        lastTime = currentTime;
+
+        Cam_Update(frametime);
+
+        if (g_Update)
+        {
+            Draw();
+            glXSwapBuffers(g_pDisplay, g_Window);
+            g_Update = FALSE;
+        }
+        else
+        {
+            usleep(1000); 
+        }
+	}
+
+    if(g_GlxContext) glXDestroyContext(g_pDisplay, g_GlxContext);
+    if(g_Window) XDestroyWindow(g_pDisplay, g_Window);
+    if(g_pDisplay) XCloseDisplay(g_pDisplay);
+
+    return 0;
+}

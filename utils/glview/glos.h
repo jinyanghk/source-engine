@@ -9,13 +9,9 @@
 //
 // This is an OS specific header file
 
-#include <windows.h>
+#include <X11/Xlib.h>
+#include <X11/Xutil.h>
+#include <GL/gl.h>
+#include <GL/glu.h>
 
-// disable data conversion warnings
 
-#pragma warning(disable : 4244)     // MIPS
-#pragma warning(disable : 4136)     // X86
-#pragma warning(disable : 4051)     // ALPHA
-  
-
- 
