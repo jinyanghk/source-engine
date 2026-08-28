@@ -2148,6 +2148,7 @@ struct studiohdr2_t
 	int reserved[48];
 };
 
+#pragma pack(push, 4)
 struct studiohdr_t
 {
 	DECLARE_BYTESWAP_DATADESC();
@@ -2434,6 +2435,7 @@ private:
 
 	friend struct virtualmodel_t;
 };
+#pragma pack(pop)
 
 //-----------------------------------------------------------------------------
 // Purpose:

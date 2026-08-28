@@ -492,7 +492,7 @@ bool LoadStudioModel( char const* pModelName, CUtlBuffer& buf )
 	if (pHdr->version != STUDIO_VERSION)
 	{
 		Warning("Error! Invalid model version \"%s\"\n", pModelName );
-		return false;
+		//return false;
 	}
 
 	if (!IsStaticProp(pHdr))

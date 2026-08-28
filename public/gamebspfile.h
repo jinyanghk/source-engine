@@ -142,12 +142,15 @@ enum
 	STATIC_PROP_WC_MASK		= 0x1d8,						// all flags settable in hammer (?)
 };
 
+#pragma pack(push, 1)
 struct StaticPropDictLump_t
 {
 	DECLARE_BYTESWAP_DATADESC();
 	char	m_Name[STATIC_PROP_NAME_LENGTH];		// model name
 };
+#pragma pack(pop)
 
+#pragma pack(push, 1)
 struct StaticPropLumpV4_t
 {
 	DECLARE_BYTESWAP_DATADESC();
@@ -164,7 +167,9 @@ struct StaticPropLumpV4_t
 	Vector			m_LightingOrigin;
 //	int				m_Lighting;			// index into the GAMELUMP_STATIC_PROP_LIGHTING lump
 };
+#pragma pack(pop)
 
+#pragma pack(push, 1)
 struct StaticPropLumpV5_t
 {
 	DECLARE_BYTESWAP_DATADESC();
@@ -182,7 +187,9 @@ struct StaticPropLumpV5_t
 	float			m_flForcedFadeScale;
 //	int				m_Lighting;			// index into the GAMELUMP_STATIC_PROP_LIGHTING lump
 };
+#pragma pack(pop)
 
+#pragma pack(push, 1)
 struct StaticPropLumpV6_t
 {
 	DECLARE_BYTESWAP_DATADESC();
@@ -202,7 +209,9 @@ struct StaticPropLumpV6_t
 	unsigned short	m_nMaxDXLevel;
 	//	int				m_Lighting;			// index into the GAMELUMP_STATIC_PROP_LIGHTING lump
 };
+#pragma pack(pop)
 
+#pragma pack(push, 1)
 struct StaticPropLumpV7_t
 {
 	DECLARE_BYTESWAP_DATADESC();
@@ -223,7 +232,9 @@ struct StaticPropLumpV7_t
 	//	int				m_Lighting;			// index into the GAMELUMP_STATIC_PROP_LIGHTING lump
 	color32			m_DiffuseModulation;	// per instance color and alpha modulation
 };
+#pragma pack(pop)
 
+#pragma pack(push, 1)
 struct StaticPropLumpV8_t
 {
 	DECLARE_BYTESWAP_DATADESC();
@@ -246,7 +257,9 @@ struct StaticPropLumpV8_t
 	//	int				m_Lighting;			// index into the GAMELUMP_STATIC_PROP_LIGHTING lump
 	color32			m_DiffuseModulation;	// per instance color and alpha modulation
 };
+#pragma pack(pop)
 
+#pragma pack(push, 1)
 struct StaticPropLumpV9_t
 {
 	DECLARE_BYTESWAP_DATADESC();
@@ -270,7 +283,9 @@ struct StaticPropLumpV9_t
 	color32			m_DiffuseModulation;	// per instance color and alpha modulation
 	bool			m_bDisableX360;
 };
+#pragma pack(pop)
 
+#pragma pack(push, 1)
 struct StaticPropLumpV10_t
 {
 	Vector			m_Origin;
@@ -291,7 +306,9 @@ struct StaticPropLumpV10_t
 	unsigned short  m_nLightmapResolutionX;
 	unsigned short  m_nLightmapResolutionY;
 };
+#pragma pack(pop)
 
+#pragma pack(push, 1)
 // version 10 bsp21
 struct StaticPropLumpV10_21_t
 {
@@ -317,7 +334,9 @@ struct StaticPropLumpV10_21_t
 	bool			m_bDisableX360;
 	int				m_FlagsEx;				// more flags (introduced in v10)
 };
+#pragma pack(pop)
 
+#pragma pack(push, 1)
 // version 11
 struct StaticPropLumpV11_t
 {
@@ -344,7 +363,9 @@ struct StaticPropLumpV11_t
 	int				m_FlagsEx;				// more flags (introduced in v10)
 	float			m_flPropScale;
 };
+#pragma pack(pop)
 
+#pragma pack(push, 1)
 struct StaticPropLump_t
 {
 	DECLARE_BYTESWAP_DATADESC();
@@ -450,6 +471,7 @@ struct StaticPropLump_t
 		return *this;
 	}
 };
+#pragma pack(pop)
 
 struct StaticPropLeafLump_t
 {

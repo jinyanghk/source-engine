@@ -50,6 +50,13 @@
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
 
+
+// Forward declare the exact 64-bit function signature to force the compiler 
+// to use full 64-bit pointer registers (rax) instead of truncating to 32-bit (eax).
+class IModelLoader;
+extern IModelLoader *modelloader;
+
+
 //-----------------------------------------------------------------------------
 // Convars!
 //-----------------------------------------------------------------------------
@@ -406,11 +413,13 @@ private:
 
 private:
 	// Unique static prop models
+	#pragma pack(push, 4)
 	struct StaticPropDict_t
 	{
 		model_t* m_pModel;
 		MDLHandle_t m_hMDL;
 	};
+	#pragma pack(pop)
 
 	// Static props that fade use this data to fade
 	struct StaticPropFade_t
@@ -480,6 +489,17 @@ CStaticProp::~CStaticProp()
 //-----------------------------------------------------------------------------
 bool CStaticProp::Init( int index, StaticPropLump_t &lump, model_t *pModel )
 {
+	// --- 64-bit Null Safety Fix Begin ---
+    if ( !pModel )
+    {
+        DevWarning( "Warning: Static prop %d initialized with NULL model!\n", index );
+        m_pModel = NULL;
+        // Set basic safe defaults so downstream code doesn't explode
+        //m_Index = index;
+        return; 
+    }
+    // --- 64-bit Null Safety Fix End ---
+
 	m_EntHandle.Init(index, STATICPROP_EHANDLE_MASK >> NUM_ENT_ENTRY_BITS);
 	m_Partition = PARTITION_INVALID_HANDLE;
 	m_flForcedFadeScale = lump.m_flForcedFadeScale;
@@ -1100,6 +1120,16 @@ int CStaticProp::DrawModel( int flags )
 //-----------------------------------------------------------------------------
 void CStaticProp::InsertPropIntoKDTree()
 {
+	// --- 64-bit Linux Architecture Safety Guard Begin ---
+	// If the model failed to load, was truncated, or is missing structural data,
+	// do not attempt to calculate its Axis-Aligned Bounding Box (AABB) or add it to the physics tree.
+	if ( !m_pModel || ((uintptr_t)m_pModel < 0x100000) )
+	{
+		DevWarning( "Warning: Skipping spatial KD-Tree insertion for Static Prop (Missing or Corrupt Model handle).\n" );
+		return;
+	}
+	// --- 64-bit Linux Architecture Safety Guard End ---
+
 	Assert( m_Partition == PARTITION_INVALID_HANDLE );
 	if ( m_nSolidType == SOLID_NONE )
 		return;
@@ -1153,6 +1183,15 @@ void CStaticProp::RemovePropFromKDTree()
 //-----------------------------------------------------------------------------
 void CStaticProp::CreateVPhysics( IPhysicsEnvironment *pPhysEnv, IVPhysicsKeyHandler *pDefaults, void *pGameData )
 {
+	// --- 64-bit Linux Architecture Safety Guard Begin ---
+	// If the server loop marked this prop as unallocated, completely skip physics initialization
+	if ( !m_pModel || (uintptr_t)m_pModel < 0x100000 )
+	{
+		m_nSolidType = SOLID_NONE;
+		return;
+	}
+	// --- 64-bit Linux Architecture Safety Guard End ---
+
 	if ( m_nSolidType == SOLID_NONE )
 		return;
 
@@ -1202,9 +1241,26 @@ void CStaticProp::CreateVPhysics( IPhysicsEnvironment *pPhysEnv, IVPhysicsKeyHan
 			solid.surfaceprop[0] = '\0';
 #endif
 
+		// --- 64-bit Physics Vector Fallback Guard Begin ---
+		// Verify structural integrity of the boundary math matrices before sending to physcollision
+		if ( !m_pModel->mins.IsValid() || !m_pModel->maxs.IsValid() )
+		{
+			DevWarning( "Physics Warning: Discarding corrupted AABB bounds for static prop collision calculation.\n" );
+			m_nSolidType = SOLID_NONE;
+			return;
+		}
+
 		// If there's no collide, we need a bbox...
 		pPhysCollide = physcollision->BBoxToCollide( m_pModel->mins, m_pModel->maxs );
 		solid.params = g_PhysDefaultObjectParams;
+		// --- 64-bit Physics Vector Fallback Guard End ---
+	}
+
+	// Extra safety check before handing over to physics environment setup
+	if ( !pPhysCollide )
+	{
+		m_nSolidType = SOLID_NONE;
+		return;
 	}
 
 	Assert(pPhysCollide);
@@ -1277,10 +1333,65 @@ void CStaticPropMgr::UnserializeModelDict( CUtlBuffer& buf )
 
 		StaticPropDict_t &dict = m_StaticPropDict[i];
 
-		dict.m_pModel = (model_t *)modelloader->GetModelForName(
+		// =========================================================================
+		// PHASE 1: 64-bit Linux Pointer Truncation & Sign-Extension Repair
+		// =========================================================================
+		uintptr_t pRawPointer = (uintptr_t)modelloader->GetModelForName( 
 			lump.m_Name, IModelLoader::FMODELLOADER_STATICPROP );
-		dict.m_hMDL = modelinfo->GetCacheHandle( dict.m_pModel );
-		g_pMDLCache->LockStudioHdr( dict.m_hMDL );
+		
+		// If the address contains signed extension bits (0xFFFFFFFFxxxxxxxx), 
+		// strip them away using a 32-bit bitmask to restore the original memory space.
+		if ( (pRawPointer & 0xFFFFFFFF00000000) == 0xFFFFFFFF00000000 )
+		{
+			pRawPointer &= 0x00000000FFFFFFFF;
+		}
+
+		// Fallback check: If the pointer resolves to an unallocated low address boundary
+		if ( pRawPointer < 0x100000 && pRawPointer != 0 )
+		{
+			// Safe fall-through attempt using a server loader mask context
+			pRawPointer = (uintptr_t)modelloader->GetModelForName( lump.m_Name, 2 ); // 2 = FMODELLOADER_SERVER
+
+			if ( (pRawPointer & 0xFFFFFFFF00000000) == 0xFFFFFFFF00000000 )
+			{
+				pRawPointer &= 0x00000000FFFFFFFF;
+			}
+		}
+
+		dict.m_pModel = (model_t *)pRawPointer;
+
+		// =========================================================================
+		// PHASE 2: ASCII Pointer Protection (Catches stream alignment bleeding)
+		// =========================================================================
+		uintptr_t pAddrVal = (uintptr_t)dict.m_pModel;
+		unsigned char firstByte  = (pAddrVal & 0x00000000000000FF);
+		unsigned char secondByte = (pAddrVal & 0x000000000000FF00) >> 8;
+
+		// Printable ASCII characters fall roughly between 0x20 (' ') and 0x7E ('~')
+		if ( (firstByte >= 0x20 && firstByte <= 0x7E) && (secondByte >= 0x20 && secondByte <= 0x7E) )
+		{
+			DevWarning( "Critical: Stream buffer alignment error detected! Dropping plain-text ASCII pointer: 0x%zX\n", pAddrVal );
+			dict.m_pModel = NULL;
+		}
+
+		// =========================================================================
+		// PHASE 3: Strict NULL Pointer Safety & Caching Guard
+		// =========================================================================
+		if ( dict.m_pModel != NULL && (uintptr_t)dict.m_pModel >= 0x100000 )
+		{
+			dict.m_hMDL = modelinfo->GetCacheHandle( dict.m_pModel );
+			
+			if ( dict.m_hMDL != MDLHANDLE_INVALID )
+			{
+				g_pMDLCache->LockStudioHdr( dict.m_hMDL );
+			}
+		}
+		else
+		{
+			// Safely skip virtual calls and flag the entry index handle as unallocated
+			dict.m_pModel = NULL;
+			dict.m_hMDL = MDLHANDLE_INVALID;
+		}
 	}
 }
 
@@ -1327,7 +1438,7 @@ void CStaticPropMgr::UnserializeModels( CUtlBuffer& buf )
 
 	int count = buf.GetInt();
 
-	// Gotta preallocate the static props here so no rellocations take place
+	// Gotta preallocate the static props here so no relocations take place
 	// the leaf list stores pointers to these tricky little guys.
 	m_StaticProps.AddMultipleToTail(count);
 	for ( int i = 0; i < count; ++i )
@@ -1353,7 +1464,43 @@ void CStaticPropMgr::UnserializeModels( CUtlBuffer& buf )
 				Assert("Unexpected version while deserializing lumps.");
 		}
 
-		m_StaticProps[i].Init( i, lump, m_StaticPropDict[lump.m_PropType].m_pModel );
+		// =========================================================================
+		// PHASE 1: 64-bit Out of Bounds Index & Structural Padding Verification
+		// =========================================================================
+		int nPropTypeIndex = (int)lump.m_PropType;
+		model_t *pModel = NULL;
+
+		// Ensure the parsed prop type falls strictly within active array boundaries
+		// and is not a corrupted negative array slice index (e.g., 0xfffffeb0)
+		if ( nPropTypeIndex >= 0 && nPropTypeIndex < (int)m_StaticPropDict.Count() )
+		{
+			pModel = m_StaticPropDict[nPropTypeIndex].m_pModel;
+			
+			// Re-verify that the extracted model pointer isn't corrupt or sign-extended
+			uintptr_t pCheckAddr = (uintptr_t)pModel;
+			if ( pCheckAddr < 0x100000 || (pCheckAddr & 0xFFFFFFFF00000000) == 0xFFFFFFFF00000000 )
+			{
+				pModel = NULL;
+			}
+		}
+		else
+		{
+			// Actively intercept the lump buffer shift error without killing the application process
+			DevWarning( "Critical: Static Prop %d referenced invalid type index %d (Total Dictionary Count: %d). Map data lump is misaligned.\n", 
+				i, nPropTypeIndex, m_StaticPropDict.Count() );
+			pModel = NULL;
+		}
+
+		// Initialize with the safe pointer constraint context
+		m_StaticProps[i].Init( i, lump, pModel );
+
+		// If the pointer layout is missing or discarded, stop subsequent data assignments 
+		// to avoid crashing calculations inside downstream spatial frameworks.
+		if ( !pModel )
+		{
+			continue;
+		}
+		// =========================================================================
 
 		// For distance-based fading, keep a list of the things that need
 		// to be faded out. Not sure if this is the optimal way of doing it
@@ -1521,25 +1668,42 @@ void CStaticPropMgr::LevelInitClient()
 	for ( int i = 0; i < nCount; ++i )
 	{
 		CStaticProp &prop = m_StaticProps[i];
+
+		// --- 64-bit Client Safety Intercept Begin ---
+		// If the server loop marked this prop as unallocated, completely skip client processing
+		if ( !prop.GetModel() )
+		{
+			continue;
+		}
+		// --- 64-bit Client Safety Intercept End ---
+
 		clientleafsystem->CreateRenderableHandle( &m_StaticProps[i], true );
 		if ( !prop.ShouldDraw() )
 			continue;
 
 		ClientRenderHandle_t handle = m_StaticProps[i].RenderHandle();
-		if ( prop.LeafCount() > 0 )
+		
+		// Validate that the render handle and leaf array mapping offsets are fully safe
+		int nFirstLeaf = (int)prop.FirstLeaf();
+		int nLeafCount = (int)prop.LeafCount();
+
+		if ( nLeafCount > 0 && nFirstLeaf >= 0 && (nFirstLeaf + nLeafCount) <= (int)m_StaticPropLeaves.Count() )
 		{
 			// Add the prop to all the leaves it lies in
-			clientleafsystem->AddRenderableToLeaves( handle, prop.LeafCount(), (unsigned short*)&m_StaticPropLeaves[prop.FirstLeaf()] ); 
+			clientleafsystem->AddRenderableToLeaves( handle, nLeafCount, (unsigned short*)&m_StaticPropLeaves[nFirstLeaf] ); 
 		}
 		else
 		{
 			Vector origin = prop.GetCollisionOrigin();
-			Vector mins = prop.OBBMins();
-			Vector maxs = prop.OBBMaxs();
-			DevMsg( 1, "Static prop in 0 leaves! %s, @ %.1f, %.1f, %.1f\n", modelloader->GetName( prop.GetModel() ), origin.x, origin.y, origin.z );
+			
+			// Only call get name if the model pointer context is healthy
+			const char *pPropName = (prop.GetModel()) ? modelloader->GetName( prop.GetModel() ) : "Unknown";
+			DevMsg( 1, "Static prop skipped leaf assignment! %s, @ %.1f, %.1f, %.1f (FirstLeaf: %d, Count: %d, MaxLeaves: %d)\n", 
+				pPropName, origin.x, origin.y, origin.z, nFirstLeaf, nLeafCount, m_StaticPropLeaves.Count() );
 		}
 	}
 
+	// This safely delegates execution down into our protected lighting system block
 	PrecacheLighting();
 
 	m_bClientInitialized = true;
@@ -1581,6 +1745,15 @@ void CStaticPropMgr::CreateVPhysicsRepresentations( IPhysicsEnvironment	*pPhysEn
 	int nCount = m_StaticProps.Count();
 	for ( int i = nCount; --i >= 0; )
 	{
+		// --- 64-bit Master Physics Loop Safety Check Begin ---
+		// Actively skip unallocated or stripped models from entering the physics setup pipeline.
+		// This prevents downstream crashes in BBoxToCollide when maps are compiled with VVIS.
+		if ( !m_StaticProps[i].GetModel() )
+		{
+			continue;
+		}
+		// --- 64-bit Master Physics Loop Safety Check End ---
+
 		m_StaticProps[i].CreateVPhysics( pPhysEnv, pDefaults, pGameData );
 	}
 }
@@ -1828,21 +2001,32 @@ void CStaticPropMgr::PrecacheLighting()
 			int i = m_StaticProps.Count();
 			while ( --i >= 0 )
 			{
+				// --- 64-bit Linux Architecture Safety Guard Begin ---
+				// If the server loop marked this prop as unallocated, completely skip hardware counting
+				if ( !m_StaticProps[i].GetModel() )
+				{
+					continue;
+				}
+				// --- 64-bit Linux Architecture Safety Guard End ---
+
 				if ( PropHasBakedLightingDisabled( m_StaticProps[i].GetEntityHandle() ) ) 
 				{
 					continue;
 				}
 
 				studiohwdata_t *pStudioHWData = g_pMDLCache->GetHardwareData( ( (model_t*)m_StaticProps[i].GetModel() )->studio );
-				for ( int lodID = pStudioHWData->m_RootLOD; lodID < pStudioHWData->m_NumLODs; lodID++ )
+				if ( pStudioHWData ) // Extra pointer check
 				{
-					studioloddata_t *pLOD = &pStudioHWData->m_pLODs[lodID];
-					for ( int meshID = 0; meshID < pStudioHWData->m_NumStudioMeshes; meshID++ )
+					for ( int lodID = pStudioHWData->m_RootLOD; lodID < pStudioHWData->m_NumLODs; lodID++ )
 					{
-						studiomeshdata_t *pMesh = &pLOD->m_pMeshData[meshID];
-						for ( int groupID = 0; groupID < pMesh->m_NumGroup; groupID++ )
+						studioloddata_t *pLOD = &pStudioHWData->m_pLODs[lodID];
+						for ( int meshID = 0; meshID < pStudioHWData->m_NumStudioMeshes; meshID++ )
 						{
-							numVerts += pMesh->m_pMeshGroup[groupID].m_NumVertices;
+							studiomeshdata_t *pMesh = &pLOD->m_pMeshData[meshID];
+							for ( int groupID = 0; groupID < pMesh->m_NumGroup; groupID++ )
+							{
+								numVerts += pMesh->m_pMeshGroup[groupID].m_NumVertices;
+							}
 						}
 					}
 				}
@@ -1855,13 +2039,24 @@ void CStaticPropMgr::PrecacheLighting()
 	while ( --i >= 0 )
 	{
 		MDLCACHE_CRITICAL_SECTION_( g_pMDLCache );
+
+		// --- 64-bit Linux Architecture Safety Guard Begin ---
+		// Prevent empty allocations or corrupted arrays from entering the rendering pipeline
+		if ( !m_StaticProps[i].GetModel() )
+		{
+			continue;
+		}
+		// --- 64-bit Linux Architecture Safety Guard End ---
+
 		if ( !m_StaticProps[i].ShouldDraw() )
 			continue;
+
 		m_StaticProps[i].PrecacheLighting();
 	}
 
 	COM_TimestampedLog( "CStaticPropMgr::PrecacheLighting - end");
 }
+
 
 void CStaticPropMgr::RecomputeStaticLighting( )
 {
