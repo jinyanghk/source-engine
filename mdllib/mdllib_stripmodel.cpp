@@ -202,8 +202,12 @@ bool CMdlLib::StripModelBuffers( CUtlBuffer &mdlBuffer, CUtlBuffer &vvdBuffer, C
 			ITERATE_CHILDREN( mstudiomesh_t, mdlMesh, mdlModel, pMesh, nummeshes )
 				
 				CMdlStripInfo::MdlRangeItem mdlRangeItem( mdlMesh->vertexoffset, mdlMesh->numvertices );
-				
-				mdlMesh->vertexdata.modelvertexdata = &mdlModel->vertexdata;
+#ifdef PLATFORM_64BITS
+				mstudio_modelvertexdata_t *real_modelvertexdata = &( mdlModel->vertexdata );
+				mdlMesh->vertexdata.index_ptr_modelvertexdata = (byte *)&real_modelvertexdata - (byte *)&mdlModel->vertexdata;
+#else
+				mdlMesh->vertexdata.pModelVertexData = &mdlModel->vertexdata;
+#endif
 				mdlMesh->numvertices = srcIndices.FindLess( mdlMesh->vertexoffset + mdlMesh->numvertices );
 				mdlMesh->vertexoffset = srcIndices.FindLess( mdlMesh->vertexoffset ) + 1;
 				mdlMesh->numvertices -= mdlMesh->vertexoffset - 1;
