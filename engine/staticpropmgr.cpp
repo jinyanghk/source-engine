@@ -1452,10 +1452,34 @@ void CStaticPropMgr::UnserializeModels( CUtlBuffer& buf )
 			case 7: // Falls down to version 10. We promoted TF to version 10 to deal with SFM. 
 			case 10:
 			{
-				if( s_MapVersion == 21 )
-					UnserializeLump<StaticPropLumpV10_21_t>(&lump, buf);
-				else
-					UnserializeLump<StaticPropLumpV10_t>(&lump, buf);
+				// BYPASS BOTH TRADITIONAL MACRO BLOCKS FOR ANY MAP VERSION
+				// This reads raw binary fields sequentially, matching your custom VBSP output exactly
+				buf.Get( &lump.m_Origin, sizeof(Vector) );
+				buf.Get( &lump.m_Angles, sizeof(QAngle) );
+				
+				lump.m_PropType   = buf.GetShort();
+				lump.m_FirstLeaf  = buf.GetShort();
+				lump.m_LeafCount  = buf.GetShort();
+				
+				lump.m_Solid      = buf.GetUnsignedChar();
+				lump.m_Flags      = buf.GetUnsignedChar();
+				
+				lump.m_Skin       = buf.GetInt();
+				lump.m_FadeMinDist= buf.GetFloat();
+				lump.m_FadeMaxDist= buf.GetFloat();
+				
+				buf.Get( &lump.m_LightingOrigin, sizeof(Vector) );
+
+				// Pull out the extended version 10 properties manually (12 + 4 + 4 = 20 bytes)
+				lump.m_flForcedFadeScale = buf.GetFloat();
+				buf.GetFloat(); // Explicitly swallow the secondary scale float
+				buf.GetFloat(); // Explicitly swallow the tertiary scale float
+				
+				lump.m_nMinDXLevel       = buf.GetShort();
+				lump.m_nMaxDXLevel       = buf.GetShort();
+				
+				// Safely swallow the trailing flag integer block to consume exactly 76 bytes total
+				buf.GetInt(); 
 				break;
 			}
 			case 9: UnserializeLump<StaticPropLumpV9_t>(&lump, buf); break;
@@ -1647,6 +1671,10 @@ void CStaticPropMgr::LevelShutdown()
 
 void CStaticPropMgr::LevelInitClient()
 {
+Msg("ENGINE EXPECTED STRUCT SIZES:\n");
+Msg("StaticPropLumpV4_t size: %d\n", (int)sizeof(StaticPropLumpV4_t));
+Msg("StaticPropLumpV5_t size: %d\n", (int)sizeof(StaticPropLumpV5_t));
+
 #ifndef SWDS
 	if ( sv.IsDedicated() ) 
 		return;
