@@ -13,8 +13,6 @@
 
 #include <QDebug>
 
-using namespace ui;
-
 // todo: fix console spam due to overlays
 COptions::COptions( QWidget *pParent ) :
 	QDialog(pParent)
@@ -56,29 +54,29 @@ COptions::COptions( QWidget *pParent ) :
 	this->setFixedSize( this->sizeHint() );
 }
 
-void ui::COptions::loadSettings()
+void COptions::loadSettings()
 {
 }
 
-void ui::COptions::saveSettings()
+void COptions::saveSettings()
 {
 }
 
-void ui::COptions::onOkPressed()
+void COptions::onOkPressed()
 {
 }
 
-void ui::COptions::onCancelPressed()
+void COptions::onCancelPressed()
 {
 	this->close();
 }
 
-void ui::COptions::onApplyPressed()
+void COptions::onApplyPressed()
 {
 	saveSettings();
 }
 
-void ui::COptions::onHelpPressed()
+void COptions::onHelpPressed()
 {
 }
 

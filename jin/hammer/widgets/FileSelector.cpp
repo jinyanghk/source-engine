@@ -5,8 +5,6 @@
 
 #include "FileSelector.h"
 
-using namespace ui;
-
 CFileSelector::CFileSelector(QWidget* pParent, Options opts) : 
 	QWidget(pParent)
 {

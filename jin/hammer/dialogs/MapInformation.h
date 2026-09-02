@@ -2,16 +2,12 @@
 
 #include <QDialog>
 
-namespace ui
+class CMapInformation : public QDialog
 {
-	class CMapInformation : public QDialog
-	{
-		Q_OBJECT
-	public:
-		CMapInformation( QWidget *pParent );
+	Q_OBJECT
+public:
+	CMapInformation(QWidget *pParent);
 
-	private slots:
-		void onClosePressed();
-	};
-
-} // namespace ui
+private slots:
+	void onClosePressed();
+};

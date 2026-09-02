@@ -6,20 +6,16 @@
 #include <QDialog>
 #include <QLineEdit>
 
-namespace ui
+class CCheckForProblems : public QDialog
 {
-	class CCheckForProblems : public QDialog
-	{
-		Q_OBJECT
-	public:
-		CCheckForProblems( QWidget *pParent );
+	Q_OBJECT
+public:
+	CCheckForProblems(QWidget *pParent);
 
-	private slots:
-		void onGoToPressed();
-		void onFixPressed();
-		void onFixAllTypePressed();
+private slots:
+	void onGoToPressed();
+	void onFixPressed();
+	void onFixAllTypePressed();
 
-		void onClosePressed();
-	};
-
-} // namespace ui
+	void onClosePressed();
+};

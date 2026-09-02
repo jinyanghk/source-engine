@@ -5,8 +5,6 @@
 #include <QPushButton>
 #include <QVBoxLayout>
 
-using namespace ui;
-
 CFindEntities::CFindEntities( QWidget *pParent ) :
 	QDialog( pParent )
 {

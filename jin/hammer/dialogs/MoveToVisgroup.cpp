@@ -6,8 +6,6 @@
 #include <QPushButton>
 #include <QStyleFactory>
 
-using namespace ui;
-
 CMoveToVisgroup::CMoveToVisgroup( QWidget *pParent ) :
 	QDialog( pParent )
 {

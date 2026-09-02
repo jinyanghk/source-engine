@@ -5,8 +5,6 @@
 #include <QLabel>
 #include <QPushButton>
 
-using namespace ui;
-
 CSmoothingGroups::CSmoothingGroups( QWidget *pParent ) :
 	QDialog( pParent )
 {

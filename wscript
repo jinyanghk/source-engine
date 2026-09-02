@@ -122,7 +122,7 @@ projects={
 		'jin/libgizmo',
 		'jin/gizmo',
 		'jin/hammer',
-		'hammer_launcher',
+		#'hammer_launcher',
 	],
 	'tests': [
 		'appframework',
@@ -219,7 +219,7 @@ projects={
 		'jin/libgizmo',
 		'jin/gizmo',
 		'jin/hammer',
-		'hammer_launcher',
+		#'hammer_launcher',
 	]
 }
 

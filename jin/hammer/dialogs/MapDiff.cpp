@@ -5,8 +5,6 @@
 #include <QLabel>
 #include <QPushButton>
 
-using namespace ui;
-
 CMapDiff::CMapDiff( QWidget *pParent ) :
 	QDialog( pParent )
 {

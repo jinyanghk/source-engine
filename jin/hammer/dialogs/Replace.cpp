@@ -7,8 +7,6 @@
 #include <QPushButton>
 #include <QVBoxLayout>
 
-using namespace ui;
-
 CReplace::CReplace( QWidget *pParent ) :
 	QDialog( pParent )
 {

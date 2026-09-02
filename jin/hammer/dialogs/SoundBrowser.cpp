@@ -4,8 +4,6 @@
 #include <QPushButton>
 #include <QLabel>
 
-using namespace ui;
-
 CSoundBrowser::CSoundBrowser( QWidget *pParent ) :
 	QDialog( pParent )
 {

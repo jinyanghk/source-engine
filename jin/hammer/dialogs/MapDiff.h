@@ -4,21 +4,18 @@
 #include <QDialog>
 #include <QLineEdit>
 
-namespace ui
+class CMapDiff : public QDialog
 {
-	class CMapDiff : public QDialog
-	{
-		Q_OBJECT
+	Q_OBJECT
 
-	public:
-		CMapDiff( QWidget *pParent );
+public:
+	CMapDiff(QWidget *pParent);
 
-		QLineEdit *m_pFindName;
-		QCheckBox *m_pDiffSimilarVisgroup;
+	QLineEdit *m_pFindName;
+	QCheckBox *m_pDiffSimilarVisgroup;
 
-	private slots:
-		void onOKPressed();
-		void onBrowsePressed();
-		void onClosePressed();
-	};
-} // namespace ui
+private slots:
+	void onOKPressed();
+	void onBrowsePressed();
+	void onClosePressed();
+};

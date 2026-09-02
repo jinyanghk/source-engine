@@ -4,8 +4,6 @@
 #include <QHBoxLayout>
 #include <QDebug>
 
-using namespace ui;
-
 void print_message()
 {
 	qDebug() << "Some words!";

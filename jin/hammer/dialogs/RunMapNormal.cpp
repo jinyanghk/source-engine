@@ -8,8 +8,6 @@
 #include <QRadioButton>
 #include <QVBoxLayout>
 
-using namespace ui;
-
 CRunMapNormal::CRunMapNormal( QWidget *pParent ) :
 	QDialog( pParent )
 {

@@ -6,8 +6,6 @@
 #include <QPushButton>
 #include <QVBoxLayout>
 
-using namespace ui;
-
 CMapInformation::CMapInformation( QWidget *pParent ) :
 	QDialog( pParent )
 {

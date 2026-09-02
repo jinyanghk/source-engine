@@ -3,12 +3,11 @@
 #include <QFile>
 #include <QTextStream>
 #include <QDebug>
+#include <QGridLayout>
 
 #include "dialogs/FaceEditSheet.h"
 #include "dialogs/RunMapNormal.h"
 #include "widgets/PrefSlider.h"
-
-using namespace ui;
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -21,10 +20,28 @@ MainWindow::MainWindow(QWidget *parent)
     createDockWidgets();
     createCentralWidget();
     createStatusBar();
-    //applyStyleSheet();
+    applyStyleSheet();
 }
 
 MainWindow::~MainWindow() {}
+
+void MainWindow::createCentralWidget()
+{
+    QWidget *centralWidget = new QWidget(this);
+    QGridLayout *layout = new QGridLayout(centralWidget);
+
+    CHammerViewportWidget *viewTop   = new CHammerViewportWidget(1, this); // Top (XY)
+    CHammerViewportWidget *viewSide  = new CHammerViewportWidget(2, this); // Side (YZ)
+    CHammerViewportWidget *viewFront = new CHammerViewportWidget(3, this); // Front (XZ)
+    CHammerViewportWidget *view3D    = new CHammerViewportWidget(0, this); // Camera 3D
+
+    layout->addWidget(viewTop, 0, 0);
+    layout->addWidget(viewSide, 0, 1);
+    layout->addWidget(viewFront, 1, 0);
+    layout->addWidget(view3D, 1, 1);
+
+    setCentralWidget(centralWidget);
+}
 
 void MainWindow::createMenuBar()
 {
@@ -64,14 +81,14 @@ void MainWindow::createMenuBar()
     QAction *faceEditAction = new QAction("Face Edit", this);
     connect(faceEditAction, &QAction::triggered, this, [this]()
             {
-		ui::CFaceEditSheet dialog(this);
+		CFaceEditSheet dialog(this);
 		dialog.exec(); });
     mapMenu->addAction(faceEditAction);
 
     QAction *runMapAction = new QAction("Run Map", this);
     connect(runMapAction, &QAction::triggered, this, [this]()
             {
-		ui::CRunMapNormal dialog(this);
+		CRunMapNormal dialog(this);
 		dialog.exec(); });
     mapMenu->addAction(runMapAction);
 
@@ -203,6 +220,7 @@ void MainWindow::createDockWidgets()
     //addDockWidget(Qt::BottomDockWidgetArea, m_consoleDock);
 }
 
+/*
 void MainWindow::createCentralWidget()
 {
     // central widget, use QVBoxLayout to hold splitters
@@ -293,6 +311,7 @@ void MainWindow::createCentralWidget()
     setCorner(Qt::TopLeftCorner, Qt::LeftDockWidgetArea);
     setCorner(Qt::BottomLeftCorner, Qt::LeftDockWidgetArea);
 }
+*/
 
 void MainWindow::createStatusBar()
 {

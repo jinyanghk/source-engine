@@ -5,8 +5,6 @@
 #include <QPushButton>
 #include <QVBoxLayout>
 
-using namespace ui;
-
 CMakeHollow::CMakeHollow( QWidget *pParent ) :
 	QDialog( pParent )
 {

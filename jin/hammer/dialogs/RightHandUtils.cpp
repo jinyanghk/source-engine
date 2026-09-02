@@ -5,8 +5,6 @@
 #include <QVBoxLayout>
 #include <QTabWidget>
 
-using namespace ui;
-
 CRightHandUtils::CRightHandUtils( QWidget *pParent ) :
 	QDialog( pParent )
 {

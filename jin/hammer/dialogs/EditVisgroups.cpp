@@ -8,8 +8,6 @@
 #include <QLabel>
 #include <QPushButton>
 
-using namespace ui;
-
 CEditVisgroups::CEditVisgroups( QWidget *pParent ) :
 	QDialog( pParent )
 {

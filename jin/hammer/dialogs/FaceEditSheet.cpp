@@ -6,8 +6,6 @@
 #include <QHBoxLayout>
 #include <QPushButton>
 
-using namespace ui;
-
 CFaceEditSheet::CFaceEditSheet( QWidget *pParent ) :
 	QDialog( pParent )
 {

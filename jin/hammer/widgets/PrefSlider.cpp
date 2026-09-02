@@ -5,8 +5,6 @@
 
 #include "PrefSlider.h"
 
-using namespace ui;
-
 //-----------------------------------------------------------------------------------------//
 
 CPrefSlider::CPrefSlider(QWidget* pParent, const QString& label, const QString& units, float min, float max, float& setting, float inc) :

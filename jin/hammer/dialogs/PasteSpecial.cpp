@@ -10,8 +10,6 @@
 #include <QLineEdit>
 #include <QPushButton>
 
-using namespace ui;
-
 CPasteSpecial::CPasteSpecial( QWidget *pParent ) :
 	QDialog( pParent )
 {

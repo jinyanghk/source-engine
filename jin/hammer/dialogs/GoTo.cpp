@@ -6,8 +6,6 @@
 #include <QIntValidator>
 #include <QLabel>
 
-using namespace ui;
-
 //-----------------------------------------------------------------//
 
 CGoToCoordDialog::CGoToCoordDialog( QWidget *pParent ) :

@@ -7,8 +7,6 @@
 #include <QLineEdit>
 #include <QPushButton>
 
-using namespace ui;
-
 CSprinkle::CSprinkle( QWidget *pParent ) :
 	QDialog( pParent )
 {

@@ -15,7 +15,7 @@
 #include <QStandardItemModel>
 #include <QSplitter>
 
-namespace ui {
+#include "widgets/HammerViewportWidget.h"
 
 class MainWindow : public QMainWindow
 {
@@ -53,8 +53,6 @@ private:
     QSplitter *m_mainSplitter;
     QSplitter *m_leftSplitter;
     QSplitter *m_rightSplitter;
-};
-
 };
 
 #endif // MAINWINDOW_H

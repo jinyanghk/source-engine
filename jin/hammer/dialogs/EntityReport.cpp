@@ -9,8 +9,6 @@
 #include <QRadioButton>
 #include <QVBoxLayout>
 
-using namespace ui;
-
 CEntityReport::CEntityReport( QWidget *pParent ) :
 	QDialog( pParent )
 {

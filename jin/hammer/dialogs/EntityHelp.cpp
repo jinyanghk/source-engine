@@ -2,8 +2,6 @@
 
 #include <QVBoxLayout>
 
-using namespace ui;
-
 CEntityHelp::CEntityHelp( QWidget *pParent ) :
 	QDialog( pParent )
 {

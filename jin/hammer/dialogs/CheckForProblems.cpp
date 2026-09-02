@@ -11,8 +11,6 @@
 #include <QPushButton>
 #include <QVBoxLayout>
 
-using namespace ui;
-
 CCheckForProblems::CCheckForProblems( QWidget *pParent ) :
 	QDialog( pParent )
 {

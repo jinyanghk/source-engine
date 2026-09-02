@@ -3,20 +3,16 @@
 #include <QDialog>
 #include <QSpinBox>
 
-namespace ui
+class CMakeHollow : public QDialog
 {
-	class CMakeHollow : public QDialog
-	{
-		Q_OBJECT
-	public:
-		CMakeHollow( QWidget *pParent );
+	Q_OBJECT
+public:
+	CMakeHollow(QWidget *pParent);
 
-		QSpinBox *m_pHollowAmount;
+	QSpinBox *m_pHollowAmount;
 
-	private slots:
-		void onOKPressed();
+private slots:
+	void onOKPressed();
 
-		void onClosePressed();
-	};
-
-} // namespace ui
+	void onClosePressed();
+};

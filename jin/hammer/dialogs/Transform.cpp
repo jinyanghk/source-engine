@@ -7,8 +7,6 @@
 #include <QLabel>
 #include <QPushButton>
 
-using namespace ui;
-
 CTransform::CTransform( QWidget *pParent ) :
 	QDialog( pParent )
 {
