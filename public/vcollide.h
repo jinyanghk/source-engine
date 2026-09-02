@@ -18,7 +18,12 @@ struct vcollide_t
 	unsigned short solidCount : 15;
 	unsigned short isPacked : 1;
 	unsigned short descSize;
-	// VPhysicsSolids
+	
+	// Natural explicit 4-byte structural padding gap for 64-bit compilers
+#if defined(__x86_64__) || defined(_WIN64) || defined(__aarch64__)
+	unsigned int   m_pad64;
+#endif
+
 	CPhysCollide	**solids;
 	char			*pKeyValues;
 };

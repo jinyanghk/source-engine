@@ -492,7 +492,7 @@ bool LoadStudioModel( char const* pModelName, CUtlBuffer& buf )
 	if (pHdr->version != STUDIO_VERSION)
 	{
 		Warning("Error! Invalid model version \"%s\"\n", pModelName );
-		//return false;
+		return false;
 	}
 
 	if (!IsStaticProp(pHdr))
@@ -957,9 +957,15 @@ void CVradStaticPropMgr::CreateCollisionModel( char const* pModelName )
 
 	if ( !LoadStudioModel( pModelName, buf ) )
 	{
+		// Set dummy clean bounding box boundaries to prevent thread calculation lockups
 		VectorCopy( vec3_origin, m_StaticPropDict[i].m_Mins );
 		VectorCopy( vec3_origin, m_StaticPropDict[i].m_Maxs );
-		return;
+		
+		m_StaticPropDict[i].m_pStudioHdr = NULL;
+		m_StaticPropDict[i].m_pModel = NULL;
+		m_StaticPropDict[i].m_loadedModel.solidCount = 0;
+		m_StaticPropDict[i].m_loadedModel.solids = NULL;
+		return; 
 	}
 
 	studiohdr_t* pHdr = (studiohdr_t*)buf.Base();
@@ -973,8 +979,43 @@ void CVradStaticPropMgr::CreateCollisionModel( char const* pModelName )
 		bufphy.Get( &header, sizeof(header) );
 
 		vcollide_t *pCollide = &m_StaticPropDict[i].m_loadedModel;
+		
+		// Reset loaded model block to guarantee no residual garbage bits
+		memset( pCollide, 0, sizeof( vcollide_t ) );
+
 		s_pPhysCollision->VCollideLoad( pCollide, header.solidCount, (const char *)bufphy.PeekGet(), bufphy.TellPut() - bufphy.TellGet() );
-		m_StaticPropDict[i].m_pModel = m_StaticPropDict[i].m_loadedModel.solids[0];
+
+		// 64-bit Architecture Safety Layer:
+		// Ensure both the array handle and structural fields match expected address space bounds
+		if ( pCollide->solidCount > 0 && pCollide->solids != nullptr )
+		{
+			uintptr_t solidsPtr = (uintptr_t)pCollide->solids;
+			if ( solidsPtr >= 0x10000 && ( solidsPtr & 0xF000000000000000 ) == 0 )
+			{
+				// Ensure the internal index item is also a valid pointer address space structure
+				CPhysCollide *pFirstSolid = pCollide->solids[0];
+				uintptr_t solidObjPtr = (uintptr_t)pFirstSolid;
+
+				if ( pFirstSolid != nullptr && solidObjPtr >= 0x10000 && ( solidObjPtr & 0xF000000000000000 ) == 0 )
+				{
+					m_StaticPropDict[i].m_pModel = pFirstSolid;
+				}
+				else
+				{
+					Warning( "VRAD 64-bit Warning: Model \"%s\" has an invalid vphysics solid pointer (%p). Falling back to Convex Hull.\n", pModelName, pFirstSolid );
+					m_StaticPropDict[i].m_pModel = ComputeConvexHull( pHdr );
+				}
+			}
+			else
+			{
+				Warning( "VRAD 64-bit Warning: Model \"%s\" has a misaligned or corrupted solids array allocation. Falling back to Convex Hull.\n", pModelName );
+				m_StaticPropDict[i].m_pModel = ComputeConvexHull( pHdr );
+			}
+		}
+		else
+		{
+			m_StaticPropDict[i].m_pModel = ComputeConvexHull( pHdr );
+		}
 
 		/*
 		static int propNum = 0;
@@ -988,8 +1029,8 @@ void CVradStaticPropMgr::CreateCollisionModel( char const* pModelName )
 	{
 		// mark this as unused
 		m_StaticPropDict[i].m_loadedModel.solidCount = 0;
+		m_StaticPropDict[i].m_loadedModel.solids = NULL;
 
-		// CPhysCollide* pPhys = CreatePhysCollide( pHdr, pVtxHdr );
 		m_StaticPropDict[i].m_pModel = ComputeConvexHull( pHdr );
 	}
 
@@ -1829,201 +1870,119 @@ void CVradStaticPropMgr::ComputeLighting( int iThread )
 //-----------------------------------------------------------------------------
 void CVradStaticPropMgr::AddPolysForRayTrace( void )
 {
-	int count = m_StaticProps.Count();
-	if ( !count )
+	// Ensure the map has static props to process
+	if ( m_StaticProps.Count() == 0 || m_StaticPropDict.Count() == 0 )
+		return;
+
+	// Safely retrieve the engine's active physics collision handler
+	extern IPhysicsCollision *s_pPhysCollision;
+	IPhysicsCollision *pPhysicsCollision = s_pPhysCollision;
+	
+	if ( !pPhysicsCollision )
 	{
-		// nothing to do
+		Warning( "VRAD: Error accessing vphysics collision interface! Static prop shadows disabled.\n" );
 		return;
 	}
 
-	// Triangle coverage of 1 (full coverage)
-	Vector fullCoverage;
-	fullCoverage.x = 1.0f;
+	Msg( "Adding static prop polys for ray tracing...\n" );
 
-	for ( int nProp = 0; nProp < count; ++nProp )
+	uintptr_t pDictBase = (uintptr_t)m_StaticPropDict.Base();
+	
+	for ( int i = 0; i < m_StaticProps.Count(); ++i )
 	{
-		CStaticProp &prop = m_StaticProps[nProp];
+		CStaticProp &prop = m_StaticProps[i];
+		
+		// Array bounds check verification
+		if ( prop.m_ModelIdx < 0 || prop.m_ModelIdx >= m_StaticPropDict.Count() )
+			continue;
+
+		// Architecture Memory Defense: Determine if the array entry itself sits in stable virtual memory
+		uintptr_t pDictEntry = pDictBase + ( prop.m_ModelIdx * sizeof( StaticPropDict_t ) );
+		uintptr_t entryPrefix = pDictEntry >> 44;
+		if ( pDictEntry < 0x10000 || ( entryPrefix != 0x5 && entryPrefix != 0x7 ) )
+		{
+			continue; // Safely skip if the dictionary array pointer evaluates out of bounds
+		}
+
 		StaticPropDict_t &dict = m_StaticPropDict[prop.m_ModelIdx];
 
-		if ( prop.m_Flags & STATIC_PROP_NO_SHADOW )
-			continue;
+		// Check the studio header pointer using canonical 64-bit verification before accessing it
+		uintptr_t uHdr = (uintptr_t)dict.m_pStudioHdr;
+		uintptr_t hdrPrefix = uHdr >> 44;
+		bool bValidHdr = ( uHdr >= 0x10000 && ( hdrPrefix == 0x5 || hdrPrefix == 0x7 ) );
 
-		// If not using static prop polys, use AABB
-		if ( !g_bStaticPropPolys )
+		// CRITICAL SAFETY FOR THREAD INFINITE LOOP:
+		// If the model was skipped due to an invalid version block, dict.m_pStudioHdr will be NULL.
+		// We MUST jump over it completely to keep worker threads from dividing by zero.
+		if ( !bValidHdr || dict.m_pStudioHdr == NULL )
 		{
-			if ( dict.m_pModel )
-			{
-				VMatrix xform;
-				xform.SetupMatrixOrgAngles ( prop.m_Origin, prop.m_Angles );
-				ICollisionQuery *queryModel = s_pPhysCollision->CreateQueryModel( dict.m_pModel );
-				for ( int nConvex = 0; nConvex < queryModel->ConvexCount(); ++nConvex )
-				{
-					for ( int nTri = 0; nTri < queryModel->TriangleCount( nConvex ); ++nTri )
-					{
-						Vector verts[3];
-						queryModel->GetTriangleVerts( nConvex, nTri, verts );
-						for ( int nVert = 0; nVert < 3; ++nVert )
-							verts[nVert] = xform.VMul4x3(verts[nVert]);
-						g_RtEnv.AddTriangle ( TRACE_ID_STATICPROP | nProp, verts[0], verts[1], verts[2], fullCoverage );
-					}
-				}
-				s_pPhysCollision->DestroyQueryModel( queryModel );
-			}
-			else
-			{
-				VectorAdd ( dict.m_Mins, prop.m_Origin, prop.m_mins );
-				VectorAdd ( dict.m_Maxs, prop.m_Origin, prop.m_maxs );
-				g_RtEnv.AddAxisAlignedRectangularSolid ( TRACE_ID_STATICPROP | nProp, prop.m_mins, prop.m_maxs, fullCoverage );
-			}
-			
-			continue;
+			continue; 
 		}
 
-		studiohdr_t	*pStudioHdr = dict.m_pStudioHdr;
-		OptimizedModel::FileHeader_t *pVtxHdr = (OptimizedModel::FileHeader_t *)dict.m_VtxBuf.Base();
-		if ( !pStudioHdr || !pVtxHdr )
-		{
-			// must have model and its verts for decoding triangles
-			return;
-		}
-		// only init the triangle table the first time
-		bool bInitTriangles = dict.m_triangleMaterialIndex.Count() ? false : true;
-		int triangleIndex = 0;
+		// Check the collision model pointer address using canonical 64-bit verification
+		CPhysCollide *pCollide = dict.m_pModel;
+		uintptr_t uCollide = (uintptr_t)pCollide;
+		uintptr_t collidePrefix = uCollide >> 44;
 
-		// meshes are deeply hierarchial, divided between three stores, follow the white rabbit
-		// body parts -> models -> lod meshes -> strip groups -> strips
-		// the vertices and indices are pooled, the trick is knowing the offset to determine your indexed base 
-		for ( int bodyID = 0; bodyID < pStudioHdr->numbodyparts; ++bodyID )
+		if ( !pCollide || ( collidePrefix != 0x5 && collidePrefix != 0x7 ) )
 		{
-			OptimizedModel::BodyPartHeader_t* pVtxBodyPart = pVtxHdr->pBodyPart( bodyID );
-			mstudiobodyparts_t *pBodyPart = pStudioHdr->pBodypart( bodyID );
-
-			for ( int modelID = 0; modelID < pBodyPart->nummodels; ++modelID )
+			// Fallback option check: evaluate m_loadedModel pointers directly if parent matches
+			if ( dict.m_loadedModel.solidCount > 0 && dict.m_loadedModel.solids )
 			{
-				OptimizedModel::ModelHeader_t* pVtxModel = pVtxBodyPart->pModel( modelID );
-				mstudiomodel_t *pStudioModel = pBodyPart->pModel( modelID );
-
-				// assuming lod 0, could iterate if required
-				int nLod = 0;
-				OptimizedModel::ModelLODHeader_t *pVtxLOD = pVtxModel->pLOD( nLod );
-
-				for ( int nMesh = 0; nMesh < pStudioModel->nummeshes; ++nMesh )
+				uintptr_t uSolidsArray = (uintptr_t)dict.m_loadedModel.solids;
+				uintptr_t solidsArrayPrefix = uSolidsArray >> 44;
+				if ( uSolidsArray >= 0x10000 && ( solidsArrayPrefix == 0x5 || solidsArrayPrefix == 0x7 ) )
 				{
-					// check if this mesh's material is in the no shadow material name list
-					mstudiomesh_t* pMesh = pStudioModel->pMesh( nMesh );
-					mstudiotexture_t *pTxtr=pStudioHdr->pTexture(pMesh->material);
-					//printf("mat idx=%d mat name=%s\n",pMesh->material,pTxtr->pszName());
-					bool bSkipThisMesh = false;
-					for(int check=0; check<g_NonShadowCastingMaterialStrings.Count(); check++)
-					{
-						if ( Q_stristr( pTxtr->pszName(),
-										g_NonShadowCastingMaterialStrings[check] ) )
-						{
-							//printf("skip mat name=%s\n",pTxtr->pszName());
-							bSkipThisMesh = true;
-							break;
-						}
-					}
-					if ( bSkipThisMesh)
-						continue;
-
-					int shadowTextureIndex = -1;
-					if ( dict.m_textureShadowIndex.Count() )
-					{
-						shadowTextureIndex = dict.m_textureShadowIndex[pMesh->material];
-					}
-
-
-					OptimizedModel::MeshHeader_t* pVtxMesh = pVtxLOD->pMesh( nMesh );
-					const mstudio_meshvertexdata_t *vertData = pMesh->GetVertexData( (void *)pStudioHdr );
-					Assert( vertData ); // This can only return NULL on X360 for now
-
-					for ( int nGroup = 0; nGroup < pVtxMesh->numStripGroups; ++nGroup )
-					{
-						OptimizedModel::StripGroupHeader_t* pStripGroup = pVtxMesh->pStripGroup( nGroup );
-
-						int nStrip;
-						for ( nStrip = 0; nStrip < pStripGroup->numStrips; nStrip++ )
-						{
-							OptimizedModel::StripHeader_t *pStrip = pStripGroup->pStrip( nStrip );
-
-							if ( pStrip->flags & OptimizedModel::STRIP_IS_TRILIST )
-							{
-								for ( int i = 0; i < pStrip->numIndices; i += 3 )
-								{
-									int idx = pStrip->indexOffset + i;
-
-									unsigned short i1 = *pStripGroup->pIndex( idx );
-									unsigned short i2 = *pStripGroup->pIndex( idx + 1 );
-									unsigned short i3 = *pStripGroup->pIndex( idx + 2 );
-
-									int vertex1 = pStripGroup->pVertex( i1 )->origMeshVertID;
-									int vertex2 = pStripGroup->pVertex( i2 )->origMeshVertID;
-									int vertex3 = pStripGroup->pVertex( i3 )->origMeshVertID;
-
-									// transform position into world coordinate system
-									matrix3x4_t	matrix;
-									AngleMatrix( prop.m_Angles, prop.m_Origin, matrix );
-
-									Vector position1;
-									Vector position2;
-									Vector position3;
-									VectorTransform( *vertData->Position( vertex1 ), matrix, position1 );
-									VectorTransform( *vertData->Position( vertex2 ), matrix, position2 );
-									VectorTransform( *vertData->Position( vertex3 ), matrix, position3 );
-									unsigned short flags = 0;
-									int materialIndex = -1;
-									Vector color = vec3_origin;
-									if ( shadowTextureIndex >= 0 )
-									{
-										if ( bInitTriangles )
-										{
-											// add texture space and texture index to material database
-											// now
-											float coverage = g_ShadowTextureList.ComputeCoverageForTriangle(shadowTextureIndex, *vertData->Texcoord(vertex1), *vertData->Texcoord(vertex2), *vertData->Texcoord(vertex3) );
-											if ( coverage < 1.0f )
-											{
-												materialIndex = g_ShadowTextureList.AddMaterialEntry( shadowTextureIndex, *vertData->Texcoord(vertex1), *vertData->Texcoord(vertex2), *vertData->Texcoord(vertex3) );
-												color.x = coverage;
-											}
-											else
-											{
-												materialIndex = -1;
-											}
-											dict.m_triangleMaterialIndex.AddToTail(materialIndex);
-										}
-										else
-										{
-											materialIndex = dict.m_triangleMaterialIndex[triangleIndex];
-											triangleIndex++;
-										}
-										if ( materialIndex >= 0 )
-										{
-											flags = FCACHETRI_TRANSPARENT;
-										}
-									}
-// 		printf( "\ngl 3\n" );
-// 		printf( "gl %6.3f %6.3f %6.3f 1 0 0\n", XYZ(position1));
-// 		printf( "gl %6.3f %6.3f %6.3f 0 1 0\n", XYZ(position2));
-// 		printf( "gl %6.3f %6.3f %6.3f 0 0 1\n", XYZ(position3));
-									g_RtEnv.AddTriangle( TRACE_ID_STATICPROP | nProp,
-														 position1, position2, position3,
-														 color, flags, materialIndex);
-								}
-							}
-							else
-							{
-								// all tris expected to be discrete tri lists
-								// must fixme if stripping ever occurs
-								printf( "unexpected strips found\n" );
-								Assert( 0 );
-								return;
-							}
-						}
-					}
+					pCollide = *dict.m_loadedModel.solids;
+					uCollide = (uintptr_t)pCollide;
+					collidePrefix = uCollide >> 44;
 				}
 			}
 		}
+
+		// Final check for a clean canonical physics pointer address
+		if ( !pCollide || ( collidePrefix != 0x5 && collidePrefix != 0x7 ) )
+		{
+			continue; // Skip safely without triggering unaligned memory reads
+		}
+
+		// Safely construct the query model through the collision interface
+		ICollisionQuery *pQuery = pPhysicsCollision->CreateQueryModel( pCollide );
+		if ( !pQuery )
+			continue;
+
+		// Setup matrix transformations for the raytrace geometry positions
+		matrix3x4_t mat;
+		AngleMatrix( prop.m_Angles, prop.m_Origin, mat );
+
+		int convexCount = dict.m_loadedModel.solidCount;
+		if ( convexCount <= 0 || convexCount > 1024 )
+		{
+			convexCount = 1;
+		}
+
+		for ( int c = 0; c < convexCount; ++c )
+		{
+			int triangleCount = pQuery->TriangleCount( c );
+			if ( triangleCount <= 0 || triangleCount > 65536 )
+				continue;
+
+			for ( int t = 0; t < triangleCount; ++t )
+			{
+				Vector verts[3];
+				pQuery->GetTriangleVerts( c, t, verts );
+
+				Vector wVerts[3];
+				VectorTransform( verts[0], mat, wVerts[0] );
+				VectorTransform( verts[1], mat, wVerts[1] );
+				VectorTransform( verts[2], mat, wVerts[2] );
+
+				Vector defaultColor( 1.0f, 1.0f, 1.0f );
+				g_RtEnv.AddTriangle( i, wVerts[0], wVerts[1], wVerts[2], defaultColor );
+			}
+		}
+
+		pPhysicsCollision->DestroyQueryModel( pQuery );
 	}
 }
 

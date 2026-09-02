@@ -274,9 +274,7 @@ static CPhysCollide* GetCollisionModel( char const* pModelName )
 
 	// Load the studio model file
 	CUtlBuffer buf;
-	//Msg ("pModelName = %s\n", pModelName);
-	//if (!LoadStudioModel(pModelName, "prop_static", buf))
-	if (!LoadStudioModel(pTemp, "prop_static", buf))
+	if (!LoadStudioModel(pModelName, "prop_static", buf))
 	{
 		Warning("Error loading studio model \"%s\"!\n", pModelName );
 
