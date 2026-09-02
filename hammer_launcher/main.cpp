@@ -4,10 +4,10 @@
 //
 //===========================================================================//
 
-#include <windows.h>
-#include <eh.h>
+//#include <windows.h>
+//#include <eh.h>
 #include "appframework/AppFramework.h"
-#include "ihammer.h"
+#include "IHammer.h"
 #include "tier0/dbg.h"
 #include "vstdlib/cvar.h"
 #include "filesystem.h"
@@ -17,7 +17,7 @@
 #include "datacache/idatacache.h"
 #include "datacache/imdlcache.h"
 #include "vphysics_interface.h"
-#include "vgui/ivgui.h"
+#include "vgui/IVGui.h"
 #include "vgui/ISurface.h"
 #include "inputsystem/iinputsystem.h"
 #include "tier0/icommandline.h"
@@ -54,8 +54,13 @@ private:
 // Define the application object
 //-----------------------------------------------------------------------------
 CHammerApp	g_ApplicationObject;
-DEFINE_WINDOWED_APPLICATION_OBJECT_GLOBALVAR( g_ApplicationObject );
-
+//DEFINE_WINDOWED_APPLICATION_OBJECT_GLOBALVAR( g_ApplicationObject );
+int main( int argc, char **argv )
+{
+	//extern int ValveLinuxWindowedMain( int argc, char **argv, CAppSystemGroup *pAppSystemGroup );
+	//return ValveLinuxWindowedMain( argc, argv, &_globalVarName );
+	return 0;
+}
 
 //-----------------------------------------------------------------------------
 // Create all singleton systems
@@ -139,7 +144,8 @@ SpewRetval_t HammerSpewFunc( SpewType_t type, tchar const *pMsg )
 	}
 	else if( type == SPEW_ERROR )
 	{
-		MessageBox( NULL, pMsg, "Hammer Error", MB_OK | MB_ICONSTOP );
+		//MessageBox( NULL, pMsg, "Hammer Error", MB_OK | MB_ICONSTOP );
+		Msg ("Hammer Error %s\n", pMsg);
 		return SPEW_ABORT;
 	}
 	else

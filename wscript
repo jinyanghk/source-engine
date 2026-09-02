@@ -120,8 +120,9 @@ projects={
 		'utils/vtex_launcher',
 		'jin/libimgui',
 		'jin/libgizmo',
-		'jin/imhammer',
-		'jin/qthammer',
+		'jin/gizmo',
+		'jin/hammer',
+		'hammer_launcher',
 	],
 	'tests': [
 		'appframework',
@@ -216,8 +217,9 @@ projects={
 		'utils/vrad',
 		'jin/libimgui',
 		'jin/libgizmo',
-		'jin/imhammer',
-		'jin/qthammer',
+		'jin/gizmo',
+		'jin/hammer',
+		'hammer_launcher',
 	]
 }
 

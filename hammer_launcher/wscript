@@ -5,34 +5,22 @@ from waflib import Utils
 import os
 
 top = '.'
-PROJECT_NAME = 'imhammer'
+PROJECT_NAME = 'hammer'
 
 def options(opt):
 	# stub
 	return
 
 def configure(conf):
-	# stub
 	return
 
 def build(bld):
 	source = [
         'main.cpp',
     ]
-
-	includes = [
-        '.',
-		'../../imgui',
-        '../libgizmo',
-        #'../../thirdparty/stb',
-		'../../public',
-		'../../public/tier0',
-		'../../public/tier1',
-	]
-
+	includes = ['.', '../public', '../public/tier0', '../public/tier1']
 	defines = []
-
-	libs = ['fgdlib', 'mathlib', 'tier1', 'tier0', 'imgui', 'gizmo', 'X11', 'GL']
+	libs = ['appframework', 'vstdlib', 'tier1', 'tier0']
 
 	install_path = bld.env.BINDIR
 	bld(
