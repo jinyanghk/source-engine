@@ -44,6 +44,7 @@ def build(bld):
 		'widgets/HammerViewportWidget.cpp',
 		'widgets/EngineView.cpp',
 		'widgets/MaterialPreview.cpp',
+		'widgets/ModelView.cpp',
 		# Everything else
 		'main.cpp',
 		'mainwindow.cpp',
@@ -77,6 +78,7 @@ def build(bld):
 		'widgets/HammerViewportWidget.h',
 		'widgets/MaterialPreview.h',
 		'widgets/EngineView.h',
+		'widgets/ModelView.h',
 		'mainwindow.h',
 	]
 

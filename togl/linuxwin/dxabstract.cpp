@@ -6773,6 +6773,15 @@ HRESULT	ID3DXMatrixStack::Create()
 
 D3DXMATRIX* ID3DXMatrixStack::GetTop()
 {
+	// SW_HAMMER_TOOL SHIELD: If the stack was never stood up by the hardware,
+	// return a safe fallback identity matrix layout instead of dereferencing NULL.
+	if ( !this )
+	{
+		static D3DXMATRIX s_HeadlessFallbackMatrix;
+		D3DXMatrixIdentity( &s_HeadlessFallbackMatrix );
+		return &s_HeadlessFallbackMatrix;
+	}
+
 	return (D3DXMATRIX*)&m_stack[ m_stackTop ];
 }
 
@@ -6804,9 +6813,11 @@ void ID3DXMatrixStack::LoadMatrix( const D3DXMATRIX *pMat )
 
 void ID3DXMatrixStack::MultMatrix( const D3DXMATRIX *pMat )
 {
-	// SW_HAMMER_TOOL MATH STUB: Replace the original break-on-error assert
-	// with a standard right-multiplication assignment pass to update the top matrix.
-	if ( !pMat ) return;
+	// SW_HAMMER_TOOL SHIELD
+	if ( !this || !pMat )
+	{
+		return;
+	}
 
 	D3DXMATRIX *pTop = GetTop();
 	if ( pTop )
@@ -6817,9 +6828,11 @@ void ID3DXMatrixStack::MultMatrix( const D3DXMATRIX *pMat )
 
 void ID3DXMatrixStack::MultMatrixLocal( const D3DXMATRIX *pMat )
 {
-	// SW_HAMMER_TOOL MATH STUB: Replace the original break-on-error assert
-	// with a standard left-multiplication assignment pass to update the top matrix.
-	if ( !pMat ) return;
+	// SW_HAMMER_TOOL SHIELD
+	if ( !this || !pMat )
+	{
+		return;
+	}
 
 	D3DXMATRIX *pTop = GetTop();
 	if ( pTop )

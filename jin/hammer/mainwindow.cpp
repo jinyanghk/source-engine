@@ -4,6 +4,7 @@
 #include <QTextStream>
 #include <QDebug>
 #include <QGridLayout>
+#include <QFileDialog>
 
 #include "dialogs/FaceEditSheet.h"
 #include "dialogs/RunMapNormal.h"
@@ -25,13 +26,18 @@ MainWindow::MainWindow(QWidget *parent)
 
 MainWindow::~MainWindow() {}
 
+void MainWindow::createCentralWidget()
+{
+    m_modelView = new CModelView(this);
+    setCentralWidget(m_modelView);
+}
+
 /*
 void MainWindow::createCentralWidget()
 {
     m_MatView = new QMaterialPreview(this);
     setCentralWidget(m_MatView);
 }
-*/
 
 void MainWindow::createCentralWidget()
 {
@@ -46,7 +52,7 @@ void MainWindow::createCentralWidget()
     // Start ticking every 16ms (~60 FPS) to force paintEvent() calls
     pRenderTimer->start(16); 
 }
-
+*/
 
 /*
 void MainWindow::createCentralWidget()
@@ -141,11 +147,22 @@ void MainWindow::createMenuBar()
     // Instancing menu
     QMenu *instanceMenu = m_menuBar->addMenu("Instancing");
 
-    QAction *previewAction = new QAction("Preview", this);
+    QAction *previewAction = new QAction("Preview Model...", this);
     connect(previewAction, &QAction::triggered, this, [this]()
-            {
-		m_MatView->SetMaterial("preview_test", "ClientEffect textures");
-		 });
+    {
+        // Pop up a native Qt file selector mapped out to Valve's .mdl model containers
+        QString szSelectedFile = QFileDialog::getOpenFileName(
+            this,
+            tr("Open Half-Life 2 Studio Model"),
+            "/home/jin/source-engine/hl2/hl2/models", // Map this to your machine's real hl2 models path context
+            tr("Studio Model Files (*.mdl)")
+        );
+
+        if ( !szSelectedFile.isEmpty() )
+        {
+            m_modelView->LoadModelFile(szSelectedFile);
+        }
+    });
     instanceMenu->addAction(previewAction);
 
     // Instancing menu
