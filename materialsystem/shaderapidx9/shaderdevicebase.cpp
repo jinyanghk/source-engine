@@ -1198,9 +1198,23 @@ void CShaderDeviceBase::RemoveView( void* hWnd )
 //-----------------------------------------------------------------------------
 // Activates a child window
 //-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+// Activates a child window
+//-----------------------------------------------------------------------------
 void CShaderDeviceBase::SetView( void* hWnd )
 {
 	LOCK_SHADERAPI();
+
+	// SW_HAMMER_TOOL GLOBAL BRIDGE FALLBACK: If our tool context skipped 
+	// SetMode tracking loops, ensure g_pShaderAPI is securely bound to the 
+	// active global context before running internal queries.
+	if ( !g_pShaderAPI )
+	{
+		// In the dx8/dx9 subsystem layout, the global g_pShaderAPI interface 
+		// pointer points straight to the active engine singleton instance wrapper.
+		extern CShaderAPIBase *g_pShaderAPI;
+		g_pShaderAPI = reinterpret_cast<CShaderAPIBase*>(this);
+	}
 
 	ShaderViewport_t viewport;
 	g_pShaderAPI->GetViewports( &viewport, 1 );

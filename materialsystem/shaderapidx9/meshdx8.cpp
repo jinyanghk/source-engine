@@ -5307,6 +5307,11 @@ IMesh* CMeshMgr::GetDynamicMesh( IMaterial* pMaterial, VertexFormat_t vertexForm
 	{
 		// Remove VERTEX_FORMAT_COMPRESSED from the material's format (dynamic meshes don't
 		// support compression, and all materials should support uncompressed verts too)
+		if ( !pMatInternal )
+		{
+			// Standalone tool fallback: Return a safe default dummy handle if no material is active
+			return &m_DynamicMesh;
+		}
 		VertexFormat_t materialFormat = pMatInternal->GetVertexFormat() & ~VERTEX_FORMAT_COMPRESSED;
 		VertexFormat_t fmt = ( vertexFormat != 0 ) ? vertexFormat : materialFormat;
 		if ( vertexFormat != 0 )
@@ -5492,7 +5497,17 @@ void CMeshMgr::GetMaxToRender( IMesh *pMesh, bool bMaxUntilFlush, int *pMaxVerts
 
 int CMeshMgr::GetMaxVerticesToRender( IMaterial *pMaterial )
 {
-	Assert( (pMaterial == NULL) || ((IMaterialInternal *)pMaterial)->IsRealTimeVersion() );
+	// SW_HAMMER_TOOL NULL MATERIAL SHIELD: If our standalone/headless execution path 
+	// triggers vertex count allocations using a NULL material handle during buffer format 
+	// passes, short-circuit the execution to block dereferencing unallocated pointers.
+	if ( !pMaterial )
+	{
+		// 16384 vertices is the standard hard safety buffer capacity threshold 
+		// used natively by the engine's dynamic buffer flushing subroutines.
+		return 16384;
+	}
+
+	Assert( pMaterial->IsRealTimeVersion() );
 
 	// Be conservative, assume no compression (in here, we don't know if the caller will used a compressed VB or not)
 	// FIXME: allow the caller to specify which compression type should be used to compute size from the vertex format

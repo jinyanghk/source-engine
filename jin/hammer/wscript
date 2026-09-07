@@ -6,7 +6,6 @@ import os
 
 top = '.'
 PROJECT_NAME = 'hammer'
-#PROJECT_NAME = 'hammer_dll'
 
 def options(opt):
 	opt.load('compiler_cxx qt5')
@@ -43,6 +42,8 @@ def build(bld):
 		'widgets/FileSelector.cpp',
 		'widgets/PrefSlider.cpp',
 		'widgets/HammerViewportWidget.cpp',
+		'widgets/EngineView.cpp',
+		'widgets/MaterialPreview.cpp',
 		# Everything else
 		'main.cpp',
 		'mainwindow.cpp',
@@ -74,6 +75,8 @@ def build(bld):
 		'widgets/FileSelector.h',
 		'widgets/PrefSlider.h',
 		'widgets/HammerViewportWidget.h',
+		'widgets/MaterialPreview.h',
+		'widgets/EngineView.h',
 		'mainwindow.h',
 	]
 
@@ -84,17 +87,17 @@ def build(bld):
 		'../../public/tier0',
 		'../../public/tier1',
 		'../../public/tier2',
+		'../../thirdparty/SDL',
 	]
 
-	defines = []
+	defines = ['SW_HAMMER_TOOL']
 
-	libs = ['QT6CORE', 'QT6WIDGETS', 'QT6GUI', 'QT6OPENGLWIDGETS', 'vstdlib', 'tier2', 'tier1', 'tier0']
+	libs = ['QT6CORE', 'QT6WIDGETS', 'QT6GUI', 'QT6OPENGLWIDGETS', 'appframework', 'bitmap', 'vstdlib', 'tier2', 'tier1', 'tier0', 'togl', 'SDL2']
+	#libs = ['QT6CORE', 'QT6WIDGETS', 'QT6GUI', 'QT6OPENGLWIDGETS', 'appframework', 'bitmap', 'vstdlib', 'tier2', 'tier1', 'tier0',]
 
-	#install_path = bld.env.LIBDIR
 	install_path = bld.env.BINDIR
 
 	bld(
-	#bld.shlib(
 		source   = source,
 		moc  = headers,
 		target   = PROJECT_NAME,
@@ -104,6 +107,7 @@ def build(bld):
 		defines  = defines,
 		use      = libs,
 		install_path = install_path,
+		#linkflags    = ['-rdynamic'],
 		subsystem = bld.env.MSVC_SUBSYSTEM,
 		idx      = bld.get_taskgen_count()
 	)

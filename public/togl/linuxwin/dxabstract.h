@@ -812,6 +812,11 @@ FORCEINLINE void TOGLMETHODCALLTYPE IDirect3DDevice9::SetSamplerStates(
 
 FORCEINLINE HRESULT TOGLMETHODCALLTYPE IDirect3DDevice9::SetTexture(DWORD Stage,IDirect3DBaseTexture9* pTexture)
 {
+	if ( !this )
+	{
+		return S_OK;
+	}
+
 #if GLMDEBUG || GL_BATCH_PERF_ANALYSIS
 	return SetTextureNonInline( Stage, pTexture );
 #else
@@ -908,6 +913,14 @@ FORCEINLINE GLenum D3DStencilOpToGL( DWORD operation )
 
 FORCEINLINE HRESULT TOGLMETHODCALLTYPE IDirect3DDevice9::SetRenderStateInline( D3DRENDERSTATETYPE State, DWORD Value )
 {
+	// SW_HAMMER_TOOL NULL DEVICE SHIELD: If a headless tool context triggers 
+	// inline state mutations, immediately return S_OK to absorb the hardware call 
+	// safely and block pointer arithmetic page faults.
+	if ( !this )
+	{
+		return S_OK;
+	}
+
 #if GLMDEBUG || GL_BATCH_PERF_ANALYSIS
 	return SetRenderState( State, Value );
 #else
@@ -1176,17 +1189,25 @@ FORCEINLINE HRESULT TOGLMETHODCALLTYPE IDirect3DDevice9::SetRenderStateInline( D
 
 FORCEINLINE HRESULT TOGLMETHODCALLTYPE IDirect3DDevice9::SetRenderStateConstInline( D3DRENDERSTATETYPE State, DWORD Value )
 {
+	if ( !this )
+	{
+		return S_OK;
+	}
 	// State is a compile time constant - luckily no need to do anything special to get the compiler to optimize this case.
 	return SetRenderStateInline( State, Value );
 }
 
 FORCEINLINE HRESULT TOGLMETHODCALLTYPE IDirect3DDevice9::SetIndices(IDirect3DIndexBuffer9* pIndexData)
 {
+	if ( !this )
+	{
+		return S_OK;
+	}
+
 #if GLMDEBUG || GL_BATCH_PERF_ANALYSIS
 	return SetIndicesNonInline( pIndexData );
 #else
 	Assert( GetCurrentOwnerThreadId() == ThreadGetCurrentId() );
-	// just latch it.
 	m_indices.m_idxBuffer = pIndexData;
 	return S_OK;
 #endif
@@ -1194,18 +1215,20 @@ FORCEINLINE HRESULT TOGLMETHODCALLTYPE IDirect3DDevice9::SetIndices(IDirect3DInd
 
 FORCEINLINE HRESULT TOGLMETHODCALLTYPE IDirect3DDevice9::SetStreamSource(UINT StreamNumber,IDirect3DVertexBuffer9* pStreamData,UINT OffsetInBytes,UINT Stride)
 {
+	// SW_HAMMER_TOOL NULL DEVICE SHIELD: If our standalone execution context 
+	// triggers stream resets while running headless, immediately return S_OK 
+	// to prevent an offset boundary segmentation fault.
+	if ( !this )
+	{
+		return S_OK;
+	}
+
 #if GLMDEBUG || GL_BATCH_PERF_ANALYSIS
 	return SetStreamSourceNonInline( StreamNumber, pStreamData, OffsetInBytes, Stride );
 #else
 	Assert( GetCurrentOwnerThreadId() == ThreadGetCurrentId() );
 	Assert( StreamNumber < D3D_MAX_STREAMS );
-	Assert( ( Stride & 3 ) == 0 ); // we support non-DWORD aligned strides, but on some drivers (like AMD's) perf goes off a cliff 
-	
-	// perfectly legal to see a vertex buffer of NULL get passed in here.
-	// so we need an array to track these.
-	// OK, we are being given the stride, we don't need to calc it..
-
-	GLMPRINTF(("-X- IDirect3DDevice9::SetStreamSource setting stream #%d to D3D buf %p (GL name %d); offset %d, stride %d", StreamNumber, pStreamData, (pStreamData) ? pStreamData->m_vtxBuffer->m_name: -1, OffsetInBytes, Stride));
+	Assert( ( Stride & 3 ) == 0 ); 
 	
 	if ( !pStreamData )
 	{
@@ -1216,7 +1239,6 @@ FORCEINLINE HRESULT TOGLMETHODCALLTYPE IDirect3DDevice9::SetStreamSource(UINT St
 	}
 	else
 	{
-		// We do not support strides of 0
 		Assert( Stride > 0 );
 		m_vtx_buffers[ StreamNumber ] = pStreamData->m_vtxBuffer;
 	}
@@ -1303,8 +1325,13 @@ FORCEINLINE HRESULT TOGLMETHODCALLTYPE IDirect3DDevice9::SetPixelShader(IDirect3
 
 FORCEINLINE HRESULT IDirect3DDevice9::SetVertexDeclaration(IDirect3DVertexDeclaration9* pDecl)
 {
+	if ( !this )
+	{
+		return S_OK;
+	}
+
 #if GLMDEBUG || GL_BATCH_PERF_ANALYSIS
-	return SetVertexDeclarationNonInline(pDecl);
+	return SetVertexDeclarationNonInline( pDecl );
 #else
 	Assert( GetCurrentOwnerThreadId() == ThreadGetCurrentId() );
 	m_pVertDecl = pDecl;

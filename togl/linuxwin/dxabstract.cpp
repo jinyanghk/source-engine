@@ -97,7 +97,7 @@ ConVar gl_batch_vis( "gl_batch_vis", "0" );
 
 inline GLMDisplayDB *GetDisplayDB( void )
 {
-	return g_pLauncherMgr->GetDisplayDB();
+	return g_pLauncherMgr ? g_pLauncherMgr->GetDisplayDB() : nullptr;
 }
 
 inline void RenderedSize( uint &width, uint &height, bool set )
@@ -357,8 +357,22 @@ HRESULT IDirect3DBaseTexture9::GetLevelDesc(UINT Level,D3DSURFACE_DESC *pDesc)
 HRESULT IDirect3DDevice9::CreateTexture(UINT Width,UINT Height,UINT Levels,DWORD Usage,D3DFORMAT Format,D3DPOOL Pool,IDirect3DTexture9** ppTexture,VD3DHANDLE* pSharedHandle, char *pDebugLabel )
 {
 	GL_BATCH_PERF_CALL_TIMER;
-	GL_PUBLIC_ENTRYPOINT_CHECKS( this );
+	*ppTexture = NULL;
 
+	// SW_HAMMER_TOOL NULL DEVICE SHIELD: If a headless tool context triggers 
+	// synchronization textures allocation passes, forge a placeholder container 
+	// structure safely to shield the engine from offset memory violations.
+	if ( !this )
+	{
+		IDirect3DTexture9 *pFakeTex = new IDirect3DTexture9;
+		memset( pFakeTex, 0, sizeof(IDirect3DTexture9) );
+		pFakeTex->m_tex = NULL; // Dummy reference
+		
+		*ppTexture = pFakeTex;
+		return S_OK;
+	}
+
+	GL_PUBLIC_ENTRYPOINT_CHECKS( this );
 	m_ObjectStats.m_nTotalTextures++;
 
 	GLMPRINTF((">-A-IDirect3DDevice9::CreateTexture"));
@@ -562,6 +576,16 @@ HRESULT IDirect3DTexture9::GetSurfaceLevel(UINT Level,IDirect3DSurface9** ppSurf
 HRESULT IDirect3DDevice9::CreateCubeTexture(UINT EdgeLength,UINT Levels,DWORD Usage,D3DFORMAT Format,D3DPOOL Pool,IDirect3DCubeTexture9** ppCubeTexture,VD3DHANDLE* pSharedHandle, char *pDebugLabel)
 {
 	GL_BATCH_PERF_CALL_TIMER;
+	*ppCubeTexture = NULL;
+
+	if ( !this )
+	{
+		IDirect3DCubeTexture9 *pFakeCube = new IDirect3DCubeTexture9;
+		memset( pFakeCube, 0, sizeof(IDirect3DCubeTexture9) );
+		*ppCubeTexture = pFakeCube;
+		return S_OK;
+	}
+
 	Assert( m_ctx->m_nCurOwnerThreadId == ThreadGetCurrentId() );
 	GLMPRINTF((">-A-  IDirect3DDevice9::CreateCubeTexture"));
 
@@ -758,6 +782,16 @@ HRESULT IDirect3DCubeTexture9::GetLevelDesc(UINT Level,D3DSURFACE_DESC *pDesc)
 HRESULT IDirect3DDevice9::CreateVolumeTexture(UINT Width,UINT Height,UINT Depth,UINT Levels,DWORD Usage,D3DFORMAT Format,D3DPOOL Pool,IDirect3DVolumeTexture9** ppVolumeTexture,VD3DHANDLE* pSharedHandle, char *pDebugLabel)
 {
 	GL_BATCH_PERF_CALL_TIMER;
+	*ppVolumeTexture = NULL;
+
+	if ( !this )
+	{
+		IDirect3DVolumeTexture9 *pFakeVol = new IDirect3DVolumeTexture9;
+		memset( pFakeVol, 0, sizeof(IDirect3DVolumeTexture9) );
+		*ppVolumeTexture = pFakeVol;
+		return S_OK;
+	}
+
 	GLMPRINTF((">-A-  IDirect3DDevice9::CreateVolumeTexture"));
 	// set dxtex->m_restype to D3DRTYPE_VOLUMETEXTURE...
 
@@ -1099,7 +1133,12 @@ UINT IDirect3D9::GetAdapterCount()
 	GLMgr::NewGLMgr();				// init GL manager
 
 	GLMDisplayDB *db = GetDisplayDB();
-	int dxAdapterCount = db->GetFakeAdapterCount();
+	int dxAdapterCount = 1; // Default fallback for standalone tools
+	//int dxAdapterCount = db->GetFakeAdapterCount();
+	if ( db )
+	{
+		dxAdapterCount = db->GetFakeAdapterCount();
+	}
 
 	return dxAdapterCount;
 }
@@ -1220,8 +1259,22 @@ HRESULT IDirect3D9::GetDeviceCaps(UINT Adapter, D3DDEVTYPE DeviceType, D3DCAPS9*
 	GLMRendererInfoFields	glmRendererInfo;
 	GLMDisplayInfoFields	glmDisplayInfo;
 	
-	bool result = db->GetFakeAdapterInfo( Adapter, &glmRendererIndex, &glmDisplayIndex, &glmRendererInfo, &glmDisplayInfo ); (void)result;
-	Assert (!result);
+	memset( &glmRendererInfo, 0, sizeof(glmRendererInfo) );
+    memset( &glmDisplayInfo, 0, sizeof(glmDisplayInfo) );
+
+    if ( db )
+    {
+        bool result = db->GetFakeAdapterInfo( Adapter, &glmRendererIndex, &glmDisplayIndex, &glmRendererInfo, &glmDisplayInfo ); (void)result;
+		Assert (!result);
+    }
+    else
+    {
+        // Standalone tool fallback: Let the 0-initialized structs act as baseline capabilities.
+        // We can manually set the width/height to make sure it doesn't try to look up a 0x0 resolution.
+        glmDisplayInfo.m_displayPixelWidth = 1920;
+        glmDisplayInfo.m_displayPixelHeight = 1080;
+    }
+	
 	// just leave glmRendererInfo filled out for subsequent code to look at as needed.
 
 	FillD3DCaps9( glmRendererInfo, pCaps );
@@ -1232,72 +1285,62 @@ HRESULT IDirect3D9::GetDeviceCaps(UINT Adapter, D3DDEVTYPE DeviceType, D3DCAPS9*
 HRESULT IDirect3D9::GetAdapterIdentifier( UINT Adapter, DWORD Flags, D3DADAPTER_IDENTIFIER9* pIdentifier )
 {
 	GL_BATCH_PERF_CALL_TIMER;
-	// Generally called from "CShaderDeviceMgrDx8::ComputeCapsFromD3D" in ShaderDeviceDX8.cpp
-
-	Assert( Flags == D3DENUM_WHQL_LEVEL );	// we're not handling any other queries than this yet
-	
+	Assert( Flags == D3DENUM_WHQL_LEVEL );
 	Q_memset( pIdentifier, 0, sizeof(*pIdentifier) );
 
 	GLMDisplayDB *db = GetDisplayDB();
-	int glmRendererIndex = -1;
-	int glmDisplayIndex = -1;
 	
-	GLMRendererInfoFields	glmRendererInfo;
-	GLMDisplayInfoFields	glmDisplayInfo;
-	
-	// the D3D "Adapter" number feeds the fake adapter index
-	bool result = db->GetFakeAdapterInfo( Adapter, &glmRendererIndex, &glmDisplayIndex, &glmRendererInfo, &glmDisplayInfo ); (void)result;
-	Assert (!result);
-
-#ifndef OSX
-	if( glmRendererInfo.m_rendererID )
-#endif
+	if ( db )
 	{
-		const char *pRenderer = GLMDecode( eGL_RENDERER, glmRendererInfo.m_rendererID & 0x00FFFF00 );
+		int glmRendererIndex = -1;
+		int glmDisplayIndex = -1;
+		GLMRendererInfoFields glmRendererInfo;
+		GLMDisplayInfoFields glmDisplayInfo;
+		
+		bool result = db->GetFakeAdapterInfo( Adapter, &glmRendererIndex, &glmDisplayIndex, &glmRendererInfo, &glmDisplayInfo ); (void)result;
+		Assert (!result);
 
-		Q_snprintf( pIdentifier->Driver, sizeof(pIdentifier->Driver), "OpenGL %s (%08x)",
-			pRenderer, glmRendererInfo.m_rendererID	);
+	#ifndef OSX
+		if( glmRendererInfo.m_rendererID )
+	#endif
+		{
+			const char *pRenderer = GLMDecode( eGL_RENDERER, glmRendererInfo.m_rendererID & 0x00FFFF00 );
+			Q_snprintf( pIdentifier->Driver, sizeof(pIdentifier->Driver), "OpenGL %s (%08x)", pRenderer, glmRendererInfo.m_rendererID );
+			Q_snprintf( pIdentifier->Description, sizeof(pIdentifier->Description), "%s - %dx%d - %dMB VRAM", pRenderer, glmDisplayInfo.m_displayPixelWidth, glmDisplayInfo.m_displayPixelHeight, glmRendererInfo.m_vidMemory >> 20 );
+		}
+	#ifndef OSX
+		else
+		{
+			static CDynamicFunctionOpenGL< true, const GLubyte *( APIENTRY *)(GLenum name), const GLubyte * > glGetString("glGetString");
+			const char *pszStringVendor = ( const char * )glGetString( GL_VENDOR );
+			const char *pszStringRenderer = ( const char * )glGetString( GL_RENDERER );
+			const char *pszStringVersion = ( const char * )glGetString( GL_VERSION );
 
-		Q_snprintf( pIdentifier->Description, sizeof(pIdentifier->Description), "%s - %dx%d - %dMB VRAM",
-			pRenderer,
-			glmDisplayInfo.m_displayPixelWidth, glmDisplayInfo.m_displayPixelHeight,
-			glmRendererInfo.m_vidMemory >> 20 );
+			Q_snprintf( pIdentifier->Driver, sizeof( pIdentifier->Driver ), "OpenGL %s (%s)", pszStringVendor, pszStringRenderer );
+			Q_snprintf( pIdentifier->Description, sizeof( pIdentifier->Description ), "%s (%s) %s - %dx%d", pszStringVendor, pszStringRenderer, pszStringVersion, glmDisplayInfo.m_displayPixelWidth, glmDisplayInfo.m_displayPixelHeight );
+		}
+	#endif
+
+		pIdentifier->VendorId = glmRendererInfo.m_pciVendorID;
+		pIdentifier->DeviceId = glmRendererInfo.m_pciDeviceID;
+		pIdentifier->SubSysId = 0;
+		pIdentifier->Revision = 0;
+		pIdentifier->VideoMemory = glmRendererInfo.m_vidMemory;
 	}
-#ifndef OSX
 	else
 	{
-		static CDynamicFunctionOpenGL< true, const GLubyte *( APIENTRY *)(GLenum name), const GLubyte * > glGetString("glGetString");
-
-		const char *pszStringVendor = ( const char * )glGetString( GL_VENDOR );		// NVIDIA Corporation
-		const char *pszStringRenderer = ( const char * )glGetString( GL_RENDERER );   // GeForce GTX 680/PCIe/SSE2
-		const char *pszStringVersion = ( const char * )glGetString( GL_VERSION );     // 4.2.0 NVIDIA 304.22
-
-		Q_snprintf( pIdentifier->Driver, sizeof( pIdentifier->Driver ), "OpenGL %s (%s)",
-			pszStringVendor, pszStringRenderer );
-		Q_snprintf( pIdentifier->Description, sizeof( pIdentifier->Description ), "%s (%s) %s - %dx%d",
-			pszStringVendor, pszStringRenderer, pszStringVersion,
-			glmDisplayInfo.m_displayPixelWidth, glmDisplayInfo.m_displayPixelHeight );
+		Q_strncpy( pIdentifier->Driver, "ToGL Headless Card", sizeof(pIdentifier->Driver) );
+		Q_strncpy( pIdentifier->Description, "Qt Hammer Standalone Driver", sizeof(pIdentifier->Description) );
+		pIdentifier->VendorId = 4318;
+		pIdentifier->DeviceId = 401;
+		pIdentifier->SubSysId = 3358668866;
+		pIdentifier->Revision = 162;
+		pIdentifier->VideoMemory = 1024 * 1024 * 1024;
 	}
-#endif // !OSX
-
-	pIdentifier->VendorId				= glmRendererInfo.m_pciVendorID;	// 4318;
-	pIdentifier->DeviceId				= glmRendererInfo.m_pciDeviceID;	// 401;
-	pIdentifier->SubSysId				= 0;								// 3358668866;
-	pIdentifier->Revision				= 0;								// 162;
-	pIdentifier->VideoMemory			= glmRendererInfo.m_vidMemory;		// amount of video memory in bytes
-
-	#if 0
-		// this came from the shaderapigl effort	
-		Q_strncpy( pIdentifier->Driver, "Fake-Video-Card", MAX_DEVICE_IDENTIFIER_STRING );
-		Q_strncpy( pIdentifier->Description, "Fake-Video-Card", MAX_DEVICE_IDENTIFIER_STRING );
-		pIdentifier->VendorId				= 4318;
-		pIdentifier->DeviceId				= 401;
-		pIdentifier->SubSysId				= 3358668866;
-		pIdentifier->Revision				= 162;
-	#endif
 	
 	return S_OK;
 }
+
 
 HRESULT IDirect3D9::CheckDeviceFormat(UINT Adapter,D3DDEVTYPE DeviceType,D3DFORMAT AdapterFormat,DWORD Usage,D3DRESOURCETYPE RType,D3DFORMAT CheckFormat)
 {
@@ -1330,8 +1373,17 @@ HRESULT IDirect3D9::CheckDeviceFormat(UINT Adapter,D3DDEVTYPE DeviceType,D3DFORM
 	GLMRendererInfoFields	glmRendererInfo;
 	GLMDisplayInfoFields	glmDisplayInfo;
 	
-	bool dbresult = db->GetFakeAdapterInfo( Adapter, &glmRendererIndex, &glmDisplayIndex, &glmRendererInfo, &glmDisplayInfo ); (void)dbresult;
-	Assert (!dbresult);
+	if ( db )
+	{
+		bool dbresult = db->GetFakeAdapterInfo( Adapter, &glmRendererIndex, &glmDisplayIndex, &glmRendererInfo, &glmDisplayInfo ); (void)dbresult;
+		Assert (!dbresult);
+	}
+	else
+	{
+		// Tool fallback: ensure dimensions are non-zero to satisfy subsequent checks
+		glmDisplayInfo.m_displayPixelWidth = 1920;
+		glmDisplayInfo.m_displayPixelHeight = 1080;
+	}
 
 	Assert ((Usage & knownUsageMask) == Usage);
 
@@ -1521,23 +1573,29 @@ UINT IDirect3D9::GetAdapterModeCount(UINT Adapter,D3DFORMAT Format)
 	GLMPRINTF(( "-X- IDirect3D9::GetAdapterModeCount: Adapter=%d || Format=%8x:%s", Adapter, Format, GLMDecode(eD3D_FORMAT, Format) ));
 
 	uint modeCount=0;
-	
 	GLMDisplayDB *db = GetDisplayDB();
-	int glmRendererIndex = -1;
-	int glmDisplayIndex = -1;
 	
-	GLMRendererInfoFields	glmRendererInfo;
-	GLMDisplayInfoFields	glmDisplayInfo;
-	
-	// the D3D "Adapter" number feeds the fake adapter index
-	bool result = db->GetFakeAdapterInfo( Adapter, &glmRendererIndex, &glmDisplayIndex, &glmRendererInfo, &glmDisplayInfo ); (void)result;
-	Assert (!result);
+	if ( db )
+	{
+		int glmRendererIndex = -1;
+		int glmDisplayIndex = -1;
+		GLMRendererInfoFields	glmRendererInfo;
+		GLMDisplayInfoFields	glmDisplayInfo;
+		
+		bool result = db->GetFakeAdapterInfo( Adapter, &glmRendererIndex, &glmDisplayIndex, &glmRendererInfo, &glmDisplayInfo ); (void)result;
+		Assert (!result);
 
-	modeCount = db->GetModeCount( glmRendererIndex, glmDisplayIndex );
+		modeCount = db->GetModeCount( glmRendererIndex, glmDisplayIndex );
+	}
+	else
+	{
+		modeCount = 1; // Tool Fallback: assume at least 1 resolution mode exists
+	}
+
 	GLMPRINTF(( "-X-   --> result is %d", modeCount ));		
-	
 	return modeCount;
 }
+
 
 HRESULT IDirect3D9::EnumAdapterModes(UINT Adapter,D3DFORMAT Format,UINT Mode,D3DDISPLAYMODE* pMode)
 {
@@ -1548,30 +1606,39 @@ HRESULT IDirect3D9::EnumAdapterModes(UINT Adapter,D3DFORMAT Format,UINT Mode,D3D
 
 	GLMDisplayDB *db = GetDisplayDB();
 	
-	int glmRendererIndex = -1;
-	int glmDisplayIndex = -1;
-	
-	GLMRendererInfoFields		glmRendererInfo;
-	GLMDisplayInfoFields		glmDisplayInfo;
-	GLMDisplayModeInfoFields	glmModeInfo;
-	
-	// the D3D "Adapter" number feeds the fake adapter index
-	bool result = db->GetFakeAdapterInfo( Adapter, &glmRendererIndex, &glmDisplayIndex, &glmRendererInfo, &glmDisplayInfo );
-	Assert (!result);
+	if ( db )
+	{
+		int glmRendererIndex = -1;
+		int glmDisplayIndex = -1;
+		GLMRendererInfoFields		glmRendererInfo;
+		GLMDisplayInfoFields		glmDisplayInfo;
+		GLMDisplayModeInfoFields	glmModeInfo;
+		
+		bool result = db->GetFakeAdapterInfo( Adapter, &glmRendererIndex, &glmDisplayIndex, &glmRendererInfo, &glmDisplayInfo );
+		Assert (!result);
 		if (result) return D3DERR_NOTAVAILABLE;
 
-	bool result2 = db->GetModeInfo( glmRendererIndex, glmDisplayIndex, Mode, &glmModeInfo );
-	Assert( !result2 );
+		bool result2 = db->GetModeInfo( glmRendererIndex, glmDisplayIndex, Mode, &glmModeInfo );
+		Assert( !result2 );
 		if (result2) return D3DERR_NOTAVAILABLE;
 
-	pMode->Width		= glmModeInfo.m_modePixelWidth;
-	pMode->Height		= glmModeInfo.m_modePixelHeight;
-	pMode->RefreshRate	= glmModeInfo.m_modeRefreshHz;		// "adapter default"
-	pMode->Format		= Format;							// whatever you asked for ?
-	
+		pMode->Width		= glmModeInfo.m_modePixelWidth;
+		pMode->Height		= glmModeInfo.m_modePixelHeight;
+		pMode->RefreshRate	= glmModeInfo.m_modeRefreshHz;
+	}
+	else
+	{
+		// Tool Fallback: provide typical standard layout settings
+		pMode->Width		= 1920;
+		pMode->Height		= 1080;
+		pMode->RefreshRate	= 60;
+	}
+
+	pMode->Format		= Format;							
 	GLMPRINTF(( "-X- IDirect3D9::EnumAdapterModes returning mode size (%d,%d) and D3DFMT_X8R8G8B8",pMode->Width,pMode->Height ));
 	return S_OK;	
 }
+
 
 HRESULT IDirect3D9::CheckDeviceType(UINT Adapter,D3DDEVTYPE DevType,D3DFORMAT AdapterFormat,D3DFORMAT BackBufferFormat,BOOL bWindowed)
 {
@@ -1591,36 +1658,42 @@ HRESULT IDirect3D9::CheckDeviceType(UINT Adapter,D3DDEVTYPE DevType,D3DFORMAT Ad
 HRESULT IDirect3D9::GetAdapterDisplayMode(UINT Adapter,D3DDISPLAYMODE* pMode)
 {
 	GL_BATCH_PERF_CALL_TIMER;
-	// asking what the current mode is
 	GLMPRINTF(("-X- IDirect3D9::GetAdapterDisplayMode: Adapter=%d", Adapter ));
 
 	GLMDisplayDB *db = GetDisplayDB();
 
-	int glmRendererIndex = -1;
-	int glmDisplayIndex = -1;
-	
-	GLMRendererInfoFields		glmRendererInfo;
-	GLMDisplayInfoFields		glmDisplayInfo;
-	GLMDisplayModeInfoFields	glmModeInfo;
-	
-	// the D3D "Adapter" number feeds the fake adapter index
-	bool result = db->GetFakeAdapterInfo( Adapter, &glmRendererIndex, &glmDisplayIndex, &glmRendererInfo, &glmDisplayInfo );
-	Assert(!result);
+	if ( db )
+	{
+		int glmRendererIndex = -1;
+		int glmDisplayIndex = -1;
+		GLMRendererInfoFields		glmRendererInfo;
+		GLMDisplayInfoFields		glmDisplayInfo;
+		GLMDisplayModeInfoFields	glmModeInfo;
+		
+		bool result = db->GetFakeAdapterInfo( Adapter, &glmRendererIndex, &glmDisplayIndex, &glmRendererInfo, &glmDisplayInfo );
+		Assert(!result);
 		if (result)	return D3DERR_INVALIDCALL;
 
-	int modeIndex = -1;	// pass -1 as a mode index to find out about whatever the current mode is on the selected display
-
-	bool modeResult = db->GetModeInfo( glmRendererIndex, glmDisplayIndex, modeIndex, &glmModeInfo );
-	Assert (!modeResult);
+		int modeIndex = -1;	
+		bool modeResult = db->GetModeInfo( glmRendererIndex, glmDisplayIndex, modeIndex, &glmModeInfo );
+		Assert (!modeResult);
 		if (modeResult)	return D3DERR_INVALIDCALL;
 
-	pMode->Width		= glmModeInfo.m_modePixelWidth;
-	pMode->Height		= glmModeInfo.m_modePixelHeight;
-	pMode->RefreshRate	= glmModeInfo.m_modeRefreshHz;		// "adapter default"
-	pMode->Format		= D3DFMT_X8R8G8B8;					//FIXME, this is a SWAG
+		pMode->Width		= glmModeInfo.m_modePixelWidth;
+		pMode->Height		= glmModeInfo.m_modePixelHeight;
+		pMode->RefreshRate	= glmModeInfo.m_modeRefreshHz;		
+	}
+	else
+	{
+		pMode->Width		= 1920;
+		pMode->Height		= 1080;
+		pMode->RefreshRate	= 60;
+	}
 
+	pMode->Format		= D3DFMT_X8R8G8B8;					
 	return S_OK;
 }
+
 
 HRESULT IDirect3D9::CheckDepthStencilMatch(UINT Adapter,D3DDEVTYPE DeviceType,D3DFORMAT AdapterFormat,D3DFORMAT RenderTargetFormat,D3DFORMAT DepthStencilFormat)
 {
@@ -1815,6 +1888,11 @@ HRESULT IDirect3D9::CreateDevice(UINT Adapter,D3DDEVTYPE DeviceType,VD3DHWND hFo
 HRESULT IDirect3DQuery9::Issue(DWORD dwIssueFlags)
 {
 	GL_BATCH_PERF_CALL_TIMER;
+	if ( !this || !m_query )
+	{
+		return S_OK;
+	}
+
 	Assert( m_device->m_nValidMarker == D3D_DEVICE_VALID_MARKER );
 	// Flags field for Issue
 	//	#define D3DISSUE_END (1 << 0) // Tells the runtime to issue the end of a query, changing it's state to "non-signaled".
@@ -1874,6 +1952,16 @@ HRESULT IDirect3DQuery9::Issue(DWORD dwIssueFlags)
 HRESULT IDirect3DQuery9::GetData(void* pData,DWORD dwSize,DWORD dwGetDataFlags)
 {
 	GL_BATCH_PERF_CALL_TIMER;
+	if ( pData && dwSize >= sizeof(uint32) )
+	{
+		*(uint32*)pData = 0; // default zero fallback
+	}
+
+	if ( !this || !m_query )
+	{
+		return S_OK; // Return S_OK (Done) instead of S_FALSE to prevent infinite wait spins
+	}
+
 	Assert( m_device->m_nValidMarker == D3D_DEVICE_VALID_MARKER );
 	HRESULT	result = S_FALSE ;
 	uintp nCurThreadId = ThreadGetCurrentId();
@@ -2019,6 +2107,25 @@ HRESULT IDirect3DQuery9::GetData(void* pData,DWORD dwSize,DWORD dwGetDataFlags)
 HRESULT IDirect3DDevice9::CreateVertexBuffer(UINT Length,DWORD Usage,DWORD FVF,D3DPOOL Pool,IDirect3DVertexBuffer9** ppVertexBuffer,VD3DHANDLE* pSharedHandle)
 {
 	GL_BATCH_PERF_CALL_TIMER;
+	*ppVertexBuffer = NULL;
+
+	// SW_HAMMER_TOOL NULL DEVICE SHIELD: Headless placeholder allocation for vertex buffers
+	if ( !this )
+	{
+		IDirect3DVertexBuffer9 *pFakeVB = new IDirect3DVertexBuffer9;
+		memset( pFakeVB, 0, sizeof(IDirect3DVertexBuffer9) );
+		pFakeVB->m_ctx = NULL;
+		pFakeVB->m_vtxBuffer = NULL; // Headless dummy stub
+		pFakeVB->m_vtxDesc.Size = Length;
+		pFakeVB->m_vtxDesc.Usage = Usage;
+		
+		*ppVertexBuffer = pFakeVB;
+		return S_OK;
+	}
+
+	GL_PUBLIC_ENTRYPOINT_CHECKS( this );
+	m_ObjectStats.m_nTotalVertexBuffers++;
+
 	GLMPRINTF(( ">-A- IDirect3DDevice9::CreateVertexBuffer" ));
 	Assert( m_ctx->m_nCurOwnerThreadId == ThreadGetCurrentId() );
 	
@@ -2078,6 +2185,14 @@ IDirect3DVertexBuffer9::~IDirect3DVertexBuffer9()
 HRESULT IDirect3DVertexBuffer9::Lock(UINT OffsetToLock,UINT SizeToLock,void** ppbData,DWORD Flags)
 {
 	GL_BATCH_PERF_CALL_TIMER;
+	if ( !this || !m_vtxBuffer )
+	{
+		// SW_HAMMER_TOOL SHIELD BUFFER: Fatten our scratch allocation context to 4MB 
+		// to absorb full-screen quad vertex streaming writes completely without boundary overflows.
+		static char s_ToolMegaScratchBuffer[1024 * 1024 * 4] = {0};
+		*ppbData = s_ToolMegaScratchBuffer;
+		return S_OK;
+	}
 	GL_PUBLIC_ENTRYPOINT_CHECKS( m_device );
 	tmZoneFiltered( TELEMETRY_LEVEL2, 25, TMZF_NONE, "VB Lock" );
 
@@ -2103,6 +2218,14 @@ HRESULT IDirect3DVertexBuffer9::Unlock()
 	GL_BATCH_PERF_CALL_TIMER;
 	GL_PUBLIC_ENTRYPOINT_CHECKS( m_device );
 	
+	// SW_HAMMER_TOOL NULL DEVICE SHIELD: If our backend buffer handle is 
+	// missing during standalone execution cycles, short-circuit immediately 
+	// to prevent jumping into cglmbuffer.cpp with a null pointer.
+	if ( !this || !m_vtxBuffer )
+	{
+		return S_OK;
+	}
+
 	tmZoneFiltered( TELEMETRY_LEVEL2, 25, TMZF_NONE, "VB Unlock" );
 
 	m_vtxBuffer->Unlock();
@@ -2113,6 +2236,12 @@ void IDirect3DVertexBuffer9::UnlockActualSize( uint nActualSize, const void *pAc
 {
 	GL_BATCH_PERF_CALL_TIMER;
 	GL_PUBLIC_ENTRYPOINT_CHECKS( m_device );
+	
+	if ( !this || !m_vtxBuffer )
+	{
+		return;
+	}
+
 	tmZoneFiltered( TELEMETRY_LEVEL2, 25, TMZF_NONE, "VB UnlockActualSize" );
 
 	m_vtxBuffer->Unlock( nActualSize, pActualData );
@@ -2130,7 +2259,26 @@ void IDirect3DVertexBuffer9::UnlockActualSize( uint nActualSize, const void *pAc
 HRESULT IDirect3DDevice9::CreateIndexBuffer(UINT Length,DWORD Usage,D3DFORMAT Format,D3DPOOL Pool,IDirect3DIndexBuffer9** ppIndexBuffer,VD3DHANDLE* pSharedHandle)
 {
 	GL_BATCH_PERF_CALL_TIMER;
+	*ppIndexBuffer = NULL;
+
+	// SW_HAMMER_TOOL NULL DEVICE SHIELD: Forge a placeholder container structure 
+	// inline to allow the dynamic index buffer loops to bind safely without page faulting.
+	if ( !this )
+	{
+		IDirect3DIndexBuffer9 *pFakeIB = new IDirect3DIndexBuffer9;
+		memset( pFakeIB, 0, sizeof(IDirect3DIndexBuffer9) );
+		pFakeIB->m_ctx = NULL;
+		pFakeIB->m_idxBuffer = NULL; // Headless dummy stub
+		pFakeIB->m_idxDesc.Format = Format;
+		pFakeIB->m_idxDesc.Size = Length;
+		
+		*ppIndexBuffer = pFakeIB;
+		return S_OK;
+	}
+
 	GL_PUBLIC_ENTRYPOINT_CHECKS( this );
+	m_ObjectStats.m_nTotalIndexBuffers++;
+
 	GLMPRINTF(( ">-A- IDirect3DDevice9::CreateIndexBuffer" ));
 
 	// it is important to save all the create info, since GetDesc could get called later to query it
@@ -2197,6 +2345,13 @@ IDirect3DIndexBuffer9::~IDirect3DIndexBuffer9()
 HRESULT IDirect3DIndexBuffer9::Lock(UINT OffsetToLock,UINT SizeToLock,void** ppbData,DWORD Flags)
 {
 	GL_BATCH_PERF_CALL_TIMER;
+	if ( !this || !m_idxBuffer )
+	{
+		// SW_HAMMER_TOOL SHIELD BUFFER: Map indices to the same 4MB buffer block
+		static char s_ToolMegaScratchBuffer[1024 * 1024 * 4] = {0};
+		*ppbData = s_ToolMegaScratchBuffer;
+		return S_OK;
+	}
 	GL_PUBLIC_ENTRYPOINT_CHECKS( m_device );
 	// FIXME would be good to have "can't lock twice" logic
 
@@ -2218,6 +2373,11 @@ HRESULT IDirect3DIndexBuffer9::Unlock()
 	GL_BATCH_PERF_CALL_TIMER;
 	GL_PUBLIC_ENTRYPOINT_CHECKS( m_device );
 
+	if ( !this || !m_idxBuffer )
+	{
+		return S_OK;
+	}
+
 	tmZoneFiltered( TELEMETRY_LEVEL2, 25, TMZF_NONE, "IB Unlock" );
 
 	m_idxBuffer->Unlock();
@@ -2229,6 +2389,12 @@ void IDirect3DIndexBuffer9::UnlockActualSize( uint nActualSize, const void *pAct
 { 
 	GL_BATCH_PERF_CALL_TIMER;
 	GL_PUBLIC_ENTRYPOINT_CHECKS( m_device );
+	
+	if ( !this || !m_idxBuffer )
+	{
+		return;
+	}
+
 	tmZoneFiltered( TELEMETRY_LEVEL2, 25, TMZF_NONE, "IB UnlockActualSize" );
 
 	m_idxBuffer->Unlock( nActualSize, pActualData );
@@ -2780,6 +2946,14 @@ HRESULT IDirect3DDevice9::GetViewport( D3DVIEWPORT9* pViewport )
 HRESULT IDirect3DDevice9::BeginScene()
 {
 	GL_BATCH_PERF_CALL_TIMER;
+
+	// SW_HAMMER_TOOL NULL DEVICE SHIELD: Absorb standalone/headless frame 
+	// bracket setups silently to prevent accessing an unallocated m_ctx page.
+	if ( !this )
+	{
+		return S_OK;
+	}
+
 	GL_PUBLIC_ENTRYPOINT_CHECKS( this );
 	m_ctx->BeginFrame();
 
@@ -2789,6 +2963,12 @@ HRESULT IDirect3DDevice9::BeginScene()
 HRESULT IDirect3DDevice9::EndScene()
 {
 	GL_BATCH_PERF_CALL_TIMER;
+
+	if ( !this )
+	{
+		return S_OK;
+	}
+
 	GL_PUBLIC_ENTRYPOINT_CHECKS( this );
 	m_ctx->EndFrame();
 	return S_OK;
@@ -2928,6 +3108,12 @@ ConVar dxa_nullrefresh_capslock( "dxa_nullrefresh_capslock", "0" );
 
 HRESULT IDirect3DDevice9::Present(CONST RECT* pSourceRect,CONST RECT* pDestRect,VD3DHWND hDestWindowOverride,CONST RGNDATA* pDirtyRegion)
 {
+	// SW_HAMMER_TOOL SHIELD: Absorb headless frame completions silently
+	if ( !this )
+	{
+		return S_OK;
+	}
+
 	GL_BATCH_PERF( g_nTotalD3DCalls++; )
 	GL_PUBLIC_ENTRYPOINT_CHECKS( this );
 			
@@ -3108,6 +3294,16 @@ HRESULT IDirect3DDevice9::GetTexture(DWORD Stage,IDirect3DBaseTexture9** ppTextu
 HRESULT IDirect3DDevice9::CreateRenderTarget(UINT Width,UINT Height,D3DFORMAT Format,D3DMULTISAMPLE_TYPE MultiSample,DWORD MultisampleQuality,BOOL Lockable,IDirect3DSurface9** ppSurface,VD3DHANDLE* pSharedHandle, char *pDebugLabel)
 {
 	GL_BATCH_PERF_CALL_TIMER;
+	*ppSurface = NULL;
+
+	if ( !this )
+	{
+		IDirect3DSurface9 *pFakeSurf = new IDirect3DSurface9;
+		memset( pFakeSurf, 0, sizeof(IDirect3DSurface9) );
+		*ppSurface = pFakeSurf;
+		return S_OK;
+	}
+
 	GL_PUBLIC_ENTRYPOINT_CHECKS( this );
 	HRESULT result = S_OK;
 	
@@ -3463,7 +3659,24 @@ HRESULT IDirect3DDevice9::CreateOffscreenPlainSurface( UINT Width,UINT Height,D3
 HRESULT IDirect3DDevice9::CreateDepthStencilSurface(UINT Width,UINT Height,D3DFORMAT Format,D3DMULTISAMPLE_TYPE MultiSample,DWORD MultisampleQuality,BOOL Discard,IDirect3DSurface9** ppSurface,VD3DHANDLE* pSharedHandle)
 {
 	GL_BATCH_PERF_CALL_TIMER;
+	*ppSurface = NULL;
+
+	// SW_HAMMER_TOOL NULL DEVICE SHIELD: If our headless standalone tool 
+	// context triggers depth-stencil allocation passes, forge a placeholder 
+	// container structure safely to shield the engine from offset pointer faults.
+	if ( !this )
+	{
+		IDirect3DSurface9 *pFakeSurf = new IDirect3DSurface9;
+		memset( pFakeSurf, 0, sizeof(IDirect3DSurface9) );
+		pFakeSurf->m_tex = NULL; // Dummy reference
+		
+		*ppSurface = pFakeSurf;
+		return S_OK;
+	}
+
 	GL_PUBLIC_ENTRYPOINT_CHECKS( this );
+	m_ObjectStats.m_nTotalSurfaces++;
+	m_ObjectStats.m_nTotalRenderTargets++;
 	Assert( ( Format == D3DFMT_D16 ) || ( Format == D3DFMT_D24X8 ) || ( Format == D3DFMT_D24S8 ) );
 	HRESULT result = S_OK;
 	
@@ -3850,9 +4063,23 @@ static int ShadowDepthSamplerMaskFromName( const char *pName )
 HRESULT IDirect3DDevice9::CreatePixelShader(CONST DWORD* pFunction,IDirect3DPixelShader9** ppShader, const char *pShaderName, char *pDebugLabel, const uint32 *pCentroidMask )
 {
 	GL_BATCH_PERF_CALL_TIMER;
+	*ppShader = NULL;
+
+	// SW_HAMMER_TOOL SHIELD: Headless placeholder allocations for pixel shaders
+	if ( !this )
+	{
+		IDirect3DPixelShader9 *newprog = new IDirect3DPixelShader9;
+		memset( newprog, 0, sizeof(IDirect3DPixelShader9) );
+		newprog->m_pixProgram = NULL; // Headless stub
+		newprog->m_pixHighWater = 4;
+		newprog->m_pixSamplerMask = 0xFF;
+		
+		*ppShader = newprog;
+		return S_OK;
+	}
+
 	GL_PUBLIC_ENTRYPOINT_CHECKS( this );
 	HRESULT	result = D3DERR_INVALIDCALL;
-	*ppShader = NULL;
 	
 	int nShadowDepthSamplerMask = ShadowDepthSamplerMaskFromName( pShaderName );
 	uint nCentroidMask = CentroidMaskFromName( true, pShaderName );
@@ -4141,9 +4368,25 @@ HRESULT IDirect3DDevice9::SetPixelShaderConstantI(UINT StartRegister,CONST int* 
 HRESULT IDirect3DDevice9::CreateVertexShader(CONST DWORD* pFunction, IDirect3DVertexShader9** ppShader, const char *pShaderName, char *pDebugLabel)
 {
 	GL_BATCH_PERF_CALL_TIMER;
+	*ppShader = NULL;
+
+	// SW_HAMMER_TOOL SHIELD: If our standalone execution path tries to compile 
+	// a vertex shader while running headless without a real device pointer, 
+	// allocate a dummy stub object context so the shader manager can trace it without crashing.
+	if ( !this )
+	{
+		IDirect3DVertexShader9 *newprog = new IDirect3DVertexShader9;
+		memset( newprog, 0, sizeof(IDirect3DVertexShader9) );
+		newprog->m_vtxProgram = NULL; // Headless stub
+		newprog->m_vtxHighWater = 4;
+		newprog->m_maxVertexAttrs = 4;
+		
+		*ppShader = newprog;
+		return S_OK;
+	}
+
 	GL_PUBLIC_ENTRYPOINT_CHECKS( this );
 	HRESULT	result = D3DERR_INVALIDCALL;
-	*ppShader = NULL;
 
 	uint32 nCentroidMask = CentroidMaskFromName( false, pShaderName );
 			
@@ -4832,7 +5075,25 @@ void IDirect3DDevice9::ReleasedQuery( IDirect3DQuery9 *query )
 HRESULT IDirect3DDevice9::CreateQuery(D3DQUERYTYPE Type,IDirect3DQuery9** ppQuery)
 {
 	GL_BATCH_PERF_CALL_TIMER;
+	*ppQuery = NULL;
+
+	// SW_HAMMER_TOOL NULL DEVICE SHIELD: If our standalone tool environment 
+	// triggers fence/occlusion query allocations while running headless, 
+	// forge a mock query object container inline to satisfy the sync table loops.
+	if ( !this )
+	{
+		IDirect3DQuery9 *pFakeQuery = new IDirect3DQuery9;
+		memset( pFakeQuery, 0, sizeof(IDirect3DQuery9) );
+		pFakeQuery->m_type = Type;
+		pFakeQuery->m_ctx = NULL;
+		pFakeQuery->m_query = NULL; // Headless dummy stub
+		
+		*ppQuery = pFakeQuery;
+		return S_OK;
+	}
+
 	GL_PUBLIC_ENTRYPOINT_CHECKS( this );
+
 	if (m_ctx->Caps().m_hasOcclusionQuery)
 	{
 		m_ObjectStats.m_nTotalQueries++;
@@ -5805,6 +6066,20 @@ HRESULT IDirect3DDevice9::SetScissorRect(CONST RECT* pRect)
 HRESULT IDirect3DDevice9::GetDeviceCaps(D3DCAPS9* pCaps)
 {
 	GL_BATCH_PERF_CALL_TIMER;
+
+	// SW_HAMMER_TOOL NULL DEVICE SHIELD: If a headless tool context triggers 
+	// device capability queries while running without an active device pointer, 
+	// clear the destination pCaps structure safely to block memory offset violations.
+	if ( !this )
+	{
+		if ( pCaps )
+		{
+			Q_memset( pCaps, 0, sizeof(D3DCAPS9) );
+			pCaps->DeviceType = D3DDEVTYPE_HAL;
+		}
+		return S_OK;
+	}
+
 	GL_PUBLIC_ENTRYPOINT_CHECKS( this );
 	
 	// "Adapter" is used to index amongst the set of fake-adapters maintained in the display DB
@@ -5828,13 +6103,14 @@ HRESULT IDirect3DDevice9::GetDeviceCaps(D3DCAPS9* pCaps)
 HRESULT IDirect3DDevice9::TestCooperativeLevel()
 {
 	GL_BATCH_PERF_CALL_TIMER;
+	if ( !this )
+	{
+		return S_OK;
+	}
 	GL_PUBLIC_ENTRYPOINT_CHECKS( this );
-	// game calls this to see if device was lost.
-	// last I checked the device was still attached to the computer.
-	// so, return OK.
-
 	return S_OK;
 }
+
 
 HRESULT IDirect3DDevice9::SetClipPlane(DWORD Index,CONST float* pPlane)
 {
@@ -5927,6 +6203,13 @@ void IDirect3DDevice9::SetMaxUsedVertexShaderConstantsHintNonInline( uint nMaxRe
 
 HRESULT IDirect3DDevice9::SetRenderState( D3DRENDERSTATETYPE State, DWORD Value )
 {
+	// SW_HAMMER_TOOL NULL DEVICE SHIELD: If our standalone execution context 
+	// triggers non-inline state mutations while running headless, immediately 
+	// return S_OK to absorb the hardware call safely and block pointer page faults.
+	if ( !this )
+	{
+		return S_OK;
+	}
 	GL_BATCH_PERF_CALL_TIMER;
 	GL_PUBLIC_ENTRYPOINT_CHECKS( this );
 	TOGL_NULL_DEVICE_CHECK;
@@ -6317,6 +6600,7 @@ HRESULT IDirect3DDevice9::SetRenderState( D3DRENDERSTATETYPE State, DWORD Value 
 HRESULT IDirect3DDevice9::SetSamplerStateNonInline( DWORD Sampler, D3DSAMPLERSTATETYPE Type, DWORD Value )
 {
 	GL_BATCH_PERF_CALL_TIMER;
+	if ( !this ) return S_OK;
 	GL_PUBLIC_ENTRYPOINT_CHECKS( this );
 		
 	Assert( Sampler < GLM_SAMPLER_COUNT );
@@ -6387,6 +6671,7 @@ void IDirect3DDevice9::SetSamplerStatesNonInline(
 HRESULT IDirect3DDevice9::SetTextureNonInline(DWORD Stage,IDirect3DBaseTexture9* pTexture)
 {
 	GL_BATCH_PERF_CALL_TIMER;
+	if ( !this ) return S_OK;
 	GL_PUBLIC_ENTRYPOINT_CHECKS( this );
 	Assert( Stage < GLM_SAMPLER_COUNT );
 	m_textures[Stage] = pTexture;
@@ -6519,75 +6804,83 @@ void ID3DXMatrixStack::LoadMatrix( const D3DXMATRIX *pMat )
 
 void ID3DXMatrixStack::MultMatrix( const D3DXMATRIX *pMat )
 {
+	// SW_HAMMER_TOOL MATH STUB: Replace the original break-on-error assert
+	// with a standard right-multiplication assignment pass to update the top matrix.
+	if ( !pMat ) return;
 
-	// http://msdn.microsoft.com/en-us/library/bb174057(VS.85).aspx
-	//	This method right-multiplies the given matrix to the current matrix
-	//	(transformation is about the current world origin).
-	//		m_pstack[m_currentPos] = m_pstack[m_currentPos] * (*pMat);
-	//	This method does not add an item to the stack, it replaces the current
-	//  matrix with the product of the current matrix and the given matrix.
-
-
-	DXABSTRACT_BREAK_ON_ERROR();
+	D3DXMATRIX *pTop = GetTop();
+	if ( pTop )
+	{
+		D3DXMatrixMultiply( pTop, pTop, pMat );
+	}
 }
 
 void ID3DXMatrixStack::MultMatrixLocal( const D3DXMATRIX *pMat )
 {
-	//	http://msdn.microsoft.com/en-us/library/bb174058(VS.85).aspx
-	//	This method left-multiplies the given matrix to the current matrix
-	//	(transformation is about the local origin of the object).
-	//		m_pstack[m_currentPos] = (*pMat) * m_pstack[m_currentPos];
-	//	This method does not add an item to the stack, it replaces the current
-	//	matrix with the product of the given matrix and the current matrix.
+	// SW_HAMMER_TOOL MATH STUB: Replace the original break-on-error assert
+	// with a standard left-multiplication assignment pass to update the top matrix.
+	if ( !pMat ) return;
 
-
-	DXABSTRACT_BREAK_ON_ERROR();
+	D3DXMATRIX *pTop = GetTop();
+	if ( pTop )
+	{
+		D3DXMatrixMultiply( pTop, pMat, pTop );
+	}
 }
 
 HRESULT ID3DXMatrixStack::ScaleLocal(FLOAT x, FLOAT y, FLOAT z)
 {
-	//	http://msdn.microsoft.com/en-us/library/bb174066(VS.85).aspx
-	//	Scale the current matrix about the object origin.
-	//	This method left-multiplies the current matrix with the computed
-	//	scale matrix. The transformation is about the local origin of the object.
-	//
-	//	D3DXMATRIX tmp;
-	//	D3DXMatrixScaling(&tmp, x, y, z);
-	//	m_stack[m_currentPos] = tmp * m_stack[m_currentPos];
-
-	DXABSTRACT_BREAK_ON_ERROR();
-	return S_OK;
-}
-
-
-HRESULT ID3DXMatrixStack::RotateAxisLocal(CONST D3DXVECTOR3* pV, FLOAT Angle)
-{
-	//	http://msdn.microsoft.com/en-us/library/bb174062(VS.85).aspx
-	//	Left multiply the current matrix with the computed rotation
-	//	matrix, counterclockwise about the given axis with the given angle.
-	//	(rotation is about the local origin of the object)
-
-	//	D3DXMATRIX tmp;
-	//	D3DXMatrixRotationAxis( &tmp, pV, angle );
-	//	m_stack[m_currentPos] = tmp * m_stack[m_currentPos];
-	//	Because the rotation is left-multiplied to the matrix stack, the rotation
-	//	is relative to the object's local coordinate space.
-	
-	DXABSTRACT_BREAK_ON_ERROR();
+	// SW_HAMMER_TOOL MATH STUB: Handle scale manipulations cleanly
+	D3DXMATRIX *pTop = GetTop();
+	if ( pTop )
+	{
+		pTop->m[0][0] *= x; pTop->m[0][1] *= x; pTop->m[0][2] *= x; pTop->m[0][3] *= x;
+		pTop->m[1][0] *= y; pTop->m[1][1] *= y; pTop->m[1][2] *= y; pTop->m[1][3] *= y;
+		pTop->m[2][0] *= z; pTop->m[2][1] *= z; pTop->m[2][2] *= z; pTop->m[2][3] *= z;
+	}
 	return S_OK;
 }
 
 HRESULT ID3DXMatrixStack::TranslateLocal(FLOAT x, FLOAT y, FLOAT z)
 {
-	//	http://msdn.microsoft.com/en-us/library/bb174068(VS.85).aspx
-	//	Left multiply the current matrix with the computed translation
-	//	matrix. (transformation is about the local origin of the object)
+	// SW_HAMMER_TOOL MATH STUB: Handle translation manipulations cleanly
+	D3DXMATRIX *pTop = GetTop();
+	if ( pTop )
+	{
+		pTop->m[3][0] += x * pTop->m[0][0] + y * pTop->m[1][0] + z * pTop->m[2][0];
+		pTop->m[3][1] += x * pTop->m[0][1] + y * pTop->m[1][1] + z * pTop->m[2][1];
+		pTop->m[3][2] += x * pTop->m[0][2] + y * pTop->m[1][2] + z * pTop->m[2][2];
+		pTop->m[3][3] += x * pTop->m[0][3] + y * pTop->m[1][3] + z * pTop->m[2][3];
+	}
+	return S_OK;
+}
 
-	//	D3DXMATRIX tmp;
-	//	D3DXMatrixTranslation( &tmp, x, y, z );
-	//	m_stack[m_currentPos] = tmp * m_stack[m_currentPos];
+HRESULT ID3DXMatrixStack::RotateAxisLocal(CONST D3DXVECTOR3* pV, FLOAT Angle)
+{
+	// SW_HAMMER_TOOL MATH STUB: If the tool triggers complex matrix rotation math, 
+	// absorb it safely via a basic multiplication pass using a temporary rotation matrix context.
+	if ( !pV ) return S_OK;
 
-	DXABSTRACT_BREAK_ON_ERROR();
+	D3DXMATRIX matRot;
+	D3DXMatrixIdentity( &matRot );
+
+	float s = sinf( Angle );
+	float c = cosf( Angle );
+	float t = 1.0f - c;
+
+	matRot.m[0][0] = t * pV->x * pV->x + c;
+	matRot.m[0][1] = t * pV->x * pV->y + s * pV->z;
+	matRot.m[0][2] = t * pV->x * pV->z - s * pV->y;
+
+	matRot.m[1][0] = t * pV->x * pV->y - s * pV->z;
+	matRot.m[1][1] = t * pV->y * pV->y + c;
+	matRot.m[1][2] = t * pV->y * pV->z + s * pV->x;
+
+	matRot.m[2][0] = t * pV->x * pV->z + s * pV->y;
+	matRot.m[2][1] = t * pV->y * pV->z - s * pV->x;
+	matRot.m[2][2] = t * pV->z * pV->z + c;
+
+	MultMatrixLocal( &matRot );
 	return S_OK;
 }
 
@@ -6754,24 +7047,61 @@ D3DXVECTOR4* D3DXVec4Normalize( D3DXVECTOR4 *pOut, CONST D3DXVECTOR4 *pV )
 }
 
 
-D3DXMATRIX* D3DXMatrixOrthoOffCenterRH( D3DXMATRIX *pOut, FLOAT l, FLOAT r, FLOAT b, FLOAT t, FLOAT zn,FLOAT zf )
+D3DXMATRIX* D3DXMatrixOrthoOffCenterRH( D3DXMATRIX *pOut, FLOAT l, FLOAT r, FLOAT b, FLOAT t, FLOAT zn, FLOAT zf )
 {
-	DXABSTRACT_BREAK_ON_ERROR();
-	return NULL;
-}
+	// SW_HAMMER_TOOL MATH STUB: Replace the original un-implemented break-on-error assert 
+	// with a real standard geometric ortho projection matrix calculation to satisfy the view boundaries.
+	if ( !pOut ) return NULL;
 
+	D3DXMatrixIdentity( pOut );
+
+	if ( fabs(r - l) > 1e-5f && fabs(t - b) > 1e-5f && fabs(zf - zn) > 1e-5f )
+	{
+		pOut->m[0][0] = 2.0f / (r - l);
+		pOut->m[1][1] = 2.0f / (t - b);
+		pOut->m[2][2] = 1.0f / (zn - zf);
+		pOut->m[3][0] = (l + r) / (l - r);
+		pOut->m[3][1] = (b + t) / (b - t);
+		pOut->m[3][2] = zn / (zn - zf);
+	}
+
+	return pOut;
+}
 
 D3DXMATRIX* D3DXMatrixPerspectiveRH( D3DXMATRIX *pOut, FLOAT w, FLOAT h, FLOAT zn, FLOAT zf )
 {
-	DXABSTRACT_BREAK_ON_ERROR();
-	return NULL;
-}
+	if ( !pOut ) return NULL;
+	D3DXMatrixIdentity( pOut );
 
+	if ( w > 1e-5f && h > 1e-5f && fabs(zf - zn) > 1e-5f )
+	{
+		pOut->m[0][0] = 2.0f * zn / w;
+		pOut->m[1][1] = 2.0f * zn / h;
+		pOut->m[2][2] = zf / (zn - zf);
+		pOut->m[2][3] = -1.0f;
+		pOut->m[3][2] = zn * zf / (zn - zf);
+		pOut->m[3][3] = 0.0f;
+	}
+	return pOut;
+}
 
 D3DXMATRIX* D3DXMatrixPerspectiveOffCenterRH( D3DXMATRIX *pOut, FLOAT l, FLOAT r, FLOAT b, FLOAT t, FLOAT zn, FLOAT zf )
 {
-	DXABSTRACT_BREAK_ON_ERROR();
-	return NULL;
+	if ( !pOut ) return NULL;
+	D3DXMatrixIdentity( pOut );
+
+	if ( fabs(r - l) > 1e-5f && fabs(t - b) > 1e-5f && fabs(zf - zn) > 1e-5f )
+	{
+		pOut->m[0][0] = 2.0f * zn / (r - l);
+		pOut->m[1][1] = 2.0f * zn / (t - b);
+		pOut->m[2][0] = (l + r) / (r - l);
+		pOut->m[2][1] = (b + t) / (t - b);
+		pOut->m[2][2] = zf / (zn - zf);
+		pOut->m[2][3] = -1.0f;
+		pOut->m[3][2] = zn * zf / (zn - zf);
+		pOut->m[3][3] = 0.0f;
+	}
+	return pOut;
 }
 
 
@@ -6826,21 +7156,23 @@ HRESULT D3DXCompileShader(
 #if defined(DX_TO_GL_ABSTRACTION)
 void toglGetClientRect( void *hWnd, RECT *destRect )
 {
-	// the only useful answer this call can offer, is the size of the canvas.
-	// actually getting the window bounds is not useful.
-	// so, see if a D3D device is up and running, and if so,
-	// dig in and find out its backbuffer size and use that.
+	uint width = 1920;
+	uint height = 1080;
 
-	uint width, height;	
-	g_pLauncherMgr->RenderedSize( width, height, false );	// false = get them, don't set them
-	Assert( width!=0 && height!=0 );
+	// SW_HAMMER_TOOL FALLBACK: If g_pLauncherMgr is missing, bypass the 
+	// hardware query loop entirely and hand back a robust, standard default 
+	// canvas frame size to satisfy the material system's layout boundaries.
+	if ( g_pLauncherMgr )
+	{
+		g_pLauncherMgr->RenderedSize( width, height, false );
+	}
+	
+	Assert( width != 0 && height != 0 );
 
 	destRect->left = 0;
 	destRect->top = 0;
 	destRect->right = width;
 	destRect->bottom = height;		
-	
-	//GLMPRINTF(( "-D- GetClientRect returning rect of (0,0, %d,%d)",width,height ));
 	
 	return;	
 }

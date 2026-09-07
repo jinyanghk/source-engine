@@ -316,7 +316,9 @@ CShaderShadowDX8::~CShaderShadowDX8()
 //-----------------------------------------------------------------------------
 void CShaderShadowDX8::Init( )
 {
-	m_pHardwareConfig = HardwareConfig();
+	// SW_HAMMER_TOOL SHADOW HOOK: Fall back gracefully if the hardware profile 
+	// singleton is empty during standalone initialization passes.
+	m_pHardwareConfig = g_pHardwareConfig ? reinterpret_cast<IMaterialSystemHardwareConfig*>(g_pHardwareConfig) : HardwareConfig();
 	
 	// Clear out the shadow state
 	memset( &m_ShadowState, 0, sizeof(m_ShadowState) );
@@ -389,6 +391,12 @@ void CShaderShadowDX8::Init( )
 //-----------------------------------------------------------------------------
 void CShaderShadowDX8::SetDefaultState()
 {
+	// SW_HAMMER_TOOL SHADOW POINTER FALLBACK
+	if ( !m_pHardwareConfig && g_pHardwareConfig != nullptr )
+	{
+		m_pHardwareConfig = reinterpret_cast<IMaterialSystemHardwareConfig*>(g_pHardwareConfig);
+	}
+
 	DepthFunc( SHADER_DEPTHFUNC_NEAREROREQUAL );
 	EnableDepthWrites( true );
 	EnableDepthTest( true );
@@ -434,14 +442,14 @@ void CShaderShadowDX8::SetDefaultState()
 	m_ShadowShaderState.m_VertexUsage = 0;
 
 	int i;
-	int nSamplerCount = HardwareConfig()->GetSamplerCount();
+	int nSamplerCount = m_pHardwareConfig ? m_pHardwareConfig->GetSamplerCount() : 4;
 	for( i = 0; i < nSamplerCount; i++ )
 	{
 		EnableTexture( (Sampler_t)i, false );
 		EnableSRGBRead( (Sampler_t)i, false );
 	}
 
-	int nTextureStageCount = HardwareConfig()->GetTextureStageCount();
+	int nTextureStageCount = m_pHardwareConfig ? m_pHardwareConfig->GetTextureStageCount() : 2;
 	for( i = 0; i < nTextureStageCount; i++ )
 	{
 		EnableTexGen( (TextureStage_t)i, false );
@@ -834,10 +842,20 @@ void CShaderShadowDX8::EnableSRGBWrite( bool bEnable )
 //-----------------------------------------------------------------------------
 void CShaderShadowDX8::EnableVertexBlend( bool bEnable )
 {
-	// Activate/deactivate skinning. Indexed blending is automatically
-	// enabled if it's available for this hardware. When blending is enabled,
-	// we allocate enough room for 3 weights (max allowed)
-	if ((m_pHardwareConfig->MaxBlendMatrices() > 0) || (!bEnable))
+	// SW_HAMMER_TOOL SHADOW POINTER FALLBACK
+	if ( !m_pHardwareConfig && g_pHardwareConfig != nullptr )
+	{
+		m_pHardwareConfig = reinterpret_cast<IMaterialSystemHardwareConfig*>(g_pHardwareConfig);
+	}
+
+	if ( m_pHardwareConfig != nullptr )
+	{
+		if ((m_pHardwareConfig->MaxBlendMatrices() > 0) || (!bEnable))
+		{
+			m_ShadowState.m_VertexBlendEnable = bEnable;
+		}
+	}
+	else
 	{
 		m_ShadowState.m_VertexBlendEnable = bEnable;
 	}

@@ -16,6 +16,7 @@
 #include <QSplitter>
 
 #include "widgets/HammerViewportWidget.h"
+#include "widgets/MaterialPreview.h"
 
 class MainWindow : public QMainWindow
 {
@@ -53,6 +54,8 @@ private:
     QSplitter *m_mainSplitter;
     QSplitter *m_leftSplitter;
     QSplitter *m_rightSplitter;
+
+    QMaterialPreview *m_MatView;
 };
 
 #endif // MAINWINDOW_H

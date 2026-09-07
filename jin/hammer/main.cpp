@@ -1,103 +1,326 @@
-
 #include <QApplication>
-#include <QString>
-#include <QDebug>
-#include <dlfcn.h>
+
+#include <unistd.h> // Required for _exit() on Linux / POSIX systems
 
 #include "mainwindow.h"
 
-// Core Source Engine Interfaces
-#include "materialsystem/imaterialsystem.h"
+#include "appframework/AppFramework.h"
+#include "tier0/dbg.h"
+#include "vstdlib/cvar.h"
 #include "filesystem.h"
-#include "interface.h"
+#include "materialsystem/imaterialsystem.h"
+#include "istudiorender.h"
+#include "filesystem_init.h"
+#include "datacache/idatacache.h"
+#include "datacache/imdlcache.h"
+#include "vphysics_interface.h"
+#include "vgui/IVGui.h"
+#include "vgui/ISurface.h"
+#include "inputsystem/iinputsystem.h"
+#include "tier0/icommandline.h"
 
-// Define our global module handles and system pointers locally
-IMaterialSystem* g_pMaterialSystem = nullptr;
-IFileSystem*    g_pFileSystem = nullptr;
+//-----------------------------------------------------------------------------
+// Global systems
+//-----------------------------------------------------------------------------
+//IHammer *g_pHammer;
+IMaterialSystem *g_pMaterialSystem;
+IFileSystem *g_pFileSystem;
+IDataCache *g_pDataCache;
+IInputSystem *g_pInputSystem;
 
-// Opaque stub factory function to pass into the Connect() method
-static void* LauncherInterfaceFactory( const char *pName, int *pReturnCode )
+// FIX: Declare the hidden global pointer that ToGL's dxabstract uses under the hood.
+// Declaring it as an extern void* satisfies the compiler perfectly without needing heavy
+// launcher definitions, while allowing the linker to find the correct symbol slot inside libtogl/shaderapi.
+//extern "C" void *g_pLauncherMgr;
+//extern ILauncherMgr *g_pLauncherMgr;
+
+#if defined(USE_SDL)
+#include "appframework/ilaunchermgr.h"
+ILauncherMgr *g_pLauncherMgr = NULL;	// set in CMaterialSystem::Connect
+
+// Forward declare the class used by the return type
+class GLMDisplayDB;
+struct CShowPixelsParams;
+struct CStackCrawlParams;
+struct SDL_Cursor;
+
+class CDummyLauncherMgr : public ILauncherMgr
 {
-    if ( pReturnCode ) 
-        *pReturnCode = 0; // IFACE_OK
-
-    if ( strcmp( pName, FILESYSTEM_INTERFACE_VERSION ) == 0 )
-    {
-        return static_cast<IFileSystem*>( g_pFileSystem );
+public:
+    // Core crash fix: Return an empty data block instead of NULL
+    virtual GLMDisplayDB* GetDisplayDB() override 
+    { 
+        static char dummyDisplayDB = {0}; 
+        return reinterpret_cast<GLMDisplayDB*>(&dummyDisplayDB); 
     }
 
+    // Fixed methods
+    virtual bool CreateGameWindow( const char *pTitle, bool bWindowed, int nWidth, int nHeight ) override { return true; }
+
+    // Pure virtual stubs required to make the class instantiable
+    virtual bool Connect( CreateInterfaceFn factory ) override { return true; }
+    virtual void Disconnect() override {}
+    virtual void *QueryInterface( const char *pInterfaceName ) override { return nullptr; }
+    virtual InitReturnVal_t Init() override { return INIT_OK; }
+    virtual void Shutdown() override {}
+    virtual void IncWindowRefCount() override {}
+    virtual void DecWindowRefCount() override {}
+    virtual int GetEvents( CCocoaEvent *pEvents, int nMaxEventsToReturn, bool debugEvents = false ) override { return 0; }
+    virtual int PeekAndRemoveKeyboardEvents( bool *pbEsc, bool *pbReturn, bool *pbSpace, bool debugEvents = false ) override { return 0; }
+    virtual void SetCursorPosition( int x, int y ) override {}
+    virtual void SetWindowFullScreen( bool bFullScreen, int nWidth, int nHeight ) override {}
+    virtual bool IsWindowFullScreen() override { return false; }
+    virtual void MoveWindow( int x, int y ) override {}
+    virtual void SizeWindow( int width, int tall ) override {}
+    virtual void PumpWindowsMessageLoop() override {}
+    virtual void DestroyGameWindow() override {}
+    virtual void SetApplicationIcon( const char *pchAppIconFile ) override {}
+    virtual void GetMouseDelta( int &x, int &y, bool bIgnoreNextMouseDelta = false ) override {}
+    virtual void GetNativeDisplayInfo( int nDisplay, uint &nWidth, uint &nHeight, uint &nRefreshHz ) override { nWidth = 1920; nHeight = 1080; nRefreshHz = 60; }
+    virtual void RenderedSize( uint &width, uint &height, bool set ) override {}
+    virtual void DisplayedSize( uint &width, uint &height) override {}
+    virtual PseudoGLContextPtr GetMainContext() override { return nullptr; }
+    virtual PseudoGLContextPtr GetGLContextForWindow( void* windowref ) override { return nullptr; }
+    virtual PseudoGLContextPtr CreateExtraContext() override { return nullptr; }
+    virtual void DeleteContext( PseudoGLContextPtr hContext ) override {}
+    virtual bool MakeContextCurrent( PseudoGLContextPtr hContext ) override { return true; }
+    virtual void GetDesiredPixelFormatAttribsAndRendererInfo( uint **ptrOut, uint *countOut, GLMRendererInfoFields *rendInfoOut ) override {}
+
+    // Newly added remaining stubs from the compiler log
+    virtual void ShowPixels( CShowPixelsParams *params ) override {}
+    virtual void GetStackCrawl( CStackCrawlParams *params ) override {}
+    virtual void WaitUntilUserInput( int msSleepTime ) override {}
+    virtual void *GetWindowRef() override { return nullptr; }
+    virtual void SetMouseVisible( bool bState ) override {}
+    virtual void SetMouseCursor( SDL_Cursor *hCursor ) override {}
+    virtual void SetForbidMouseGrab( bool bForbidMouseGrab ) override {}
+    virtual void OnFrameRendered() override {}
+    virtual void SetGammaRamp( const uint16 *pRed, const uint16 *pGreen, const uint16 *pBlue ) override {}
+    virtual double GetPrevGLSwapWindowTime() override { return 0.0; }
+};
+
+static CDummyLauncherMgr s_DummyLauncherMgr;
+
+// This factory function intercepts requests for SDLMgrInterface001
+void* HammerExtraFactory( const char *pInterfaceName, int *pReturnCode )
+{
+    if ( strcmp( pInterfaceName, "SDLMgrInterface001" ) == 0 )
+    {
+        if ( pReturnCode ) *pReturnCode = 0; // IFACE_OK
+        return &s_DummyLauncherMgr;
+    }
+    if ( pReturnCode ) *pReturnCode = 1; // IFACE_FAILED
     return nullptr;
 }
 
-bool InitializeSourceEngineSubsystems()
+// This macro registers your dummy instance directly to the engine's local CreateInterface factory
+//EXPOSE_SINGLE_INTERFACE_GLOBALVAR( CDummyLauncherMgr, ILauncherMgr, "SDLMgrInterface001", s_DummyLauncherMgr );
+#endif
+
+//-----------------------------------------------------------------------------
+// The application object
+//-----------------------------------------------------------------------------
+class CHammerApp : public CAppSystemGroup
 {
-    int status = 0;
+public:
+	// Methods of IApplication
+	virtual bool Create( );
+	virtual bool PreInit( );
+	virtual int Main( );
+	virtual void PostShutdown();
+	virtual void Destroy();
+};
 
-    // 1. Resolve filesystem_stdio via native dlopen layout
-    void* hFileSystemModule = dlopen( "bin/libfilesystem_stdio.so", RTLD_NOW | RTLD_GLOBAL );
-    if ( !hFileSystemModule )
-    {
-        qCritical() << "Failed to dlopen libfilesystem_stdio.so:" << dlerror();
-        return false;
-    }
-    
-    CreateInterfaceFn fsFactory = (CreateInterfaceFn)dlsym( hFileSystemModule, "CreateInterface" );
-    if ( !fsFactory ) return false;
+//-----------------------------------------------------------------------------
+// Define the application object
+//-----------------------------------------------------------------------------
+CHammerApp	g_ApplicationObject;
 
-    g_pFileSystem = (IFileSystem*)fsFactory( FILESYSTEM_INTERFACE_VERSION, &status );
-    if ( !g_pFileSystem || status != 0 ) return false;
+int main( int argc, char *argv[] )
+{
+    CommandLine()->CreateCmdLine( argc, argv );
 
-    if ( !g_pFileSystem->Connect( LauncherInterfaceFactory ) || g_pFileSystem->Init() != INIT_OK )
-    {
-        qCritical() << "Failed to initialize FileSystem system link!";
-        return false;
-    }
-
-    // 2. Resolve materialsystem
-    void* hMaterialSystemModule = dlopen( "bin/libmaterialsystem.so", RTLD_NOW | RTLD_GLOBAL );
-    if ( !hMaterialSystemModule )
-    {
-        qCritical() << "Failed to dlopen libmaterialsystem.so:" << dlerror();
-        return false;
-    }
-
-    CreateInterfaceFn matFactory = (CreateInterfaceFn)dlsym( hMaterialSystemModule, "CreateInterface" );
-    if ( !matFactory ) return false;
-
-    g_pMaterialSystem = (IMaterialSystem*)matFactory( MATERIAL_SYSTEM_INTERFACE_VERSION, &status );
-    if ( !g_pMaterialSystem || status != 0 ) 
-    {
-        qCritical() << "Material System interface instantiation failed! Status:" << status;
-        return false;
-    }
-
-    // 3. Connect to the Material System
-    qInfo() << "Connecting to Material System instance...";
-    
-    // Fix: Corrected typo structure where 'if' statement was malformed
-    if ( !g_pMaterialSystem->Connect( LauncherInterfaceFactory ) )
-    {
-        qCritical() << "Failed to Connect to Material System!";
-        return false;
-    }
-
-    qInfo() << "Initializing Material System context...";
-    if ( g_pMaterialSystem->Init() != INIT_OK )
-    {
-        qCritical() << "Failed to Init Material System!";
-        return false;
-    }
-
-    g_pMaterialSystem->SetShaderAPI( "shaderapidx9" );
-    return true;
+    // FIX: Instead of calling Create/PreInit manually, pass control over to Run().
+    // This activates ConnectSystems(), waking up the shader, inputsystem, and material contexts!
+    return g_ApplicationObject.Run();
 }
 
-int main(int argc, char** argv)  {
-	QApplication app(argc, argv);
+//-----------------------------------------------------------------------------
+// Create all singleton systems
+//-----------------------------------------------------------------------------
+bool CHammerApp::Create( )
+{
+	// Save some memory so engine/hammer isn't so painful
+	CommandLine()->AppendParm( "-disallowhwmorph", NULL );
 
-	auto pWin = new MainWindow(nullptr);
-    pWin->setAttribute(Qt::WA_DeleteOnClose);
-    pWin->show();
+    // 1. Manually instantiate your dummy launcher manager onto the global engine scope
+    static CDummyLauncherMgr s_DummyLauncherMgr;
+    g_pLauncherMgr = &s_DummyLauncherMgr;
+
+	IAppSystem *pSystem;
+
+	// Add in the cvar factory
+	AppModule_t cvarModule = LoadModule( VStdLib_GetICVarFactory() );
+	pSystem = AddSystem( cvarModule, CVAR_INTERFACE_VERSION );
+	if ( !pSystem )
+		return false;
 	
-	return QApplication::exec();
+	bool bSteam;
+	char pFileSystemDLL[MAX_PATH];
+	if ( FileSystem_GetFileSystemDLLName( pFileSystemDLL, MAX_PATH, bSteam ) != FS_OK )
+		return false;
+
+	AppModule_t fileSystemModule = LoadModule( pFileSystemDLL );
+	g_pFileSystem = (IFileSystem*)AddSystem( fileSystemModule, FILESYSTEM_INTERFACE_VERSION );
+
+	FileSystem_SetBasePaths( g_pFileSystem );
+/*
+    // FIX: Pass the module name string directly into Sys_GetFactory 
+	// instead of using the raw AppModule_t handle variable.
+	Sys_LoadModule( "liblauncher.so" ); // Ensure it is loaded into memory space
+	CreateInterfaceFn launcherFactory = Sys_GetFactory( "liblauncher.so" );
+	
+	if ( launcherFactory )
+	{
+		const char* launcherVersions[] = { "SDLMgrInterface001", "IXboxLaunch001", "LauncherVersion001" };
+		for ( const char* version : launcherVersions )
+		{
+			void* pInterface = launcherFactory( version, nullptr );
+			if ( pInterface != nullptr )
+			{
+				g_pLauncherMgr = pInterface; // Satisfies dxabstract.cpp line 100 perfectly!
+				Msg( "[HAMMER DEBUG] Successfully matched and connected g_pLauncherMgr via version: [%s]\n", version );
+				break;
+			}
+		}
+	}
+*/
+	AppSystemInfo_t appSystems[] = 
+	{
+		{ "materialsystem.dll",		MATERIAL_SYSTEM_INTERFACE_VERSION },
+		{ "inputsystem.dll",		INPUTSYSTEM_INTERFACE_VERSION },
+		{ "studiorender.dll",		STUDIO_RENDER_INTERFACE_VERSION },
+		{ "vphysics.dll",			VPHYSICS_INTERFACE_VERSION },
+		{ "datacache.dll",			DATACACHE_INTERFACE_VERSION },
+		{ "datacache.dll",			MDLCACHE_INTERFACE_VERSION },
+		{ "datacache.dll",			STUDIO_DATA_CACHE_INTERFACE_VERSION },
+		{ "vguimatsurface.dll",		VGUI_SURFACE_INTERFACE_VERSION },
+		{ "vgui2.dll",				VGUI_IVGUI_INTERFACE_VERSION },
+		//{ "hammer_dll.dll",			INTERFACEVERSION_HAMMER },
+		{ "", "" }	// Required to terminate the list
+	};
+
+	if ( !AddSystems( appSystems ) ) 
+		return false;
+
+	// Connect to interfaces loaded in AddSystems that we need locally
+	g_pMaterialSystem = (IMaterialSystem*)FindSystem( MATERIAL_SYSTEM_INTERFACE_VERSION );
+	//g_pHammer = (IHammer*)FindSystem( INTERFACEVERSION_HAMMER );
+	g_pDataCache = (IDataCache*)FindSystem( DATACACHE_INTERFACE_VERSION );
+	g_pInputSystem = (IInputSystem*)FindSystem( INPUTSYSTEM_INTERFACE_VERSION );
+
+	if ( !g_pLauncherMgr )
+	{
+		static CDummyLauncherMgr s_DummyLauncherMgr;
+		g_pLauncherMgr = &s_DummyLauncherMgr;
+	}
+
+	// This has to be done before connection.
+	//g_pMaterialSystem->SetShaderAPI( "shaderapiempty.dll" );
+    g_pMaterialSystem->SetShaderAPI( "shaderapidx9.dll" );
+
+	return true;
+}
+
+void CHammerApp::Destroy()
+{
+	g_pFileSystem = NULL;
+	g_pMaterialSystem = NULL;
+	g_pDataCache = NULL;
+	//g_pHammer = NULL;
+	g_pInputSystem = NULL;
+}
+
+
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+SpewRetval_t HammerSpewFunc( SpewType_t type, tchar const *pMsg )
+{
+	if ( type == SPEW_ASSERT )
+	{
+		return SPEW_DEBUGGER;
+	}
+	else if( type == SPEW_ERROR )
+	{
+		//MessageBox( NULL, pMsg, "Hammer Error", MB_OK | MB_ICONSTOP );
+		Msg ("Hammer Error %s\n", pMsg);
+		return SPEW_ABORT;
+	}
+	else
+	{
+		return SPEW_CONTINUE;
+	}
+}
+
+//-----------------------------------------------------------------------------
+// Init, shutdown
+//-----------------------------------------------------------------------------
+bool CHammerApp::PreInit( )
+{
+	SpewOutputFunc( HammerSpewFunc );
+    printf ("GetVProjectCmdLineValue() = %s\n", GetVProjectCmdLineValue());
+
+	//
+	// Init the game and mod dirs in the file system.
+	// This needs to happen before calling Init on the material system.
+	//
+	CFSSearchPathsInit initInfo;
+	initInfo.m_pFileSystem = g_pFileSystem;
+	initInfo.m_pDirectoryName = "hl2";
+
+	if ( FileSystem_LoadSearchPaths( initInfo ) != FS_OK )
+	{
+		Error( "Unable to load search paths!\n" );
+	}
+
+	// Required to run through the editor
+	g_pMaterialSystem->EnableEditorMaterials();
+
+	// needed for VGUI model rendering
+	g_pMaterialSystem->SetAdapter( 0, MATERIAL_INIT_ALLOCATE_FULLSCREEN_TEXTURE );
+
+	return true; 
+}
+
+void CHammerApp::PostShutdown()
+{
+}
+
+
+//-----------------------------------------------------------------------------
+// main application
+//-----------------------------------------------------------------------------
+int CHammerApp::Main( )
+{
+    // FIX: Boot up the Qt Framework workspace window context inside Main().
+    // At this precise moment, every single engine module is 100% connected, alive,
+    // and ready to draw graphics variables!
+    int argc = 0;
+    char *argv[] = { nullptr };
+    QApplication app( argc, argv );
+
+    auto pWin = new MainWindow( nullptr );
+    pWin->setAttribute( Qt::WA_DeleteOnClose );
+    pWin->show();
+    
+    int result = QApplication::exec();
+
+    // SW_HAMMER_TOOL SHUTDOWN SHIELD: Bypassing legacy global destructors 
+    // inside tier0 / materialsystem libraries to prevent invalid memory 
+    // free passes during shared library unloading cycles.
+#ifdef SW_HAMMER_TOOL
+    _exit( result ); 
+#else
+    return result;
+#endif
 }

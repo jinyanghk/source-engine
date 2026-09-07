@@ -67,8 +67,8 @@ projects={
 		'launcher_main',
 		'materialsystem',
 		'materialsystem/shaderapiempty',
-		'materialsystem/shaderapigl',
-		'materialsystem/shaderapivk',
+		#'materialsystem/shaderapigl',
+		#'materialsystem/shaderapivk',
 		'materialsystem/shaderapidx9',
 		'materialsystem/shaderlib',
 		'materialsystem/stdshaders',
@@ -118,11 +118,7 @@ projects={
 		'utils/vrad_launcher',
 		'utils/vrad',
 		'utils/vtex_launcher',
-		'jin/libimgui',
-		'jin/libgizmo',
-		'jin/gizmo',
 		'jin/hammer',
-		#'hammer_launcher',
 	],
 	'tests': [
 		'appframework',
@@ -215,11 +211,7 @@ projects={
 		'utils/vvis',
 		'utils/vrad_launcher',
 		'utils/vrad',
-		'jin/libimgui',
-		'jin/libgizmo',
-		'jin/gizmo',
 		'jin/hammer',
-		#'hammer_launcher',
 	]
 }
 

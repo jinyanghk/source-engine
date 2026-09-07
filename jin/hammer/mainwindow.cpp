@@ -7,7 +7,7 @@
 
 #include "dialogs/FaceEditSheet.h"
 #include "dialogs/RunMapNormal.h"
-#include "widgets/PrefSlider.h"
+#include "widgets/EngineView.h"
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -16,15 +16,39 @@ MainWindow::MainWindow(QWidget *parent)
     resize(1200, 800);
 
     createMenuBar();
-    createToolBars();
-    createDockWidgets();
+    //createToolBars();
+    //createDockWidgets();
     createCentralWidget();
     createStatusBar();
-    applyStyleSheet();
+    //applyStyleSheet();
 }
 
 MainWindow::~MainWindow() {}
 
+/*
+void MainWindow::createCentralWidget()
+{
+    m_MatView = new QMaterialPreview(this);
+    setCentralWidget(m_MatView);
+}
+*/
+
+void MainWindow::createCentralWidget()
+{
+    // 1. Create your newly adjusted QWidget-based viewport
+    CEngineView *pEngineView = new CEngineView(this);
+    setCentralWidget(pEngineView);
+
+    // 2. Set up a heartbeat timer to continuously invalidate the widget canvas
+    QTimer *pRenderTimer = new QTimer(this);
+    connect(pRenderTimer, &QTimer::timeout, pEngineView, qOverload<>(&QWidget::update));
+    
+    // Start ticking every 16ms (~60 FPS) to force paintEvent() calls
+    pRenderTimer->start(16); 
+}
+
+
+/*
 void MainWindow::createCentralWidget()
 {
     QWidget *centralWidget = new QWidget(this);
@@ -42,6 +66,7 @@ void MainWindow::createCentralWidget()
 
     setCentralWidget(centralWidget);
 }
+*/
 
 void MainWindow::createMenuBar()
 {
@@ -115,6 +140,13 @@ void MainWindow::createMenuBar()
 
     // Instancing menu
     QMenu *instanceMenu = m_menuBar->addMenu("Instancing");
+
+    QAction *previewAction = new QAction("Preview", this);
+    connect(previewAction, &QAction::triggered, this, [this]()
+            {
+		m_MatView->SetMaterial("preview_test", "ClientEffect textures");
+		 });
+    instanceMenu->addAction(previewAction);
 
     // Instancing menu
     QMenu *windowMenu = m_menuBar->addMenu("Window");
