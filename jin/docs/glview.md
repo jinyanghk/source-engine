@@ -1,4 +1,9 @@
 
+```sh
+LD_LIBRARY_PATH ./glview
+Usage: glview [-portal] [-disp] <filename.gl>
+```
+
 
 ```sh
 LD_LIBRARY_PATH=bin:$LD_LIBRARY_PATH ./vbsp -game hl2 -glview ../../d1_town_01_d.vmf
