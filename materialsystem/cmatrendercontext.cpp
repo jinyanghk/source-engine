@@ -2047,14 +2047,14 @@ void CMatRenderContext::GetLightmapDimensions( int *w, int *h )
 
 void CMatRenderContext::DrawScreenSpaceQuad( IMaterial* pMaterial )
 {
-	// SW_HAMMER_TOOL HEADLESS SHIELD: Query the pre-declared global device pointer.
+#ifdef SW_HAMMER_TOOL
 	// If it's missing or reports 0 stencil bits (headless tool mode), short-circuit 
 	// the fullscreen quad loops immediately to prevent invalid pointer page faults.
 	if ( !g_pShaderDevice || g_pShaderDevice->StencilBufferBits() == 0 )
 	{
 		return;
 	}
-
+#endif
 	// Despite saying we render a full screen quad, this actually renders a single triangle
 	// that covers the whole screen.
 	int w, h;
@@ -2389,12 +2389,13 @@ void CMatRenderContext::ClearBuffers( bool bClearColor, bool bClearDepth, bool b
 
 void CMatRenderContext::DrawClearBufferQuad( unsigned char r, unsigned char g, unsigned char b, unsigned char a, bool bClearColor, bool bClearAlpha, bool bClearDepth )
 {
+#ifdef SW_HAMMER_TOOL
 	// SW_HAMMER_TOOL HEADLESS SHIELD: Absorb headless clearing quads silently
 	if ( !g_pShaderDevice || g_pShaderDevice->StencilBufferBits() == 0 )
 	{
 		return;
 	}
-
+#endif
 	IMaterialInternal *pClearMaterial = GetBufferClearObeyStencil( bClearColor + ( bClearAlpha << 1 ) + ( bClearDepth << 2 ) );
 	Bind( pClearMaterial );
 

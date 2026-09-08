@@ -316,10 +316,13 @@ CShaderShadowDX8::~CShaderShadowDX8()
 //-----------------------------------------------------------------------------
 void CShaderShadowDX8::Init( )
 {
+#ifdef SW_HAMMER_TOOL
 	// SW_HAMMER_TOOL SHADOW HOOK: Fall back gracefully if the hardware profile 
 	// singleton is empty during standalone initialization passes.
 	m_pHardwareConfig = g_pHardwareConfig ? reinterpret_cast<IMaterialSystemHardwareConfig*>(g_pHardwareConfig) : HardwareConfig();
-	
+#else
+	m_pHardwareConfig = HardwareConfig();
+#endif
 	// Clear out the shadow state
 	memset( &m_ShadowState, 0, sizeof(m_ShadowState) );
 
@@ -391,12 +394,13 @@ void CShaderShadowDX8::Init( )
 //-----------------------------------------------------------------------------
 void CShaderShadowDX8::SetDefaultState()
 {
+#ifdef SW_HAMMER_TOOL
 	// SW_HAMMER_TOOL SHADOW POINTER FALLBACK
 	if ( !m_pHardwareConfig && g_pHardwareConfig != nullptr )
 	{
 		m_pHardwareConfig = reinterpret_cast<IMaterialSystemHardwareConfig*>(g_pHardwareConfig);
 	}
-
+#endif
 	DepthFunc( SHADER_DEPTHFUNC_NEAREROREQUAL );
 	EnableDepthWrites( true );
 	EnableDepthTest( true );
@@ -442,14 +446,21 @@ void CShaderShadowDX8::SetDefaultState()
 	m_ShadowShaderState.m_VertexUsage = 0;
 
 	int i;
+#ifdef SW_HAMMER_TOOL
 	int nSamplerCount = m_pHardwareConfig ? m_pHardwareConfig->GetSamplerCount() : 4;
+#else
+	int nSamplerCount = HardwareConfig()->GetSamplerCount();
+#endif
 	for( i = 0; i < nSamplerCount; i++ )
 	{
 		EnableTexture( (Sampler_t)i, false );
 		EnableSRGBRead( (Sampler_t)i, false );
 	}
-
+#ifdef SW_HAMMER_TOOL
 	int nTextureStageCount = m_pHardwareConfig ? m_pHardwareConfig->GetTextureStageCount() : 2;
+#else
+	int nTextureStageCount = HardwareConfig()->GetTextureStageCount();
+#endif
 	for( i = 0; i < nTextureStageCount; i++ )
 	{
 		EnableTexGen( (TextureStage_t)i, false );
@@ -840,6 +851,7 @@ void CShaderShadowDX8::EnableSRGBWrite( bool bEnable )
 //-----------------------------------------------------------------------------
 // Activate/deactivate skinning
 //-----------------------------------------------------------------------------
+#ifdef SW_HAMMER_TOOL
 void CShaderShadowDX8::EnableVertexBlend( bool bEnable )
 {
 	// SW_HAMMER_TOOL SHADOW POINTER FALLBACK
@@ -860,6 +872,18 @@ void CShaderShadowDX8::EnableVertexBlend( bool bEnable )
 		m_ShadowState.m_VertexBlendEnable = bEnable;
 	}
 }
+#else
+void CShaderShadowDX8::EnableVertexBlend( bool bEnable )
+{
+	// Activate/deactivate skinning. Indexed blending is automatically
+	// enabled if it's available for this hardware. When blending is enabled,
+	// we allocate enough room for 3 weights (max allowed)
+	if ((m_pHardwareConfig->MaxBlendMatrices() > 0) || (!bEnable))
+	{
+		m_ShadowState.m_VertexBlendEnable = bEnable;
+	}
+}
+#endif
 
 				 
 //-----------------------------------------------------------------------------

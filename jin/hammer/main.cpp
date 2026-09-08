@@ -28,12 +28,6 @@ IFileSystem *g_pFileSystem;
 IDataCache *g_pDataCache;
 IInputSystem *g_pInputSystem;
 
-// FIX: Declare the hidden global pointer that ToGL's dxabstract uses under the hood.
-// Declaring it as an extern void* satisfies the compiler perfectly without needing heavy
-// launcher definitions, while allowing the linker to find the correct symbol slot inside libtogl/shaderapi.
-//extern "C" void *g_pLauncherMgr;
-//extern ILauncherMgr *g_pLauncherMgr;
-
 #if defined(USE_SDL)
 #include "appframework/ilaunchermgr.h"
 ILauncherMgr *g_pLauncherMgr = NULL;	// set in CMaterialSystem::Connect
@@ -174,27 +168,7 @@ bool CHammerApp::Create( )
 	g_pFileSystem = (IFileSystem*)AddSystem( fileSystemModule, FILESYSTEM_INTERFACE_VERSION );
 
 	FileSystem_SetBasePaths( g_pFileSystem );
-/*
-    // FIX: Pass the module name string directly into Sys_GetFactory 
-	// instead of using the raw AppModule_t handle variable.
-	Sys_LoadModule( "liblauncher.so" ); // Ensure it is loaded into memory space
-	CreateInterfaceFn launcherFactory = Sys_GetFactory( "liblauncher.so" );
-	
-	if ( launcherFactory )
-	{
-		const char* launcherVersions[] = { "SDLMgrInterface001", "IXboxLaunch001", "LauncherVersion001" };
-		for ( const char* version : launcherVersions )
-		{
-			void* pInterface = launcherFactory( version, nullptr );
-			if ( pInterface != nullptr )
-			{
-				g_pLauncherMgr = pInterface; // Satisfies dxabstract.cpp line 100 perfectly!
-				Msg( "[HAMMER DEBUG] Successfully matched and connected g_pLauncherMgr via version: [%s]\n", version );
-				break;
-			}
-		}
-	}
-*/
+
 	AppSystemInfo_t appSystems[] = 
 	{
 		{ "materialsystem.dll",		MATERIAL_SYSTEM_INTERFACE_VERSION },
@@ -315,10 +289,10 @@ int CHammerApp::Main( )
     
     int result = QApplication::exec();
 
+#ifdef SW_HAMMER_TOOL
     // SW_HAMMER_TOOL SHUTDOWN SHIELD: Bypassing legacy global destructors 
     // inside tier0 / materialsystem libraries to prevent invalid memory 
     // free passes during shared library unloading cycles.
-#ifdef SW_HAMMER_TOOL
     _exit( result ); 
 #else
     return result;

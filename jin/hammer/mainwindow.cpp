@@ -154,7 +154,7 @@ void MainWindow::createMenuBar()
         QString szSelectedFile = QFileDialog::getOpenFileName(
             this,
             tr("Open Half-Life 2 Studio Model"),
-            "/home/jin/source-engine/hl2/hl2/models", // Map this to your machine's real hl2 models path context
+            "hl2/models", // Map this to your machine's real hl2 models path context
             tr("Studio Model Files (*.mdl)")
         );
 

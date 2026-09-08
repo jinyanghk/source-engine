@@ -42,7 +42,7 @@ def build(bld):
 		'../public/tier1'
 	] + bld.env.INCLUDES_SDL2
 
-	defines = []
+	defines = ['SW_HAMMER_TOOL']
 
 	libs = ['tier0','tier1','tier2','vstdlib','mathlib']
 

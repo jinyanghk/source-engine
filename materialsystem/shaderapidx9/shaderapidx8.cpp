@@ -809,6 +809,7 @@ public:
 
 	bool IsTexture( ShaderAPITextureHandle_t textureHandle );
 	bool IsTextureResident( ShaderAPITextureHandle_t textureHandle );
+#ifdef SW_HAMMER_TOOL
 	FORCEINLINE bool TextureIsAllocated( ShaderAPITextureHandle_t hTexture )
 	{
 		// SW_HAMMER_TOOL HEADLESS SHIELD: Query Valve's native device accessor macro directly.
@@ -827,6 +828,12 @@ public:
 
 		return ( GetTexture( hTexture ).m_Flags & Texture_t::IS_ALLOCATED ) != 0;
 	}
+#else
+	FORCEINLINE bool TextureIsAllocated( ShaderAPITextureHandle_t hTexture )
+	{
+		return m_Textures.IsValidIndex( hTexture ) && ( GetTexture( hTexture ).m_Flags & Texture_t::IS_ALLOCATED );
+	}
+#endif
 	FORCEINLINE void AssertValidTextureHandle( ShaderAPITextureHandle_t textureHandle )
 	{
 #ifdef _DEBUG
@@ -1091,6 +1098,7 @@ public:
 	virtual void EvictManagedResourcesInternal();
 
 	// Gets at a particular transform
+#ifdef SW_HAMMER_TOOL
 	inline D3DXMATRIX& GetTransform( int i )
 	{
 		if ( i >= 0 && i < NUM_MATRIX_MODES )
@@ -1110,6 +1118,12 @@ public:
 		D3DXMatrixIdentity(&s_FallbackIdentity);
 		return s_FallbackIdentity;
 	}
+#else
+	inline D3DXMATRIX& GetTransform( int i )
+	{
+		return *m_pMatrixStack[i]->GetTop();
+	}
+#endif
 
 	int GetCurrentNumBones( void ) const;
 	bool IsHWMorphingEnabled( ) const;
@@ -1878,6 +1892,7 @@ void PIXifyName( char *pDst, int destSize, const char *pSrc )
 static int AdjustUpdateRange( float const* pVec, void const *pOut, int numVecs, int* pSkip )
 {
 	int skip = 0;
+#ifdef SW_HAMMER_TOOL
 	*pSkip = skip;
 
 	// SW_HAMMER_TOOL HEADLESS FALLBACK: If our destination matrix cache pointer 
@@ -1887,13 +1902,13 @@ static int AdjustUpdateRange( float const* pVec, void const *pOut, int numVecs, 
 	{
 		return numVecs;
 	}
-
+#endif
 	uint32* pSrc = (uint32*)pVec;
 	uint32* pDst = (uint32*)pOut;
-	
+#ifdef SW_HAMMER_TOOL
 	// Safe bounds guard wrapper check
 	if ( !pDst ) return numVecs;
-
+#endif
 	while( numVecs && !( ( pSrc[0] ^ pDst[0] ) | ( pSrc[1] ^ pDst[1] ) | ( pSrc[2] ^ pDst[2] ) | ( pSrc[3] ^ pDst[3] ) ) )
 	{
 		pSrc += 4;
@@ -1916,7 +1931,6 @@ static int AdjustUpdateRange( float const* pVec, void const *pOut, int numVecs, 
 
 	return numVecs;
 }
-
 
 //-----------------------------------------------------------------------------
 // Constructor, destructor
@@ -3918,6 +3932,7 @@ void CShaderAPIDx8::GetMaxToRender( IMesh *pMesh, bool bMaxUntilFlush, int *pMax
 
 int CShaderAPIDx8::GetMaxVerticesToRender( IMaterial *pMaterial )
 {
+#ifdef SW_HAMMER_TOOL
 	// SW_HAMMER_TOOL NULL GUARD: If internal utility shaders trigger geometry count 
 	// lookups with a NULL material during buffer formatting steps, bypass the 
 	// virtual casting track completely to prevent a dereference page crash.
@@ -3926,7 +3941,7 @@ int CShaderAPIDx8::GetMaxVerticesToRender( IMaterial *pMaterial )
 		LOCK_SHADERAPI();
 		return MeshMgr()->GetMaxVerticesToRender( NULL );
 	}
-
+#endif
 	pMaterial = ((IMaterialInternal *)pMaterial)->GetRealTimeVersion(); //always work with the realtime version internally
 
 	LOCK_SHADERAPI();
@@ -5481,7 +5496,7 @@ void CShaderAPIDx8::SetHeightClipMode( MaterialHeightClipMode_t heightClipMode )
 void CShaderAPIDx8::SetClipPlane( int index, const float *pPlane )
 {
 	LOCK_SHADERAPI();
-
+#if SW_HAMMER_TOOL
 	// SW_HAMMER_TOOL INDEX BOUNDS SHIELD: If an uninitialized context pass 
 	// transfers a corrupted out-of-bounds user clip index ID while running standalone, 
 	// skip processing immediately to prevent memory matrix array corruption page crashes.
@@ -5489,7 +5504,7 @@ void CShaderAPIDx8::SetClipPlane( int index, const float *pPlane )
 	{
 		return;
 	}
-
+#endif
 	Assert( index < g_pHardwareConfig->MaxUserClipPlanes() && index >= 0 );
 
 	// NOTE: The plane here is specified in *world space*
@@ -5577,10 +5592,12 @@ void CShaderAPIDx8::UserClipTransform( const VMatrix &worldToProjection )
 void CShaderAPIDx8::EnableClipPlane( int index, bool bEnable )
 {
 	LOCK_SHADERAPI();
+#ifdef SW_HAMMER_TOOL
 	if ( index < 0 || index >= MAXUSERCLIPPLANES )
 	{
 		return;
-	}	
+	}
+#endif
 	Assert( index < g_pHardwareConfig->MaxUserClipPlanes() && index >= 0 );
 	if( ( m_DynamicState.m_UserClipPlaneEnabled & ( 1 << index ) ? true : false ) != bEnable )
 	{
@@ -6365,6 +6382,7 @@ int CShaderAPIDx8::GetCurrentDynamicVBSize( void )
 	return m_nDynamicVBSize;
 }
 
+#ifdef SW_HAMMER_TOOL
 FORCEINLINE void CShaderAPIDx8::SetVertexShaderConstantInternal( int var, float const* pVec, int numVecs, bool bForce )
 {
 	Assert( numVecs > 0 );
@@ -6408,7 +6426,33 @@ FORCEINLINE void CShaderAPIDx8::SetVertexShaderConstantInternal( int var, float 
 		memcpy( &m_DesiredState.m_pVectorVertexShaderConstant[var], pVec, numVecs * 4 * sizeof(float) );	
 	}
 }
+#else
+FORCEINLINE void CShaderAPIDx8::SetVertexShaderConstantInternal( int var, float const* pVec, int numVecs, bool bForce )
+{
+	Assert( numVecs > 0 );
+	Assert( pVec );
 
+	if ( IsPC() || IsPS3() )
+	{
+		Assert( var + numVecs <= g_pHardwareConfig->NumVertexShaderConstants() );
+
+		if ( !bForce && memcmp( pVec, &m_DynamicState.m_pVectorVertexShaderConstant[var], numVecs * 4 * sizeof( float ) ) == 0 )
+			return;
+
+		Dx9Device()->SetVertexShaderConstantF( var, pVec, numVecs );
+		memcpy( &m_DynamicState.m_pVectorVertexShaderConstant[var], pVec, numVecs * 4 * sizeof(float) );
+	}
+	else
+	{
+		Assert( var + numVecs <= g_pHardwareConfig->NumVertexShaderConstants() );
+	}
+
+	if ( IsX360() && var + numVecs > m_MaxVectorVertexShaderConstant )
+			m_MaxVectorVertexShaderConstant = var + numVecs;
+
+	memcpy( &m_DesiredState.m_pVectorVertexShaderConstant[var], pVec, numVecs * 4 * sizeof(float) );	
+}
+#endif
 
 //-----------------------------------------------------------------------------
 // Sets the constant register for vertex and pixel shaders
@@ -6484,6 +6528,7 @@ void CShaderAPIDx8::SetIntegerVertexShaderConstant( int var, int const* pVec, in
 	}
 }
 
+#ifdef SW_HAMMER_TOOL
 FORCEINLINE void CShaderAPIDx8::SetPixelShaderConstantInternal( int nStartConst, float const* pValues, int nNumConsts, bool bForce )
 {
 	Assert( nStartConst + nNumConsts <= g_pHardwareConfig->NumPixelShaderConstants() );
@@ -6533,6 +6578,47 @@ FORCEINLINE void CShaderAPIDx8::SetPixelShaderConstantInternal( int nStartConst,
 		memcpy( &m_DesiredState.m_pVectorPixelShaderConstant[nStartConst], pValues, nNumConsts * 4 * sizeof(float) );
 	}
 }
+#else
+FORCEINLINE void CShaderAPIDx8::SetPixelShaderConstantInternal( int nStartConst, float const* pValues, int nNumConsts, bool bForce )
+{
+	Assert( nStartConst + nNumConsts <= g_pHardwareConfig->NumPixelShaderConstants() );
+
+	if ( IsPC() || IsPS3() )
+	{
+		if ( !bForce )
+		{
+			DWORD* pSrc = (DWORD*)pValues;
+			DWORD* pDst = (DWORD*)&m_DesiredState.m_pVectorPixelShaderConstant[nStartConst];
+			while( nNumConsts && ( pSrc[0] == pDst[0] ) && ( pSrc[1] == pDst[1] ) && ( pSrc[2] == pDst[2] ) && ( pSrc[3] == pDst[3] ) )
+			{
+				pSrc += 4;
+				pDst += 4;
+				nNumConsts--;
+				nStartConst++;
+			}
+			if ( !nNumConsts )
+				return;
+			pValues = reinterpret_cast< float const * >( pSrc );
+		}
+					
+		Dx9Device()->SetPixelShaderConstantF( nStartConst, pValues, nNumConsts );
+		memcpy( &m_DynamicState.m_pVectorPixelShaderConstant[nStartConst], pValues, nNumConsts * 4 * sizeof(float) );
+	}
+
+	if ( IsX360() && nStartConst + nNumConsts > m_MaxVectorPixelShaderConstant )
+	{
+		m_MaxVectorPixelShaderConstant = nStartConst + nNumConsts;
+		Assert( m_MaxVectorPixelShaderConstant <= 32 );
+		if ( m_MaxVectorPixelShaderConstant > 32 )
+		{
+			// NOTE!  There really are 224 pixel shader constants on the 360, but we do an optimization that only blasts the first 32 always.
+			Error( "Don't use more then the first 32 pixel shader constants on the 360!" );
+		}
+	}
+
+	memcpy( &m_DesiredState.m_pVectorPixelShaderConstant[nStartConst], pValues, nNumConsts * 4 * sizeof(float) );
+}
+#endif
 
 void CShaderAPIDx8::SetPixelShaderConstant( int var, float const* pVec, int numVecs, bool bForce )
 {
@@ -6879,12 +6965,13 @@ inline bool CShaderAPIDx8::WouldBeOverTextureLimit( ShaderAPITextureHandle_t hTe
 //-----------------------------------------------------------------------------
 void CShaderAPIDx8::SetTextureState( Sampler_t sampler, ShaderAPITextureHandle_t hTexture, bool force )
 {
+#ifdef SW_HAMMER_TOOL
 	// SW_HAMMER_TOOL INPUT SHIELD
 	if ( sampler < 0 || sampler >= MAX_SAMPLERS )
 	{
 		return;
 	}
-
+#endif
 	// Get the dynamic texture info
 	SamplerState_t &samplerState = SamplerState( sampler );
 
@@ -7008,14 +7095,14 @@ void CShaderAPIDx8::SetTextureState( Sampler_t sampler, ShaderAPITextureHandle_t
 void CShaderAPIDx8::BindTexture( Sampler_t sampler, ShaderAPITextureHandle_t textureHandle )
 {
 	LOCK_SHADERAPI();
-
+#ifdef SW_HAMMER_TOOL
 	// SW_HAMMER_TOOL INPUT SHIELD: If uninitialized standard texture loops pass down 
 	// corrupted unaligned sampler indexes, discard the call immediately to block memory corruption.
 	if ( sampler < 0 || sampler >= MAX_SAMPLERS )
 	{
 		return;
 	}
-
+#endif
 	SetTextureState( sampler, textureHandle );
 }
 
@@ -8171,6 +8258,7 @@ bool CShaderAPIDx8::DoRenderTargetsNeedSeparateDepthBuffer() const
 //-----------------------------------------------------------------------------
 // Indicates we're modifying a texture
 //-----------------------------------------------------------------------------
+#ifdef SW_HAMMER_TOOL
 void CShaderAPIDx8::ModifyTexture( ShaderAPITextureHandle_t textureHandle )
 {
 	tmZone( TELEMETRY_LEVEL2, TMZF_NONE, "%s", __FUNCTION__ );
@@ -8193,7 +8281,28 @@ void CShaderAPIDx8::ModifyTexture( ShaderAPITextureHandle_t textureHandle )
 		tex.m_SwitchNeeded = true;
 	}
 }
+#else
+void CShaderAPIDx8::ModifyTexture( ShaderAPITextureHandle_t textureHandle )
+{
+	tmZone( TELEMETRY_LEVEL2, TMZF_NONE, "%s", __FUNCTION__ );
 
+	LOCK_SHADERAPI();
+	// Can't do this if we're locked!
+	Assert( m_ModifyTextureLockedLevel < 0 );
+
+	AssertValidTextureHandle( textureHandle );
+	m_ModifyTextureHandle = textureHandle;
+	
+	// If we're got a multi-copy texture, we need to up the current copy count
+	Texture_t& tex = GetTexture( textureHandle );
+	if (tex.m_NumCopies > 1)
+	{
+		// Each time we modify a texture, we'll want to switch texture
+		// as soon as a TexImage2D call is made...
+		tex.m_SwitchNeeded = true;
+	}
+}
+#endif
 
 //-----------------------------------------------------------------------------
 // Advances the current copy of a texture...
@@ -10052,6 +10161,7 @@ void CShaderAPIDx8::MatrixMode( MaterialMatrixMode_t matrixMode )
 //-----------------------------------------------------------------------------
 void CShaderAPIDx8::GetWorldSpaceCameraPosition( float* pPos ) const
 {
+#ifdef SW_HAMMER_TOOL
 	// SW_HAMMER_TOOL NULL GUARD: If the material context layer passes a null 
 	// storage vector pointer during headless tool view restores, abort the 
 	// memcpy execution completely to block an unaligned memory page crash.
@@ -10059,7 +10169,7 @@ void CShaderAPIDx8::GetWorldSpaceCameraPosition( float* pPos ) const
 	{
 		return;
 	}
-
+#endif
 	memcpy( pPos, m_WorldSpaceCameraPositon.Base(), sizeof( float[3] ) );
 }
 
@@ -10316,7 +10426,7 @@ int CShaderAPIDx8::GetPackedDeformationInformation( int nMaskOfUnderstoodDeforma
 //-----------------------------------------------------------------------------
 // Matrix stack operations
 //-----------------------------------------------------------------------------
-
+#ifdef SW_HAMMER_TOOL
 void CShaderAPIDx8::PushMatrix()
 {
 	// SW_HAMMER_TOOL AUTO-ALLOCATION FALLBACK: If our standalone tool environment 
@@ -10337,7 +10447,15 @@ void CShaderAPIDx8::PushMatrix()
 		}
 	}
 }
+#else
+void CShaderAPIDx8::PushMatrix()
+{
+	// NOTE: No matrix transform update needed here.
+	m_pMatrixStack[m_CurrStack]->Push();
+}
+#endif
 
+#ifdef SW_HAMMER_TOOL
 void CShaderAPIDx8::PopMatrix()
 {
 	if ( m_CurrStack >= 0 && m_CurrStack < NUM_MATRIX_MODES )
@@ -10358,7 +10476,18 @@ void CShaderAPIDx8::PopMatrix()
 		}
 	}
 }
+#else
+void CShaderAPIDx8::PopMatrix()
+{
+	if (MatrixIsChanging())
+	{
+		m_pMatrixStack[m_CurrStack]->Pop();
+		UpdateMatrixTransform();
+	}
+}
+#endif
 
+#ifdef SW_HAMMER_TOOL
 void CShaderAPIDx8::LoadIdentity( void )
 {
 	if ( m_CurrStack >= 0 && m_CurrStack < NUM_MATRIX_MODES )
@@ -10379,6 +10508,16 @@ void CShaderAPIDx8::LoadIdentity( void )
 		}
 	}
 }
+#else
+void CShaderAPIDx8::LoadIdentity( )
+{
+	if (MatrixIsChanging(TRANSFORM_IS_IDENTITY))
+	{
+		m_pMatrixStack[m_CurrStack]->LoadIdentity( );
+		UpdateMatrixTransform( TRANSFORM_IS_IDENTITY );
+	}
+}
+#endif
 
 void CShaderAPIDx8::LoadCameraToWorld( )
 {
@@ -10397,6 +10536,7 @@ void CShaderAPIDx8::LoadCameraToWorld( )
 	}
 }
 
+#ifdef SW_HAMMER_TOOL
 void CShaderAPIDx8::LoadMatrix( float *m )
 {
 	// SW_HAMMER_TOOL AUTO-ALLOCATION FALLBACK: Bypassing the identity check 
@@ -10420,6 +10560,27 @@ void CShaderAPIDx8::LoadMatrix( float *m )
 		}
 	}
 }
+#else
+void CShaderAPIDx8::LoadMatrix( float *m )
+{
+	// Check for identity...
+	if ( (fabs(m[0] - 1.0f) < 1e-3) && (fabs(m[5] - 1.0f) < 1e-3) && (fabs(m[10] - 1.0f) < 1e-3) && (fabs(m[15] - 1.0f) < 1e-3) &&
+		 (fabs(m[1]) < 1e-3)  && (fabs(m[2]) < 1e-3)  && (fabs(m[3]) < 1e-3) &&
+		 (fabs(m[4]) < 1e-3)  && (fabs(m[6]) < 1e-3)  && (fabs(m[7]) < 1e-3) &&
+		 (fabs(m[8]) < 1e-3)  && (fabs(m[9]) < 1e-3)  && (fabs(m[11]) < 1e-3) &&
+		 (fabs(m[12]) < 1e-3) && (fabs(m[13]) < 1e-3) && (fabs(m[14]) < 1e-3) )
+	{
+		LoadIdentity();
+		return;
+	}
+
+	if (MatrixIsChanging())
+	{
+		m_pMatrixStack[m_CurrStack]->LoadMatrix( (D3DXMATRIX*)m );
+		UpdateMatrixTransform();
+	}
+}
+#endif
 
 void CShaderAPIDx8::LoadBoneMatrix( int boneIndex, const float *m )
 {
@@ -10484,6 +10645,7 @@ void CShaderAPIDx8::SetFlexWeights( int nFirstWeight, int nCount, const MorphWei
 	ADD_COMMIT_FUNC( COMMIT_PER_DRAW, COMMIT_VERTEX_SHADER, CommitFlexWeights );
 }
 
+#ifdef SW_HAMMER_TOOL
 void CShaderAPIDx8::MultMatrix( float *m )
 {
 	if ( m_CurrStack >= 0 && m_CurrStack < NUM_MATRIX_MODES )
@@ -10504,6 +10666,16 @@ void CShaderAPIDx8::MultMatrix( float *m )
 		}
 	}
 }
+#else
+void CShaderAPIDx8::MultMatrix( float *m )
+{
+	if (MatrixIsChanging())
+	{
+		m_pMatrixStack[m_CurrStack]->MultMatrix( (D3DXMATRIX*)m );
+		UpdateMatrixTransform();
+	}
+}
+#endif
 
 void CShaderAPIDx8::MultMatrixLocal( float *m )
 {
@@ -12575,6 +12747,7 @@ IMaterialInternal* CShaderAPIDx8::GetBoundMaterial()
 //-----------------------------------------------------------------------------
 void CShaderAPIDx8::BindStandardTexture( Sampler_t sampler, StandardTextureId_t id )
 {
+#ifdef SW_HAMMER_TOOL
 	// SW_HAMMER_TOOL ARRAY BOUNDS SHIELD: If an uninitialized texture manager loop 
 	// passes down a corrupted out-of-bounds garbage index ID during standalone view 
 	// updates, short-circuit immediately to prevent array index page corruption.
@@ -12582,7 +12755,7 @@ void CShaderAPIDx8::BindStandardTexture( Sampler_t sampler, StandardTextureId_t 
 	{
 		return;
 	}
-
+#endif
 	if ( m_StdTextureHandles[id] != INVALID_SHADERAPI_TEXTURE_HANDLE )
 	{
 		BindTexture( sampler, m_StdTextureHandles[id] );
@@ -12595,18 +12768,22 @@ void CShaderAPIDx8::BindStandardTexture( Sampler_t sampler, StandardTextureId_t 
 
 void CShaderAPIDx8::BindStandardVertexTexture( VertexTextureSampler_t sampler, StandardTextureId_t id )
 {
+#ifdef SW_HAMMER_TOOL
 	if ( id < 0 || id >= ARRAYSIZE( m_StdTextureHandles ) ) return;
+#endif
 	ShaderUtil()->BindStandardVertexTexture( sampler, id );
 }
 
 void CShaderAPIDx8::GetStandardTextureDimensions( int *pWidth, int *pHeight, StandardTextureId_t id )
 {
+#ifdef SW_HAMMER_TOOL
 	if ( id < 0 || id >= ARRAYSIZE( m_StdTextureHandles ) )
 	{
 		if ( pWidth ) *pWidth = 0;
 		if ( pHeight ) *pHeight = 0;
 		return;
 	}
+#endif
 	ShaderUtil()->GetStandardTextureDimensions( pWidth, pHeight, id );
 }
 

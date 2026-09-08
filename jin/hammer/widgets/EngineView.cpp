@@ -1,9 +1,10 @@
+#include <QPainter>
+
 #include "EngineView.h"
 
 #include "materialsystem/imaterialsystem.h"
 #include "materialsystem/imesh.h"
 #include "inputsystem/iinputsystem.h"
-#include <QPainter>
 
 // Pull the global pointer populated by your CHammerApp::Create loop
 extern IMaterialSystem *g_pMaterialSystem;
