@@ -28,51 +28,9 @@ MainWindow::~MainWindow() {}
 
 void MainWindow::createCentralWidget()
 {
-    m_modelView = new CModelView(this);
+    m_modelView = new QModelView(this);
     setCentralWidget(m_modelView);
 }
-
-/*
-void MainWindow::createCentralWidget()
-{
-    m_MatView = new QMaterialPreview(this);
-    setCentralWidget(m_MatView);
-}
-
-void MainWindow::createCentralWidget()
-{
-    // 1. Create your newly adjusted QWidget-based viewport
-    CEngineView *pEngineView = new CEngineView(this);
-    setCentralWidget(pEngineView);
-
-    // 2. Set up a heartbeat timer to continuously invalidate the widget canvas
-    QTimer *pRenderTimer = new QTimer(this);
-    connect(pRenderTimer, &QTimer::timeout, pEngineView, qOverload<>(&QWidget::update));
-    
-    // Start ticking every 16ms (~60 FPS) to force paintEvent() calls
-    pRenderTimer->start(16); 
-}
-*/
-
-/*
-void MainWindow::createCentralWidget()
-{
-    QWidget *centralWidget = new QWidget(this);
-    QGridLayout *layout = new QGridLayout(centralWidget);
-
-    CHammerViewportWidget *viewTop   = new CHammerViewportWidget(1, this); // Top (XY)
-    CHammerViewportWidget *viewSide  = new CHammerViewportWidget(2, this); // Side (YZ)
-    CHammerViewportWidget *viewFront = new CHammerViewportWidget(3, this); // Front (XZ)
-    CHammerViewportWidget *view3D    = new CHammerViewportWidget(0, this); // Camera 3D
-
-    layout->addWidget(viewTop, 0, 0);
-    layout->addWidget(viewSide, 0, 1);
-    layout->addWidget(viewFront, 1, 0);
-    layout->addWidget(view3D, 1, 1);
-
-    setCentralWidget(centralWidget);
-}
-*/
 
 void MainWindow::createMenuBar()
 {
@@ -270,6 +228,44 @@ void MainWindow::createDockWidgets()
 }
 
 /*
+void MainWindow::createCentralWidget()
+{
+    m_MatView = new QMaterialPreview(this);
+    setCentralWidget(m_MatView);
+}
+
+void MainWindow::createCentralWidget()
+{
+    // 1. Create your newly adjusted QWidget-based viewport
+    QEngineView *pEngineView = new QEngineView(this);
+    setCentralWidget(pEngineView);
+
+    // 2. Set up a heartbeat timer to continuously invalidate the widget canvas
+    QTimer *pRenderTimer = new QTimer(this);
+    connect(pRenderTimer, &QTimer::timeout, pEngineView, qOverload<>(&QWidget::update));
+    
+    // Start ticking every 16ms (~60 FPS) to force paintEvent() calls
+    pRenderTimer->start(16); 
+}
+
+void MainWindow::createCentralWidget()
+{
+    QWidget *centralWidget = new QWidget(this);
+    QGridLayout *layout = new QGridLayout(centralWidget);
+
+    CHammerViewportWidget *viewTop   = new CHammerViewportWidget(1, this); // Top (XY)
+    CHammerViewportWidget *viewSide  = new CHammerViewportWidget(2, this); // Side (YZ)
+    CHammerViewportWidget *viewFront = new CHammerViewportWidget(3, this); // Front (XZ)
+    CHammerViewportWidget *view3D    = new CHammerViewportWidget(0, this); // Camera 3D
+
+    layout->addWidget(viewTop, 0, 0);
+    layout->addWidget(viewSide, 0, 1);
+    layout->addWidget(viewFront, 1, 0);
+    layout->addWidget(view3D, 1, 1);
+
+    setCentralWidget(centralWidget);
+}
+
 void MainWindow::createCentralWidget()
 {
     // central widget, use QVBoxLayout to hold splitters

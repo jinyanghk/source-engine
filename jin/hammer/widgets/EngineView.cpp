@@ -9,7 +9,7 @@
 // Pull the global pointer populated by your CHammerApp::Create loop
 extern IMaterialSystem *g_pMaterialSystem;
 
-CEngineView::CEngineView(QWidget *parent)
+QEngineView::QEngineView(QWidget *parent)
     : QWidget(parent)
 {
     // MODIFIED FOR STANDALONE HEADLESS PAINTING:
@@ -22,7 +22,7 @@ CEngineView::CEngineView(QWidget *parent)
     setFocusPolicy(Qt::StrongFocus);
 }
 
-CEngineView::~CEngineView()
+QEngineView::~QEngineView()
 {
     // FIX STACK OVERFLOW ON SHUTDOWN:
     // Using internalWinId() instead of winId() ensures the destructor simply
@@ -36,7 +36,7 @@ CEngineView::~CEngineView()
 
 // FIX: This triggers exactly when the widget becomes physically allocated and visible.
 // We force native window creation and pass the OS handle straight to the engine.
-void CEngineView::showEvent(QShowEvent *event)
+void QEngineView::showEvent(QShowEvent *event)
 {
     QWidget::showEvent(event);
 
@@ -57,17 +57,17 @@ void CEngineView::showEvent(QShowEvent *event)
     }
 }
 
-void CEngineView::focusInEvent(QFocusEvent *event)
+void QEngineView::focusInEvent(QFocusEvent *event)
 {
     QWidget::focusInEvent(event);
 }
 
-void CEngineView::focusOutEvent(QFocusEvent *event)
+void QEngineView::focusOutEvent(QFocusEvent *event)
 {
     QWidget::focusOutEvent(event);
 }
 
-void CEngineView::resizeEvent(QResizeEvent *event)
+void QEngineView::resizeEvent(QResizeEvent *event)
 {
     QWidget::resizeEvent(event);
     
@@ -75,7 +75,7 @@ void CEngineView::resizeEvent(QResizeEvent *event)
     this->update(); 
 }
 
-void CEngineView::paintEvent(QPaintEvent *event)
+void QEngineView::paintEvent(QPaintEvent *event)
 {
     // 1. Run the headless engine frame logic to pump ticks and keep assets alive cleanly
     RenderFrame();
@@ -113,7 +113,7 @@ void CEngineView::paintEvent(QPaintEvent *event)
     painter.drawText(20, 50, "Qt Native View Loop: ACTIVE");
 }
 
-void CEngineView::RenderFrame()
+void QEngineView::RenderFrame()
 {
     if ( !g_pMaterialSystem || !isVisible() )
         return;

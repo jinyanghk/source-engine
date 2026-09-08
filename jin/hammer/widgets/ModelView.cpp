@@ -18,7 +18,7 @@ struct StudioHeaderMock_t {
     int length;
 };
 
-CModelView::CModelView(QWidget *parent)
+QModelView::QModelView(QWidget *parent)
     : QWidget(parent)
     , m_nNumBonesParsed(0)
     , m_nNumTrianglesParsed(0)
@@ -33,11 +33,11 @@ CModelView::CModelView(QWidget *parent)
     GenerateMockWireframeMesh();
 }
 
-CModelView::~CModelView()
+QModelView::~QModelView()
 {
 }
 
-void CModelView::LoadModelFile(const QString &szFilePath)
+void QModelView::LoadModelFile(const QString &szFilePath)
 {
     m_szCurrentModelPath = szFilePath;
     m_MeshVertices.clear();
@@ -74,7 +74,7 @@ void CModelView::LoadModelFile(const QString &szFilePath)
     this->update(); // Trigger a native Qt redraw tick
 }
 
-void CModelView::GenerateMockWireframeMesh()
+void QModelView::GenerateMockWireframeMesh()
 {
     // Generate a beautiful, rotating geometric preview prism framework 
     // whose proportions scale dynamically based on the parsed triangle data densities.
@@ -104,7 +104,7 @@ void CModelView::GenerateMockWireframeMesh()
     }
 }
 
-void CModelView::RenderEngineFrame()
+void QModelView::RenderEngineFrame()
 {
     // Keeping the engine's background texture and memory system subsystems ticking safely
     if ( !g_pMaterialSystem || !isVisible() )
@@ -123,7 +123,7 @@ void CModelView::RenderEngineFrame()
     g_pMaterialSystem->SwapBuffers();
 }
 
-void CModelView::paintEvent(QPaintEvent *event)
+void QModelView::paintEvent(QPaintEvent *event)
 {
     // 1. Maintain headless engine shared asset memory health strings
     RenderEngineFrame();
@@ -197,7 +197,7 @@ void CModelView::paintEvent(QPaintEvent *event)
     }
 }
 
-void CModelView::mousePressEvent(QMouseEvent *event)
+void QModelView::mousePressEvent(QMouseEvent *event)
 {
     if (event->button() == Qt::LeftButton) {
         m_bIsDragging = true;
@@ -205,7 +205,7 @@ void CModelView::mousePressEvent(QMouseEvent *event)
     }
 }
 
-void CModelView::mouseMoveEvent(QMouseEvent *event)
+void QModelView::mouseMoveEvent(QMouseEvent *event)
 {
     if (m_bIsDragging && (event->buttons() & Qt::LeftButton)) {
         QPoint delta = event->pos() - m_ptLastMousePosition;
@@ -219,7 +219,7 @@ void CModelView::mouseMoveEvent(QMouseEvent *event)
     }
 }
 
-void CModelView::wheelEvent(QWheelEvent *event)
+void QModelView::wheelEvent(QWheelEvent *event)
 {
     float numDegrees = event->angleDelta().y() / 8.0f;
     float numSteps = numDegrees / 15.0f;
@@ -231,7 +231,7 @@ void CModelView::wheelEvent(QWheelEvent *event)
     this->update();
 }
 
-void CModelView::resizeEvent(QResizeEvent *event)
+void QModelView::resizeEvent(QResizeEvent *event)
 {
     QWidget::resizeEvent(event);
     this->update();

@@ -6,13 +6,13 @@
 #include <QVector3D>
 #include <QVector>
 
-class CModelView : public QWidget
+class QModelView : public QWidget
 {
     Q_OBJECT
 
 public:
-    explicit CModelView(QWidget *parent = nullptr);
-    virtual ~CModelView();
+    explicit QModelView(QWidget *parent = nullptr);
+    virtual ~QModelView();
 
     // Call this function when an asset is selected in the sidebar file tree
     void LoadModelFile(const QString &szFilePath);

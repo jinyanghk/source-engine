@@ -56,7 +56,7 @@ private:
     QSplitter *m_leftSplitter;
     QSplitter *m_rightSplitter;
 
-    CModelView *m_modelView;
+    QModelView *m_modelView;
 };
 
 #endif // MAINWINDOW_H

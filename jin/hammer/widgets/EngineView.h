@@ -6,12 +6,12 @@
 #include <QShowEvent>   // <-- ADD THIS INCLUDE
 #include <QResizeEvent> // <-- ADD THIS INCLUDE
 
-class CEngineView : public QWidget
+class QEngineView : public QWidget
 {
     Q_OBJECT
 public:
-    explicit CEngineView(QWidget *parent = nullptr);
-    virtual ~CEngineView();
+    explicit QEngineView(QWidget *parent = nullptr);
+    virtual ~QEngineView();
 
 protected:
     // Virtual method overrides from QWidget
