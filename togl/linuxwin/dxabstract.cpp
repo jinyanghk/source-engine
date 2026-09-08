@@ -789,6 +789,7 @@ HRESULT IDirect3DCubeTexture9::GetLevelDesc(UINT Level,D3DSURFACE_DESC *pDesc)
 HRESULT IDirect3DDevice9::CreateVolumeTexture(UINT Width,UINT Height,UINT Depth,UINT Levels,DWORD Usage,D3DFORMAT Format,D3DPOOL Pool,IDirect3DVolumeTexture9** ppVolumeTexture,VD3DHANDLE* pSharedHandle, char *pDebugLabel)
 {
 	GL_BATCH_PERF_CALL_TIMER;
+#ifdef SW_HAMMER_TOOL
 	*ppVolumeTexture = NULL;
 
 	if ( !this )
@@ -798,7 +799,7 @@ HRESULT IDirect3DDevice9::CreateVolumeTexture(UINT Width,UINT Height,UINT Depth,
 		*ppVolumeTexture = pFakeVol;
 		return S_OK;
 	}
-
+#endif
 	GLMPRINTF((">-A-  IDirect3DDevice9::CreateVolumeTexture"));
 	// set dxtex->m_restype to D3DRTYPE_VOLUMETEXTURE...
 
