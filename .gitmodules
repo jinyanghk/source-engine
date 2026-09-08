@@ -7,6 +7,3 @@
 [submodule "lib"]
 	path = lib
 	url = https://github.com/jinyanghk/source-engine-libs.git
-[submodule "imgui"]
-	path = imgui
-	url = https://github.com/ocornut/imgui
