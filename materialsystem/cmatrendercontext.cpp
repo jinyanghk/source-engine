@@ -3026,12 +3026,22 @@ void CMatRenderContext::EndBatch()
 
 bool CMatRenderContext::OnDrawMesh( IMesh *pMesh, int firstIndex, int numIndices )
 {
+#ifdef SW_HAMMER_TOOL
+	// Force the underlying ShaderAPI layer to clear its primitive pools
+	// and forcefully mark its state registers as dirty.
+	g_pShaderAPI->FlushBufferedPrimitives();
+	g_pShaderAPI->ResetRenderState( false );
+#endif
 	SyncMatrices();
 	return true;
 }
 
 bool CMatRenderContext::OnDrawMesh( IMesh *pMesh, CPrimList *pLists, int nLists )
 {
+#ifdef SW_HAMMER_TOOL
+	g_pShaderAPI->FlushBufferedPrimitives();
+	g_pShaderAPI->ResetRenderState( false );
+#endif
 	SyncMatrices();
 	return true;
 }

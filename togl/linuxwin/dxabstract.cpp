@@ -2332,7 +2332,6 @@ HRESULT IDirect3DDevice9::CreateVertexBuffer(UINT Length,DWORD Usage,DWORD FVF,D
 	}
 
 	GL_PUBLIC_ENTRYPOINT_CHECKS( this );
-	m_ObjectStats.m_nTotalVertexBuffers++;
 #endif
 	GLMPRINTF(( ">-A- IDirect3DDevice9::CreateVertexBuffer" ));
 	Assert( m_ctx->m_nCurOwnerThreadId == ThreadGetCurrentId() );
@@ -2486,10 +2485,7 @@ HRESULT IDirect3DDevice9::CreateIndexBuffer(UINT Length,DWORD Usage,D3DFORMAT Fo
 		*ppIndexBuffer = pFakeIB;
 		return S_OK;
 	}
-#endif
 	GL_PUBLIC_ENTRYPOINT_CHECKS( this );
-#ifdef SW_HAMMER_TOOL
-	m_ObjectStats.m_nTotalIndexBuffers++;
 #endif
 	GLMPRINTF(( ">-A- IDirect3DDevice9::CreateIndexBuffer" ));
 
