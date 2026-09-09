@@ -27,6 +27,8 @@ IMaterialSystem *g_pMaterialSystem;
 IFileSystem *g_pFileSystem;
 IDataCache *g_pDataCache;
 IInputSystem *g_pInputSystem;
+IStudioRender *g_pStudioRender;
+IMDLCache *g_pMDLCache;
 
 #if defined(USE_SDL)
 #include "appframework/ilaunchermgr.h"
@@ -178,8 +180,8 @@ bool CHammerApp::Create( )
 		{ "datacache.dll",			DATACACHE_INTERFACE_VERSION },
 		{ "datacache.dll",			MDLCACHE_INTERFACE_VERSION },
 		{ "datacache.dll",			STUDIO_DATA_CACHE_INTERFACE_VERSION },
-		{ "vguimatsurface.dll",		VGUI_SURFACE_INTERFACE_VERSION },
-		{ "vgui2.dll",				VGUI_IVGUI_INTERFACE_VERSION },
+		//{ "vguimatsurface.dll",		VGUI_SURFACE_INTERFACE_VERSION },
+		//{ "vgui2.dll",				VGUI_IVGUI_INTERFACE_VERSION },
 		//{ "hammer_dll.dll",			INTERFACEVERSION_HAMMER },
 		{ "", "" }	// Required to terminate the list
 	};
@@ -192,7 +194,9 @@ bool CHammerApp::Create( )
 	//g_pHammer = (IHammer*)FindSystem( INTERFACEVERSION_HAMMER );
 	g_pDataCache = (IDataCache*)FindSystem( DATACACHE_INTERFACE_VERSION );
 	g_pInputSystem = (IInputSystem*)FindSystem( INPUTSYSTEM_INTERFACE_VERSION );
-
+	g_pStudioRender = (IStudioRender*)FindSystem( STUDIO_RENDER_INTERFACE_VERSION );
+	g_pMDLCache = (IMDLCache*)FindSystem( MDLCACHE_INTERFACE_VERSION );
+	
 	if ( !g_pLauncherMgr )
 	{
 		static CDummyLauncherMgr s_DummyLauncherMgr;

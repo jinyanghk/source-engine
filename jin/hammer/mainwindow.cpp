@@ -28,7 +28,7 @@ MainWindow::~MainWindow() {}
 
 void MainWindow::createCentralWidget()
 {
-    m_modelView = new QModelView(this);
+    m_modelView = new QModelView2(this);
     setCentralWidget(m_modelView);
 }
 
@@ -104,25 +104,14 @@ void MainWindow::createMenuBar()
 
     // Instancing menu
     QMenu *instanceMenu = m_menuBar->addMenu("Instancing");
-
+/*
     QAction *previewAction = new QAction("Preview Model...", this);
     connect(previewAction, &QAction::triggered, this, [this]()
     {
-        // Pop up a native Qt file selector mapped out to Valve's .mdl model containers
-        QString szSelectedFile = QFileDialog::getOpenFileName(
-            this,
-            tr("Open Half-Life 2 Studio Model"),
-            "hl2/models", // Map this to your machine's real hl2 models path context
-            tr("Studio Model Files (*.mdl)")
-        );
 
-        if ( !szSelectedFile.isEmpty() )
-        {
-            m_modelView->LoadModelFile(szSelectedFile);
-        }
     });
     instanceMenu->addAction(previewAction);
-
+*/
     // Instancing menu
     QMenu *windowMenu = m_menuBar->addMenu("Window");
 

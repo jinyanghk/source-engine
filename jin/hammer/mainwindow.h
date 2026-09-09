@@ -17,7 +17,7 @@
 
 #include "widgets/HammerViewportWidget.h"
 #include "widgets/MaterialPreview.h"
-#include "widgets/ModelView.h"
+#include "widgets/ModelView2.h"
 
 class MainWindow : public QMainWindow
 {
@@ -56,7 +56,7 @@ private:
     QSplitter *m_leftSplitter;
     QSplitter *m_rightSplitter;
 
-    QModelView *m_modelView;
+    QModelView2 *m_modelView;
 };
 
 #endif // MAINWINDOW_H
