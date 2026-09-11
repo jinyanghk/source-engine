@@ -3337,6 +3337,18 @@ void CMeshDX8::DrawInternal( CPrimList *pLists, int nLists )
 	// can't do these in selection mode!
 	Assert( !ShaderAPI()->IsInSelectionMode() );
 
+#ifdef SW_HAMMER_TOOL
+	// SW_HAMMER_TOOL VGUI STATE PROTECTION: When transitioning between 3D world space
+	// map assets and 2D VGui overlays, the engine can leak active 3D vertex/pixel programs.
+	// Force a safe render state reset ONLY right before drawing a UI panel batch,
+	// rather than on every single sub-primitive mesh draw.
+	if ( m_pTextureGroupName && V_stristr( m_pTextureGroupName, "vgui" ) )
+	{
+		g_pShaderAPI->FlushBufferedPrimitives();
+		g_pShaderAPI->ResetRenderState( false );
+	}
+#endif
+
 	if ( !SetRenderState( 0, 0 ) )
 		return;
 

@@ -3026,30 +3026,12 @@ void CMatRenderContext::EndBatch()
 
 bool CMatRenderContext::OnDrawMesh( IMesh *pMesh, int firstIndex, int numIndices )
 {
-#ifdef SW_HAMMER_TOOL
-	// Protect the viewmodel pass: Only clear and reset states if the active material 
-	// is explicitly a VGui or HUD interface overlay asset.
-	if ( m_pCurrentMaterial && m_pCurrentMaterial->GetName() && 
-	     ( V_stristr( m_pCurrentMaterial->GetName(), "vgui" ) || V_stristr( m_pCurrentMaterial->GetName(), "hud" ) ) )
-	{
-		g_pShaderAPI->FlushBufferedPrimitives();
-		g_pShaderAPI->ResetRenderState( false );
-	}
-#endif
 	SyncMatrices();
 	return true;
 }
 
 bool CMatRenderContext::OnDrawMesh( IMesh *pMesh, CPrimList *pLists, int nLists )
 {
-#ifdef SW_HAMMER_TOOL
-	if ( m_pCurrentMaterial && m_pCurrentMaterial->GetName() && 
-	     ( V_stristr( m_pCurrentMaterial->GetName(), "vgui" ) || V_stristr( m_pCurrentMaterial->GetName(), "hud" ) ) )
-	{
-		g_pShaderAPI->FlushBufferedPrimitives();
-		g_pShaderAPI->ResetRenderState( false );
-	}
-#endif
 	SyncMatrices();
 	return true;
 }
