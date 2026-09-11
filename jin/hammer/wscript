@@ -46,6 +46,7 @@ def build(bld):
 		'widgets/MaterialPreview.cpp',
 		'widgets/ModelView.cpp',
 		'widgets/ModelView2.cpp',
+		'widgets/ModelView3.cpp',
 		# Everything else
 		'main.cpp',
 		'mainwindow.cpp',
@@ -81,6 +82,7 @@ def build(bld):
 		'widgets/EngineView.h',
 		'widgets/ModelView.h',
 		'widgets/ModelView2.h',
+		'widgets/ModelView3.h',
 		'mainwindow.h',
 	]
 

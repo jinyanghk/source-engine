@@ -228,6 +228,24 @@ void DrawSkin_DX9_Internal( CBaseVSShader *pShader, IMaterialVar** params, IShad
 	bool bHasFlashlight, VertexLitGeneric_DX9_Vars_t &info, VertexCompressionType_t vertexCompression,
 							CBasePerMaterialContextData **pContextDataPtr )
 {
+#ifdef SW_HAMMER_TOOL
+	// SW_HAMMER_TOOL SHADERAPI FALLBACK: Use a local inheriting struct to bypass C++ protected 
+	// scope access limits safely, pulling the internal engine context pointer to satisfy texture bindings.
+	bool bBypassLighting = false;
+	if ( !pShaderAPI )
+	{
+		struct Accessor : public CBaseVSShader {
+			static IShaderDynamicAPI* GetAPI() { return s_pShaderAPI; }
+		};
+		pShaderAPI = Accessor::GetAPI();
+		bBypassLighting = true;
+	}
+	
+	if ( !pContextDataPtr )
+	{
+		return;
+	}
+#endif
 	bool bHasBaseTexture = (info.m_nBaseTexture != -1) && params[info.m_nBaseTexture]->IsTexture();
 	bool bHasBump = (info.m_nBumpmap != -1) && params[info.m_nBumpmap]->IsTexture();
 

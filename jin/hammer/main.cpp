@@ -32,7 +32,7 @@ IMDLCache *g_pMDLCache;
 
 #if defined(USE_SDL)
 #include "appframework/ilaunchermgr.h"
-ILauncherMgr *g_pLauncherMgr = NULL;	// set in CMaterialSystem::Connect
+//ILauncherMgr *g_pLauncherMgr = NULL;	// set in CMaterialSystem::Connect
 
 // Forward declare the class used by the return type
 class GLMDisplayDB;

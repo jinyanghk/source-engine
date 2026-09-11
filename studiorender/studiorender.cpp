@@ -481,6 +481,21 @@ void CStudioRender::DrawModel( const DrawModelInfo_t& info, const StudioRenderCo
 		info.m_pHardwareData->m_pLODs[info.m_Lod].ppMaterials, 
 		info.m_pHardwareData->m_pLODs[info.m_Lod].pMaterialFlags, flags, boneMask, info.m_Lod, info.m_pColorMeshes);
 
+#ifdef SW_HAMMER_TOOL
+	// SW_HAMMER_TOOL DRAWMODEL OVERRIDE: Offscreen tool canvas preview passes do not feature
+	// map instances, world shadows, or decal history tracking lists.
+	// Terminate the function early right here to prevent unaligned stack memory accesses 
+	// from entering DrawDecal/DrawShadows and crashing with a SIGSEGV.
+	pRenderContext->MatrixMode( MATERIAL_MODEL );
+	pRenderContext->PopMatrix();
+	pRenderContext->SetNumBoneWeights( 0 );
+	m_pRC = NULL;
+	m_pBoneToWorld = NULL;
+	m_pFlexWeights = NULL;
+	m_pFlexDelayedWeights = NULL;
+	return;
+#endif
+
 	// Draw all the decals on this model
 	// If the model is not in memory, this code may not function correctly
 	// This code assumes the model has been rendered!

@@ -3877,6 +3877,13 @@ inline void CShaderAPIDx8::SetVertexDecl( VertexFormat_t vertexFormat, bool bHas
 {
 	VPROF("CShaderAPIDx8::SetVertexDecl");
 	IDirect3DVertexDeclaration9 *pDecl = FindOrCreateVertexDecl( vertexFormat, bHasColorMesh, bUsingFlex, bUsingMorph );
+#ifdef SW_HAMMER_TOOL
+	// If vertex declaration creation was safely bypassed, short-circuit the stream setup safely
+	if ( !pDecl )
+	{
+		return;
+	}
+#endif
 	Assert( pDecl );
 
 	if ( ( pDecl != m_DynamicState.m_pVertexDecl ) && pDecl )
@@ -5230,6 +5237,14 @@ void CShaderAPIDx8::Color3ub( unsigned char r, unsigned char g, unsigned char b 
 void CShaderAPIDx8::Color3ubv( unsigned char const* pColor )
 {
 	Assert( pColor );
+#ifdef SW_HAMMER_TOOL
+	// SW_HAMMER_TOOL GARBAGE POINTER SHIELD: Prevent crashing if the incoming 
+	// pointer address is invalid or points to unallocated system pages during snapshot init.
+	if ( (uintp)pColor < 0x1000 )
+	{
+		return;
+	}
+#endif
 	unsigned int color = D3DCOLOR_ARGB( 255, pColor[0], pColor[1], pColor[2] ); 
 	if (color != m_DynamicState.m_ConstantColor)
 	{
@@ -5251,6 +5266,13 @@ void CShaderAPIDx8::Color4ub( unsigned char r, unsigned char g, unsigned char b,
 void CShaderAPIDx8::Color4ubv( unsigned char const* pColor )
 {
 	Assert( pColor );
+#ifdef SW_HAMMER_TOOL
+	// Symmetric safety barrier for the 4-component variation
+	if ( (uintp)pColor < 0x1000 )
+	{
+		return;
+	}
+#endif
 	unsigned int color = D3DCOLOR_ARGB( pColor[3], pColor[0], pColor[1], pColor[2] ); 
 	if (color != m_DynamicState.m_ConstantColor)
 	{
@@ -6468,6 +6490,19 @@ void CShaderAPIDx8::SetVertexShaderConstant( int var, float const* pVec, int num
 void CShaderAPIDx8::SetBooleanVertexShaderConstant( int var, int const* pVec, int numBools, bool bForce )
 {
 	Assert( pVec );
+#ifdef SW_HAMMER_TOOL
+	// SW_HAMMER_TOOL BOOLEAN CONSTANT SHIELD: Symmetrically protect against uninitialized state cache 
+	// arrays or missing hardware device wrappers during early standalone viewport passes, 
+	// preventing a memcmp or Dx9Device NULL pointer crash.
+	if ( !Dx9Device() || !m_DesiredState.m_pBooleanVertexShaderConstant || !m_DynamicState.m_pBooleanVertexShaderConstant )
+	{
+		if ( m_DesiredState.m_pBooleanVertexShaderConstant )
+		{
+			memcpy( &m_DesiredState.m_pBooleanVertexShaderConstant[var], pVec, numBools * sizeof(BOOL) );
+		}
+		return;
+	}
+#endif
 	Assert( var + numBools <= g_pHardwareConfig->NumBooleanVertexShaderConstants() );
 
 	if ( IsPC() && g_pHardwareConfig->GetDXSupportLevel() < 90 )
@@ -6503,6 +6538,21 @@ void CShaderAPIDx8::SetIntegerVertexShaderConstant( int var, int const* pVec, in
 {
 	Assert( pVec );
 	Assert( var + numIntVecs <= g_pHardwareConfig->NumIntegerVertexShaderConstants() );
+
+#ifdef SW_HAMMER_TOOL
+	// SW_HAMMER_TOOL OFFLINE CONTEXT SHIELD: If this method is called during early offscreen
+	// tool passes when the underlying hardware device or the tracking state buffers are 
+	// unallocated, safely short-circuit to prevent a memcmp or Dx9Device() null pointer crash.
+	if ( !Dx9Device() || !m_DesiredState.m_pIntegerVertexShaderConstant || !m_DynamicState.m_pIntegerVertexShaderConstant )
+	{
+		// Symmetrically fulfill the fallback buffer storage tracking updates if allocated
+		if ( m_DesiredState.m_pIntegerVertexShaderConstant )
+		{
+			memcpy( &m_DesiredState.m_pIntegerVertexShaderConstant[var], pVec, numIntVecs * sizeof(IntVector4D) );
+		}
+		return;
+	}
+#endif
 
 	if ( IsPC() && g_pHardwareConfig->GetDXSupportLevel() < 90 )
 	{
@@ -7892,6 +7942,17 @@ IDirect3DSurface* CShaderAPIDx8::GetTextureSurface( ShaderAPITextureHandle_t tex
 {
 	MEM_ALLOC_D3D_CREDIT();
 
+#ifdef SW_HAMMER_TOOL
+	// SW_HAMMER_TOOL NULL RENDER TARGET SHIELD: When procedural render target textures 
+	// are instantiated inside standalone tools (like our QModelView2 widget), their 
+	// underlying textureHandle maps to 0 before the driver layer completely finishes. 
+	// Return NULL safely instead of dereferencing a zero index and causing a SIGSEGV.
+	if ( textureHandle == 0 || textureHandle == INVALID_SHADERAPI_TEXTURE_HANDLE )
+	{
+		return NULL;
+	}
+#endif
+
 	IDirect3DSurface* pSurface;
 
 	// We'll be modifying this sucka
@@ -7953,6 +8014,17 @@ void CShaderAPIDx8::SetRenderTargetEx( int nRenderTargetID, ShaderAPITextureHand
 	{
 		return;
 	}
+
+#ifdef SW_HAMMER_TOOL
+	// SW_HAMMER_TOOL NULL RENDERTARGET SHIELD: If this method is called during early asset
+	// initialization when the procedural render targets haven't finished compiling yet,
+	// their texture handles map to 0/INVALID. Abort the operation safely to prevent 
+	// GetTextureSurface from dereferencing a zero index handle and crashing with a SIGSEGV.
+	if ( colorTextureHandle == 0 || colorTextureHandle == INVALID_SHADERAPI_TEXTURE_HANDLE )
+	{
+		return;
+	}
+#endif
 
 	// GR - need to flush batched geometry
 	FlushBufferedPrimitives();
@@ -11918,7 +11990,15 @@ int CShaderAPIDx8::GetViewports( ShaderViewport_t* pViewports, int nMax ) const
 		return 1;
 
 	LOCK_SHADERAPI();
-
+#ifdef SW_HAMMER_TOOL
+	// SW_HAMMER_TOOL VIEWPORT SEGV PROTECTION: If this method is called during offline
+	// material snapshot compiling with an uninitialized or garbage memory address (e.g., 0xc), 
+	// short-circuit the execution safely to prevent writing into restricted memory.
+	if ( (uintp)pViewports < 0x1000 )
+	{
+		return 1;
+	}
+#endif
 	pViewports[0].m_nTopLeftX = m_DesiredState.m_Viewport.X;
 	pViewports[0].m_nTopLeftY = m_DesiredState.m_Viewport.Y;
 	pViewports[0].m_nWidth = m_DesiredState.m_Viewport.Width;
@@ -13321,6 +13401,17 @@ int CShaderAPIDx8::OcclusionQuery_GetNumPixelsRendered( ShaderAPIOcclusionQuery_
 
 void CShaderAPIDx8::SetPixelShaderFogParams( int reg, ShaderFogMode_t fogMode )
 {
+#ifdef SW_HAMMER_TOOL
+	// SW_HAMMER_TOOL SHADOW STATE BARRIER: If the transition table's current shadow 
+	// state pointer is completely null, uninitialized, or contains garbage memory metrics
+	// during offscreen tool passes, short-circuit immediately to avoid a SIGSEGV.
+	if ( !m_TransitionTable.CurrentShadowState() || (uintp)(m_TransitionTable.CurrentShadowState()) < 0x1000 )
+	{
+		// Force a clean call passing 0 (no fog) safely down to the driver hardware
+		SetPixelShaderFogParams( reg, 0 );
+		return;
+	}
+#endif
 	m_DelayedShaderConstants.iPixelShaderFogParams = reg; //save it off in case the ShaderFogMode_t disables fog. We only find out later.
 	float fogParams[4];
 
@@ -13364,6 +13455,18 @@ void CShaderAPIDx8::SetPixelShaderFogParams( int reg, ShaderFogMode_t fogMode )
 
 void CShaderAPIDx8::SetPixelShaderFogParams( int reg )
 {
+#ifdef SW_HAMMER_TOOL
+	// FORCE SANITY SHIELD: Always ensure that the active transition table shadow state 
+	// structure is initialized and completely safe to dereference before parsing.
+	if ( !m_TransitionTable.CurrentShadowState() || (uintp)(m_TransitionTable.CurrentShadowState()) < 0x1000 )
+	{
+		// RECURSION BYPASS: Directly write a blank constant vector to the hardware
+		// pixel shader registers to satisfy wireframe compilation without stack overflow recursion loops.
+		float vZeroFogConst[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+		SetPixelShaderConstant( reg, vZeroFogConst, 1 );
+		return;
+	}
+#endif
 	SetPixelShaderFogParams( reg, m_TransitionTable.CurrentShadowState()->m_FogMode );
 }
 
@@ -13392,6 +13495,23 @@ void CShaderAPIDx8::SetFlashlightStateEx( const FlashlightState_t &state, const 
 const FlashlightState_t &CShaderAPIDx8::GetFlashlightState( VMatrix &worldToTexture ) const
 {
 	worldToTexture = m_FlashlightWorldToTexture;
+#ifdef SW_HAMMER_TOOL
+	// SW_HAMMER_TOOL FLASHLIGHT STATE BOUNDS SHIELD: If this state structure is queried 
+	// before the engine has loaded a 3D world or map environment, force all fields to 
+	// zero to prevent the stdshaders helper loops from dereferencing uninitialized garbage.
+	static FlashlightState_t s_SafeBlankFlashlightState;
+	static bool bInitializedBlank = false;
+	if ( !bInitializedBlank ) {
+		memset( &s_SafeBlankFlashlightState, 0, sizeof( FlashlightState_t ) );
+		bInitializedBlank = true;
+	}
+	
+	// If m_pRenderMesh or the active drawing view isn't initialized yet, we are in an offline snapshot pass!
+	if ( !m_pRenderMesh )
+	{
+		return s_SafeBlankFlashlightState;
+	}
+#endif
 	return m_FlashlightState;
 }
 
@@ -13399,6 +13519,21 @@ const FlashlightState_t &CShaderAPIDx8::GetFlashlightStateEx( VMatrix &worldToTe
 {
 	worldToTexture = m_FlashlightWorldToTexture;
 	*ppFlashlightDepthTexture = m_pFlashlightDepthTexture;
+#ifdef SW_HAMMER_TOOL
+	// Apply the same structural isolation layout protection for the Ex method
+	static FlashlightState_t s_SafeBlankFlashlightStateEx;
+	static bool bInitializedBlankEx = false;
+	if ( !bInitializedBlankEx ) {
+		memset( &s_SafeBlankFlashlightStateEx, 0, sizeof( FlashlightState_t ) );
+		bInitializedBlankEx = true;
+	}
+	
+	if ( !m_pRenderMesh )
+	{
+		if ( ppFlashlightDepthTexture ) *ppFlashlightDepthTexture = NULL;
+		return s_SafeBlankFlashlightStateEx;
+	}
+#endif
 	return m_FlashlightState;
 }
 

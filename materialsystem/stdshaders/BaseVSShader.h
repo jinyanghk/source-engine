@@ -339,6 +339,12 @@ private:
 
 FORCEINLINE void SetFlashLightColorFromState( FlashlightState_t const &state, IShaderDynamicAPI *pShaderAPI, int nPSRegister=28, bool bFlashlightNoLambert=false )
 {
+#ifdef SW_HAMMER_TOOL
+	if ( !pShaderAPI || (uintp)(&state) < 0x1000 )
+	{
+		return;
+	}
+#endif
 	// Old code
 	//float flToneMapScale = ( pShaderAPI->GetToneMappingScaleLinear() ).x;
 	//float flFlashlightScale = 1.0f / flToneMapScale;

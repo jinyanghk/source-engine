@@ -3115,6 +3115,17 @@ HRESULT IDirect3DDevice9::SetViewport(CONST D3DVIEWPORT9* pViewport)
 {
 	GL_BATCH_PERF_CALL_TIMER;
 	GL_PUBLIC_ENTRYPOINT_CHECKS( this );
+
+#ifdef SW_HAMMER_TOOL
+	// SW_HAMMER_TOOL VIEWPORT ACCEL SHIELD: If this method is called during offscreen tool 
+	// frame initialization passes when the underlying device context is unallocated,
+	// short-circuit the execution safely to prevent a NULL pointer dereference crash.
+	if ( !this )
+	{
+		return S_OK;
+	}
+#endif
+
 	GLMPRINTF(("-X- IDirect3DDevice9::SetViewport : minZ %f, maxZ %f",pViewport->MinZ, pViewport->MaxZ ));
 	
 	gl.m_ViewportBox.x		= pViewport->X;
@@ -3717,6 +3728,16 @@ HRESULT IDirect3DDevice9::SetRenderTarget(DWORD RenderTargetIndex,IDirect3DSurfa
 	
 	Assert( RenderTargetIndex < 4 );
 
+	#ifdef SW_HAMMER_TOOL
+	// SW_HAMMER_TOOL DEVICE TARGET SHIELD: If SetRenderTarget is invoked during offline
+	// material compiling or MRT index purges when the underlying device context is unallocated,
+	// short-circuit the execution safely to prevent a NULL pointer dereference crash.
+	if ( !this )
+	{
+		return S_OK;
+	}
+#endif
+
 	HRESULT result = S_OK;
 
 	GLMPRINTF(("-F- SetRenderTarget index=%d, surface=%8x (tex=%8x %s)",
@@ -3950,6 +3971,17 @@ HRESULT IDirect3DDevice9::SetDepthStencilSurface( IDirect3DSurface9* pNewZStenci
 {
 	GL_BATCH_PERF_CALL_TIMER;
 	GL_PUBLIC_ENTRYPOINT_CHECKS( this );
+
+#ifdef SW_HAMMER_TOOL
+	// SW_HAMMER_TOOL DEPTH STENCIL SHIELD: If this method is called during offscreen 
+	// render target popping when the underlying device context is unallocated,
+	// short-circuit the execution safely to prevent a NULL pointer dereference crash.
+	if ( !this )
+	{
+		return S_OK;
+	}
+#endif
+
 	HRESULT	result = S_OK;
 
 	GLMPRINTF(("-F- SetDepthStencilSurface, surface=%8x (tex=%8x %s)",
@@ -4885,6 +4917,16 @@ HRESULT IDirect3DDevice9::CreateVertexDeclaration(CONST D3DVERTEXELEMENT9* pVert
 {
 	GL_BATCH_PERF_CALL_TIMER;
 	GL_PUBLIC_ENTRYPOINT_CHECKS( this );
+#ifdef SW_HAMMER_TOOL
+	// SW_HAMMER_TOOL VERTEX DECLARATION SHIELD: If CreateVertexDeclaration is invoked during 
+	// early offscreen model caching passes when the underlying device context is unallocated,
+	// short-circuit the execution safely to prevent a NULL pointer dereference crash.
+	if ( !this )
+	{
+		if ( ppDecl ) *ppDecl = NULL;
+		return S_OK;
+	}
+#endif
 	*ppDecl = NULL;
 	
 	// the goal here is to arrive at something which lets us quickly generate GLMVertexSetups.
@@ -5819,6 +5861,17 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive( D3DPRIMITIVETYPE Type, INT BaseV
 	Assert( m_ctx->m_nCurOwnerThreadId == ThreadGetCurrentId() );
 		
 	TOGL_NULL_DEVICE_CHECK;
+
+#ifdef SW_HAMMER_TOOL
+	// SW_HAMMER_TOOL DRAW INDEXED PRIMITIVE SHIELD: If this method is called during offline
+	// material caching passes when the underlying device context is unallocated,
+	// short-circuit the execution safely to prevent a NULL pointer dereference crash.
+	if ( !this )
+	{
+		return S_OK;
+	}
+#endif
+
 	if ( m_bFBODirty )
 	{
 		UpdateBoundFBO();
@@ -6191,6 +6244,16 @@ HRESULT IDirect3DDevice9::Clear(DWORD Count,CONST D3DRECT* pRects,DWORD Flags,D3
 {
 	GL_BATCH_PERF_CALL_TIMER;
 
+#ifdef SW_HAMMER_TOOL
+	// SW_HAMMER_TOOL DEVICE CLEAR SHIELD: If Clear() is invoked during early material 
+	// snapshot compiling/precaching when the underlying device context is unallocated,
+	// short-circuit the execution safely to prevent a NULL pointer dereference crash.
+	if ( !this )
+	{
+		return S_OK;
+	}
+#endif
+
 	if ( m_bFBODirty )
 	{
 		UpdateBoundFBO();
@@ -6242,6 +6305,12 @@ HRESULT IDirect3DDevice9::SetTransform(D3DTRANSFORMSTATETYPE State,CONST D3DMATR
 
 HRESULT IDirect3DDevice9::SetTextureStageState(DWORD Stage,D3DTEXTURESTAGESTATETYPE Type,DWORD Value)
 {
+#ifdef SW_HAMMER_TOOL
+	if ( !this )
+	{
+		return S_OK;
+	}
+#endif
 	GL_BATCH_PERF_CALL_TIMER;
 	GL_PUBLIC_ENTRYPOINT_CHECKS( this );
 	DXABSTRACT_BREAK_ON_ERROR();

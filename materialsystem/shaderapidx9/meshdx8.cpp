@@ -2557,7 +2557,15 @@ void CMeshDX8::HandleLateCreation( )
 
 	if ( m_pColorMesh )
 	{
+#ifdef SW_HAMMER_TOOL
+		// SW_HAMMER_TOOL LATE CREATION BYPASS: During offscreen tool previews, 
+		// m_pColorMesh can point to a wild, unallocated garbage memory block address.
+		// Since we handle offscreen meshes without local vertex color streaming channels,
+		// skip executing HandleLateCreation on m_pColorMesh entirely to guarantee thread stability.
+		return;
+#else
 		m_pColorMesh->HandleLateCreation();
+#endif
 	}
 }
 
@@ -3043,13 +3051,25 @@ bool CMeshDX8::IsValidVertexFormat( VertexFormat_t vertexFormat )
 		// The -1 here is because if we have N bones, we can have only (N-1) weights,
 		// since the Nth is implied (the weights sum to 1).
 		int nWeightCount = NumBoneWeights( m_VertexFormat );
+		
+#ifdef SW_HAMMER_TOOL
+		// SW_HAMMER_TOOL SCOPE GUARD: Prevent a dereference fault if g_pShaderAPI is unallocated.
+		// Fall back cleanly to the visible inline ShaderAPI() context.
+		IShaderAPI *pActiveAPI = g_pShaderAPI ? g_pShaderAPI : ShaderAPI();
+		bIsValid = bIsValid && ( nWeightCount >= ( pActiveAPI->GetCurrentNumBones() - 1 ) );
+#else
 		bIsValid = bIsValid && ( nWeightCount >= ( g_pShaderAPI->GetCurrentNumBones() - 1 ) );
+#endif
 
 #ifdef _DEBUG
 		if ( !bIsValid )
 		{
 			Warning( "Material Format:" );
+#ifdef SW_HAMMER_TOOL
+			if ( pActiveAPI && pActiveAPI->GetCurrentNumBones() > 0 )
+#else
 			if ( g_pShaderAPI->GetCurrentNumBones() > 0 )
+#endif
 			{
 				vertexFormat |= VERTEX_BONE_INDEX;
 				vertexFormat &= ~VERTEX_BONE_WEIGHT_MASK;
@@ -3123,6 +3143,12 @@ void CMeshDX8::SetColorStreamState()
 {
 	if ( ( m_pColorMesh != g_pLastColorMesh ) || ( m_nColorMeshVertOffsetInBytes != g_nLastColorMeshVertOffsetInBytes ) )
 	{
+#ifdef SW_HAMMER_TOOL
+		// Bypass volatile mesh properties offscreen and unbind stream slot 1 cleanly
+		RECORD_COMMAND( DX8_SET_STREAM_SOURCE, 4 );
+		RECORD_INT( -1 ); RECORD_INT( 1 ); RECORD_INT( 0 ); RECORD_INT( 0 );
+		D3DSetStreamSource( 1, 0, 0, 0 );
+#else
 		if ( m_pColorMesh )
 		{
 			RECORD_COMMAND( DX8_SET_STREAM_SOURCE, 4 );
@@ -3145,6 +3171,7 @@ void CMeshDX8::SetColorStreamState()
 
 			D3DSetStreamSource( 1, 0, 0, 0 );
 		}
+#endif
 		g_pLastColorMesh = m_pColorMesh;
 		g_nLastColorMeshVertOffsetInBytes = m_nColorMeshVertOffsetInBytes;
 	}

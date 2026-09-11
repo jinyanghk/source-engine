@@ -739,6 +739,15 @@ private:
 
 FORCEINLINE HRESULT TOGLMETHODCALLTYPE IDirect3DDevice9::SetSamplerState( DWORD Sampler, D3DSAMPLERSTATETYPE Type, DWORD Value )
 {
+#ifdef SW_HAMMER_TOOL
+	// SW_HAMMER_TOOL SAMPLER STATE SHIELD: If this method is called during early offscreen
+	// material snapshot application when the underlying device context is unallocated,
+	// short-circuit the execution safely to prevent a NULL pointer dereference crash.
+	if ( !this )
+	{
+		return S_OK;
+	}
+#endif
 #if GLMDEBUG || GL_BATCH_PERF_ANALYSIS
 	return SetSamplerStateNonInline( Sampler, Type, Value );
 #else
@@ -1318,6 +1327,15 @@ HRESULT IDirect3DDevice9::SetVertexShader(IDirect3DVertexShader9* pShader)
 #if GLMDEBUG || GL_BATCH_PERF_ANALYSIS
 	return SetVertexShaderNonInline(pShader);
 #else
+#ifdef SW_HAMMER_TOOL
+	// SW_HAMMER_TOOL HEADLESS SHIELD: If this method is called during early asset
+	// pre-precaching when no live device context instance is active, abort the 
+	// call safely to prevent a NULL pointer dereference crash.
+	if ( !this )
+	{
+		return S_OK;
+	}
+#endif
 	Assert( GetCurrentOwnerThreadId() == ThreadGetCurrentId() );
 	m_ctx->SetVertexProgram( pShader ? pShader->m_vtxProgram : NULL );
 	m_vertexShader = pShader;
@@ -1330,6 +1348,13 @@ FORCEINLINE HRESULT TOGLMETHODCALLTYPE IDirect3DDevice9::SetPixelShader(IDirect3
 #if GLMDEBUG || GL_BATCH_PERF_ANALYSIS
 	return SetPixelShaderNonInline(pShader);
 #else
+#ifdef SW_HAMMER_TOOL
+	// Mirroring symmetric safety armor for the accompanying pixel shader method
+	if ( !this )
+	{
+		return S_OK;
+	}
+#endif
 	Assert( GetCurrentOwnerThreadId() == ThreadGetCurrentId() );
 	m_ctx->SetFragmentProgram( pShader ? pShader->m_pixProgram : NULL );
 	m_pixelShader = pShader;
@@ -1356,6 +1381,15 @@ FORCEINLINE HRESULT IDirect3DDevice9::SetVertexDeclaration(IDirect3DVertexDeclar
 
 FORCEINLINE void IDirect3DDevice9::SetMaxUsedVertexShaderConstantsHint( uint nMaxReg )
 {
+#ifdef SW_HAMMER_TOOL
+	// SW_HAMMER_TOOL CONSTANTS HINT SHIELD: If this method is called during early offscreen
+	// skeletal animation solving passes when the underlying device context is unallocated,
+	// short-circuit the execution safely to prevent a NULL pointer dereference crash.
+	if ( !this )
+	{
+		return S_OK;
+	}
+#endif
 #if GLMDEBUG || GL_BATCH_PERF_ANALYSIS
 	return SetMaxUsedVertexShaderConstantsHintNonInline( nMaxReg );
 #else

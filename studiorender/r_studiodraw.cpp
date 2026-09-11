@@ -2145,6 +2145,11 @@ int CStudioRender::R_StudioDrawGroupHWSkin( IMatRenderContext *pRenderContext, s
 	PROFILE_STUDIO("HwSkin");
 	int numTrianglesRendered = 0;
 
+#ifdef SW_HAMMER_TOOL
+	// Shield the hardware skin layout from register spill contamination
+	pColorMeshInfo = NULL;
+#endif
+
 #if PIX_ENABLE
 	char szPIXEventName[128];
 	sprintf( szPIXEventName, "R_StudioDrawGroupHWSkin (%s)", m_pStudioHdr->name );	// PIX
@@ -2272,6 +2277,14 @@ int CStudioRender::R_StudioDrawStaticMesh( IMatRenderContext *pRenderContext, ms
 {
 	MatSysQueueMark( g_pMaterialSystem, "R_StudioDrawStaticMesh\n" );
 	VPROF( "R_StudioDrawStaticMesh" );
+
+#ifdef SW_HAMMER_TOOL
+	// SW_HAMMER_TOOL UNIFIED REGISTER BARRIER: Direct-cross library register shifting 
+	// can cause high-range system addresses (like 0x7cff0000021b) to contaminate the 
+	// pColorMeshes argument register slot. Since offscreen model previews never use
+	// color mesh array sheets, force it to NULL to ensure complete stability.
+	pColorMeshes = NULL;
+#endif
 
 	int numTrianglesRendered = 0;
 

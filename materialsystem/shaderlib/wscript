@@ -30,7 +30,7 @@ def build(bld):
 		'../'
 	]
 
-	defines = []
+	defines = ['SW_HAMMER_TOOL']
 
 	libs = []
 

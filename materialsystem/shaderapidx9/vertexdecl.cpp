@@ -540,8 +540,27 @@ IDirect3DVertexDeclaration9 *FindOrCreateVertexDecl( VertexFormat_t fmt, bool bS
 	D3DVERTEXELEMENT9 decl[32];
 	ComputeVertexSpec( fmt, decl, bStaticLit, bUsingFlex, bUsingMorph );
 
+#ifdef SW_HAMMER_TOOL
+	// SW_HAMMER_TOOL NULL DEVICE SHIELD: If this method is called during early offscreen 
+	// rendering before the physical graphics context has completely initialized, 
+	// Dx9Device() can evaluate to NULL. Return NULL safely to prevent a SIGSEGV.
+	if ( !Dx9Device() )
+	{
+		return NULL;
+	}
+#endif
+
 	HRESULT hr = 
 		Dx9Device()->CreateVertexDeclaration( decl, &lookup.m_pDecl );
+
+#ifdef SW_HAMMER_TOOL
+	// If the device context was alive but our dxabstract shield activated, 
+	// abort the registration loop safely right now.
+	if ( !lookup.m_pDecl )
+	{
+		return NULL;
+	}
+#endif
 
 	// NOTE: can't record until we have m_pDecl!
 	RECORD_COMMAND( DX8_CREATE_VERTEX_DECLARATION, 2 );

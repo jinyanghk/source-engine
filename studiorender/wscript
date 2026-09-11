@@ -40,7 +40,7 @@ def build(bld):
 		'../public/tier1',
 	]
 
-	defines = []
+	defines = ['SW_HAMMER_TOOL']
 
 	libs = ['tier0','tier1','tier2','tier3','vstdlib','mathlib','bitmap']
 

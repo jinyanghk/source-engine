@@ -28,7 +28,7 @@ MainWindow::~MainWindow() {}
 
 void MainWindow::createCentralWidget()
 {
-    m_modelView = new QModelView2(this);
+    m_modelView = new QModelView3(this);
     setCentralWidget(m_modelView);
 }
 

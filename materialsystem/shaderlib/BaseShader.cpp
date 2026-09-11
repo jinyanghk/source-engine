@@ -1635,6 +1635,15 @@ bool CBaseShader::UsingFlashlight( IMaterialVar **params ) const
 	}
 	else
 	{
+#ifdef SW_HAMMER_TOOL
+		// SW_HAMMER_TOOL NULL SHIELD: When compiling material snapshots during early
+		// asset precaching passes, s_pShaderAPI can evaluate to NULL. Add a safe bounds
+		// check to prevent a nested NULL pointer dereference crash.
+		if ( !s_pShaderAPI )
+		{
+			return false;
+		}
+#endif
 		return s_pShaderAPI->InFlashlightMode();
 	}
 }
