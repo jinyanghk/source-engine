@@ -23,9 +23,10 @@ extern "C" void Hammer_SetLauncherWindowContext(void *pWindowRef, int width, int
 static matrix3x4_t s_InterceptedBoneTransforms[MAXSTUDIOBONES];
 
 QModelView3::QModelView3(QWidget *parent)
-    : QWidget(parent), m_flAnimationCycle(0.0f), m_hCurrentModel(0xFFFF), m_szCurrentModelPath(""), m_flZoomScale(1.0f), m_pOffscreenRenderTarget(nullptr), m_bIsRenderBufferBlank(true), m_ptCameraPanOffset(QPointF(0, 0))
+    : QWidget(parent), m_flAnimationCycle(0.0f), m_hCurrentModel(0xFFFF), m_szCurrentModelPath(""), m_flZoomScale(2.5f), m_pOffscreenRenderTarget(nullptr), m_bIsRenderBufferBlank(true), m_ptCameraPanOffset(QPointF(0, 0))
 {
-    m_ptRotationAngle = QPoint(20, -45);
+    // FIX: Perfect front-facing viewing angle coordinates
+    m_ptRotationAngle = QPoint(0, 0); // 0 Pitch, 0 Yaw aligns her face right down your viewer screen!
 
     m_pAnimationFrameTimer = new QTimer(this);
     connect(m_pAnimationFrameTimer, &QTimer::timeout, this, [=]()
@@ -271,16 +272,31 @@ void QModelView3::paintEvent(QPaintEvent *event)
             float radX = qDegreesToRadians((float)m_ptRotationAngle.x());
             float radY = qDegreesToRadians((float)m_ptRotationAngle.y());
 
+            // ---- FIX: ORIENTATION SWIZZLE FOR TRUE UPRIGHT FRONT-FACING PROFILE ----
+            // Source Engine: X = Forward, Y = Left, Z = Up
+            // We map Z directly to the screen vertical axis, Y to the horizontal, 
+            // and apply our custom mouse rotation pitching matrix rules around her center.
             auto Project3DPointEx = [this, w, h, radX, radY](float x, float y, float z, float &outRotZ) -> QPointF
             {
-                float x1 = x;
-                float y1 = y * qCos(radX) - z * qSin(radX);
-                float z1 = y * qSin(radX) + z * qCos(radX);
-                float x2 = x1 * qCos(radY) + z1 * qSin(radY);
-                outRotZ = -x1 * qSin(radY) + z1 * qCos(radY);
+                // 1. First apply our horizontal orbit angle (Yaw) around her vertical axis
+                float rotatedX = x * qCos(radY) - y * qSin(radY);
+                float rotatedY = x * qSin(radY) + y * qCos(radY);
 
-float sX = (w / 2.0f) + (x2 * m_flZoomScale * 1.8f) + m_ptCameraPanOffset.x();float sY = (h / 2.0f) + (y1 * m_flZoomScale * 1.8f) + 40.0f + m_ptCameraPanOffset.y();
-return QPointF(sX, sY); };
+                // 2. Then apply our vertical tilt angle (Pitch) over her shoulders
+                float finalX = rotatedX;
+                float finalY = rotatedY * qCos(radX) - z * qSin(radX);
+                outRotZ      = rotatedY * qSin(radX) + z * qCos(radX); // Clean depth tracking row
+
+                // 3. Coordinate Swizzle: Enforce her upright posture
+                // Map finalX to screen horizontal (Left-Right)
+                // Map z directly to screen vertical (Up-Down) so she stands completely vertical
+                float sX = (w / 2.0f) + (finalX * m_flZoomScale * 1.8f) + m_ptCameraPanOffset.x();
+                
+                // Subtracted the final vertical height tracker from our half-height baseline
+                float sY = (h / 2.0f) - (z * m_flZoomScale * 1.8f) + 120.0f + m_ptCameraPanOffset.y(); 
+                return QPointF(sX, sY);
+            };
+
             matrix3x4_t pBoneToWorld[MAXSTUDIOBONES];
             mstudiobone_t *pBoneArray = (mstudiobone_t *)((byte *)pStudioHdr + pStudioHdr->boneindex);
             for (int b = 0; b < qMin(pStudioHdr->numbones, MAXSTUDIOBONES); ++b)
