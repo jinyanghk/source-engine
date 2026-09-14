@@ -206,7 +206,7 @@ void QModelView3::RenderEngineFrame()
 
 void QModelView3::paintEvent(QPaintEvent *event)
 {
-    // Execute engine canvas synchronization blocks safely
+    // Execute frame safety checks
     RenderEngineFrame();
 
     QPainter painter(this);
@@ -215,276 +215,270 @@ void QModelView3::paintEvent(QPaintEvent *event)
     int w = rect().width();
     int h = rect().height();
 
-    // 1. If the engine GPU pipeline renders successfully, draw the rasterized image
-    if (!m_bIsRenderBufferBlank && !m_RenderOutputImage.isNull())
-    {
-        painter.drawImage(0, 0, m_RenderOutputImage);
-    }
-    else
-    {
-        // 2. Headless Fallback Viewer Layer: Fill Background
-        painter.fillRect(rect(), QColor(43, 45, 66));
+    // Clear background canvas space smoothly
+    painter.fillRect(rect(), QColor(30, 32, 44));
 
-        if (m_hCurrentModel != 0xFFFF && g_pMDLCache)
+    if (m_hCurrentModel != 0xFFFF && g_pMDLCache)
+    {
+        studiohdr_t *pStudioHdr = g_pMDLCache->GetStudioHdr(m_hCurrentModel);
+        studiohwdata_t *pHardwareData = g_pMDLCache->GetHardwareData(m_hCurrentModel);
+
+        if (pStudioHdr && pHardwareData && pHardwareData->m_NumLODs > 0 && pHardwareData->m_pLODs != nullptr)
         {
-            studiohdr_t *pStudioHdr = g_pMDLCache->GetStudioHdr(m_hCurrentModel);
-            studiohwdata_t *pHardwareData = g_pMDLCache->GetHardwareData(m_hCurrentModel);
+            float radX = qDegreesToRadians((float)m_ptRotationAngle.x());
+            float radY = qDegreesToRadians((float)m_ptRotationAngle.y());
 
-            if (pStudioHdr && pHardwareData && pHardwareData->m_NumLODs > 0 && pHardwareData->m_pLODs != nullptr)
+            // 3D Screen Space Projector with explicit depth extraction return parameters
+            auto Project3DPointEx = [this, w, h, radX, radY](float x, float y, float z, float &outRotZ) -> QPointF
             {
-                float radX = qDegreesToRadians((float)m_ptRotationAngle.x());
-                float radY = qDegreesToRadians((float)m_ptRotationAngle.y());
+                float x1 = x;
+                float y1 = y * qCos(radX) - z * qSin(radX);
+                float z1 = y * qSin(radX) + z * qCos(radX);
+                float x2 = x1 * qCos(radY) + z1 * qSin(radY);
+                outRotZ = -x1 * qSin(radY) + z1 * qCos(radY); // Depth tracking variable
 
-                auto Project3DPoint = [&](float x, float y, float z) -> QPointF
+                float sX = (w / 2.0f) + (x2 * m_flZoomScale * 1.8f) + m_ptCameraPanOffset.x();
+                float sY = (h / 2.0f) + (y1 * m_flZoomScale * 1.8f) + 40.0f + m_ptCameraPanOffset.y();
+                return QPointF(sX, sY);
+            };
+
+            // ---- HIGH PERFORMANCE FORWARD KINEMATICS CHAIN ----
+            matrix3x4_t pBoneToWorld[MAXSTUDIOBONES];
+            mstudiobone_t *pBoneArray = (mstudiobone_t *)((byte *)pStudioHdr + pStudioHdr->boneindex);
+
+            if (pBoneArray != nullptr)
+            {
+                for (int i = 0; i < pStudioHdr->numbones; i++)
                 {
-                    float x1 = x;
-                    float y1 = y * qCos(radX) - z * qSin(radX);
-                    float z1 = y * qSin(radX) + z * qCos(radX);
-                    float x2 = x1 * qCos(radY) + z1 * qSin(radY);
+                    Vector bonePos = pBoneArray[i].pos;
+                    Quaternion boneQuat = pBoneArray[i].quat;
 
-                    float sX = (w / 2.0f) + (x2 * m_flZoomScale * 1.8f) + m_ptCameraPanOffset.x();
-                    float sY = (h / 2.0f) + (y1 * m_flZoomScale * 1.8f) + 40.0f + m_ptCameraPanOffset.y();
-                    return QPointF(sX, sY);
-                };
-
-                // ---- DYNAMIC SKELETAL ANIMATION CALCULATOR ----
-                matrix3x4_t pBoneToWorld[MAXSTUDIOBONES];
-                mstudiobone_t *pBoneArray = (mstudiobone_t *)((byte *)pStudioHdr + pStudioHdr->boneindex);
-
-                if (pBoneArray != nullptr)
-                {
-                    for (int i = 0; i < pStudioHdr->numbones; i++)
+                    if (pBoneArray[i].parent != -1)
                     {
-                        Vector bonePos = pBoneArray[i].pos;
-                        Quaternion boneQuat = pBoneArray[i].quat;
-
-                        if (pBoneArray[i].parent != -1)
-                        {
-                            float waveFactor = qSin(m_flAnimationCycle * M_PI * 2.0f + i * 0.2f) * 0.3f;
-                            bonePos.x += waveFactor;
-                            bonePos.y += waveFactor * 0.5f;
-                        }
-
-                        matrix3x4_t bonematrix;
-                        QuaternionMatrix(boneQuat, bonePos, bonematrix);
-
-                        int parentIdx = pBoneArray[i].parent;
-                        if (parentIdx == -1)
-                            MatrixCopy(bonematrix, pBoneToWorld[i]);
-                        else
-                            ConcatTransforms(pBoneToWorld[parentIdx], bonematrix, pBoneToWorld[i]);
+                        float waveFactor = qSin(m_flAnimationCycle * M_PI * 2.0f + i * 0.2f) * 0.3f;
+                        bonePos.x += waveFactor;
+                        bonePos.y += waveFactor * 0.5f;
                     }
+
+                    matrix3x4_t bonematrix;
+                    QuaternionMatrix(boneQuat, bonePos, bonematrix);
+
+                    int parentIdx = pBoneArray[i].parent;
+                    if (parentIdx == -1)
+                        MatrixCopy(bonematrix, pBoneToWorld[i]);
+                    else
+                        ConcatTransforms(pBoneToWorld[parentIdx], bonematrix, pBoneToWorld[i]);
                 }
+            }
 
-                // ---- INITIALIZE PROCEDURAL UV ALIGNMENT CALIBRATION TEXTURE SHEET ----
-                static QImage uvGridSheet;
-                int texW = 256, texH = 256;
-                if (uvGridSheet.isNull())
+            // Directional studio key light vector direction
+            Vector vecLightDir(0.5f, -0.4f, 0.7f);
+            vecLightDir.NormalizeInPlace();
+
+            // Collect all triangles to run our Painter's Depth Sorting pass
+            struct SortableTriangle_t
+            {
+                QPolygonF poly;
+                QColor color;
+                float avgDepth;
+            };
+            QList<SortableTriangle_t> triangleDrawList;
+
+            // ---- ADVANCED MATERIAL MAPPED WIREFRAME & MESH SURFACE RENDERER ----
+            studioloddata_t *pLOD = pHardwareData->m_pLODs;
+
+            if (pLOD && pLOD->m_pMeshData != nullptr)
+            {
+                for (int bodyPart = 0; bodyPart < pStudioHdr->numbodyparts; ++bodyPart)
                 {
-                    uvGridSheet = QImage(texW, texH, QImage::Format_RGB32);
-                    QPainter texPainter(&uvGridSheet);
-                    texPainter.fillRect(uvGridSheet.rect(), Qt::white);
-                    for (int y = 0; y < texH; y += 32)
+                    mstudiobodyparts_t *pBodyPart = pStudioHdr->pBodypart(bodyPart);
+                    if (!pBodyPart || pBodyPart->nummodels <= 0)
+                        continue;
+
+                    mstudiomodel_t *pSubModel = pBodyPart->pModel(0);
+                    if (!pSubModel)
+                        continue;
+
+                    mstudiovertex_t *pVertices = nullptr;
+                    const mstudio_meshvertexdata_t *pMeshVertData = pSubModel->pMesh(0) ? &pSubModel->pMesh(0)->vertexdata : nullptr;
+                    if (pMeshVertData && pMeshVertData->pModelVertexData())
+                        pVertices = (mstudiovertex_t *)pMeshVertData->pModelVertexData()->GetVertexData();
+
+                    if (pVertices != nullptr)
                     {
-                        for (int x = 0; x < texW; x += 32)
+                        short *pSkinRefArray = pStudioHdr->pSkinref(0);
+                        for (int meshIndex = 0; meshIndex < pSubModel->nummeshes; ++meshIndex)
                         {
-                            if (((x / 32) + (y / 32)) % 2 == 0)
+                            mstudiomesh_t *pMesh = pSubModel->pMesh(meshIndex);
+                            if (!pMesh)
+                                continue;
+
+                            studiomeshdata_t *pMeshData = &pLOD->m_pMeshData[pMesh->meshid];
+                            if (!pMeshData || pMeshData->m_NumGroup <= 0 || pMeshData->m_pMeshGroup == nullptr)
+                                continue;
+
+                            // ---- RESOLVE ACCURATE PALETTE SHADING COLOR VIA MATERIAL STRINGS ----
+                            QColor baseColor(145, 150, 160); // Neutral baseline grey
+                            
+                            if (pSkinRefArray && pMesh->material < pStudioHdr->numtextures)
                             {
-                                texPainter.fillRect(x, y, 32, 32, QColor(220, 220, 220));
-                            }
-                            else
-                            {
-                                texPainter.fillRect(x, y, 32, 32, QColor(255, 255, 255));
-                            }
-                        }
-                    }
-                    texPainter.setPen(QPen(Qt::black, 1));
-                    texPainter.drawRect(0, 0, texW - 1, texH - 1);
-                }
-
-                // ---- ADVANCED MATERIAL MAPPED WIREFRAME & MESH SURFACE RENDERER ----
-                studioloddata_t *pLOD = pHardwareData->m_pLODs;
-
-                if (pLOD && pLOD->m_pMeshData != nullptr)
-                {
-                    for (int bodyPart = 0; bodyPart < pStudioHdr->numbodyparts; ++bodyPart)
-                    {
-                        mstudiobodyparts_t *pBodyPart = pStudioHdr->pBodypart(bodyPart);
-                        if (!pBodyPart || pBodyPart->nummodels <= 0)
-                            continue;
-
-                        mstudiomodel_t *pSubModel = pBodyPart->pModel(0);
-                        if (!pSubModel)
-                            continue;
-
-                        mstudiovertex_t *pVertices = nullptr;
-                        const mstudio_meshvertexdata_t *pMeshVertData = pSubModel->pMesh(0) ? &pSubModel->pMesh(0)->vertexdata : nullptr;
-
-                        if (pMeshVertData && pMeshVertData->pModelVertexData())
-                        {
-                            pVertices = (mstudiovertex_t *)pMeshVertData->pModelVertexData()->GetVertexData();
-                        }
-
-                        if (pVertices != nullptr)
-                        {
-                            short *pSkinRefArray = pStudioHdr->pSkinref(0);
-
-                            for (int meshIndex = 0; meshIndex < pSubModel->nummeshes; ++meshIndex)
-                            {
-                                mstudiomesh_t *pMesh = pSubModel->pMesh(meshIndex);
-                                if (!pMesh)
-                                    continue;
-
-                                studiomeshdata_t *pMeshData = &pLOD->m_pMeshData[pMesh->meshid];
-                                if (!pMeshData || pMeshData->m_NumGroup <= 0 || pMeshData->m_pMeshGroup == nullptr)
-                                    continue;
-
-                                // ---- RESOLVE ACCURATE PALETTE SHADING COLOR VIA MATERIAL STRINGS ----
-                                QColor submeshColor(139, 149, 165, 95);
-
-                                if (pSkinRefArray && pMesh->material < pStudioHdr->numtextures && g_pMaterialSystem)
+                                mstudiotexture_t *pTextureTable = pStudioHdr->pTexture(pSkinRefArray[pMesh->material]);
+                                if (pTextureTable && pTextureTable->pszName())
                                 {
-                                    mstudiotexture_t *pTextureTable = pStudioHdr->pTexture(pSkinRefArray[pMesh->material]);
-                                    if (pTextureTable && pTextureTable->pszName())
+                                    QString szMatName = QString(pTextureTable->pszName()).toLower();
+                                    
+                                    // FIX: Catch her true texture sheet names like "alyx_sheet", "vance_body", and "alyx_faceandbody"
+                                    if (szMatName.contains("face") || szMatName.contains("head") || szMatName.contains("skin"))
                                     {
-                                        // FIX: Corrected variable names to use szMatName consistently
-                                        QString szMatName = QString(pTextureTable->pszName()).toLower();
-
-                                        // FIX: Refactored string lookup arrays to correctly intercept "alyx_sheet", "vance_body", etc.
-                                        if (szMatName.contains("face") || szMatName.contains("head") || szMatName.contains("skin") || szMatName.contains("vance"))
-                                        {
-                                            submeshColor = QColor(233, 190, 165, 120); // Accurate warm flesh tones
-                                        }
-                                        else if (szMatName.contains("jacket") || szMatName.contains("coat") || szMatName.contains("body") || szMatName.contains("sheet"))
-                                        {
-                                            submeshColor = QColor(101, 67, 33, 140); // Dark leather brown jacket tones
-                                        }
-                                        else if (szMatName.contains("jean") || szMatName.contains("pant") || szMatName.contains("leg") || szMatName.contains("interior"))
-                                        {
-                                            submeshColor = QColor(58, 79, 102, 140); // Authentic blue jean denim wash
-                                        }
-                                        else if (szMatName.contains("hair"))
-                                        {
-                                            submeshColor = QColor(45, 36, 30, 180); // Dark brunette hair profile
-                                        }
-                                        else if (szMatName.contains("glove") || szMatName.contains("shoe") || szMatName.contains("boot"))
-                                        {
-                                            submeshColor = QColor(35, 35, 35, 200); // Charcoal combat boots
-                                        }
-                                        else if (szMatName.contains("eye"))
-                                        {
-                                            submeshColor = QColor(114, 153, 114, 255); // Green eye irises
-                                        }
-                                        else
-                                        {
-                                            uint hash = qHash(szMatName);
-                                            submeshColor = QColor::fromHsl((hash % 360), 140, 110, 110);
-                                        }
+                                        baseColor = QColor(228, 185, 161); // Clear Skin Flush Tone
+                                    }
+                                    // If the texture represents her combined body sheet, or her leather jacket assets
+                                    else if (szMatName.contains("jacket") || szMatName.contains("coat") || szMatName.contains("vance"))
+                                    {
+                                        baseColor = QColor(112, 78, 54);    // Leather Brown Jacket
+                                    }
+                                    // Catch her lower body denim sheets like "alyx_sheet" or "alyx_interior"
+                                    else if (szMatName.contains("jean") || szMatName.contains("pant") || szMatName.contains("leg") || szMatName.contains("sheet") || szMatName.contains("interior"))
+                                    {
+                                        baseColor = QColor(64, 88, 118);    // Denim Blue Jeans
+                                    }
+                                    else if (szMatName.contains("hair"))
+                                    {
+                                        baseColor = QColor(50, 42, 36);     // Dark Brunette Hair
+                                    }
+                                    else if (szMatName.contains("boot") || szMatName.contains("shoe") || szMatName.contains("glove"))
+                                    {
+                                        baseColor = QColor(42, 42, 42);     // Charcoal Combat Items
+                                    }
+                                    else if (szMatName.contains("eye"))
+                                    {
+                                        baseColor = QColor(120, 160, 120);  // Green Eyes
+                                    }
+                                    else
+                                    {
+                                        // Fallback procedural hashing
+                                        uint hash = qHash(szMatName);
+                                        baseColor = QColor::fromHsl((hash % 360), 130, 120);
                                     }
                                 }
+                            }
 
-                                for (int groupIdx = 0; groupIdx < pMeshData->m_NumGroup; ++groupIdx)
+                            for (int groupIdx = 0; groupIdx < pMeshData->m_NumGroup; ++groupIdx)
+                            {
+                                studiomeshgroup_t *pGroup = &pMeshData->m_pMeshGroup[groupIdx];
+                                if (!pGroup || pGroup->m_pIndices == nullptr || pGroup->m_pGroupIndexToMeshIndex == nullptr)
+                                    continue;
+
+                                unsigned short *pIndices = pGroup->m_pIndices;
+                                int numIndices = 0;
+                                if (pGroup->m_pUniqueTris != nullptr)
                                 {
-                                    studiomeshgroup_t *pGroup = &pMeshData->m_pMeshGroup[groupIdx];
-                                    if (!pGroup || pGroup->m_pIndices == nullptr || pGroup->m_pGroupIndexToMeshIndex == nullptr)
-                                        continue;
+                                    for (int s = 0; s < pGroup->m_NumStrips; ++s)
+                                        numIndices += pGroup->m_pUniqueTris[s] * 3;
+                                }
+                                if (numIndices <= 0)
+                                    continue;
 
-                                    unsigned short *pIndices = pGroup->m_pIndices;
+                                int globalVertexBaseIdx = pSubModel->vertexindex / sizeof(mstudiovertex_t);
 
-                                    int numIndices = 0;
-                                    if (pGroup->m_pUniqueTris != nullptr)
+                                auto SkinVertex = [&](int globalVertIdx) -> Vector
+                                {
+                                    Vector &rawPos = pVertices[globalVertIdx].m_vecPosition;
+                                    mstudioboneweight_t &weights = pVertices[globalVertIdx].m_BoneWeights;
+
+                                    if (weights.numbones == 0)
+                                        return rawPos;
+
+                                    Vector skinnedPos(0, 0, 0);
+                                    for (int b = 0; b < weights.numbones; ++b)
                                     {
-                                        for (int s = 0; s < pGroup->m_NumStrips; ++s)
+                                        int boneIdx = (int)weights.bone[b];
+                                        float weight = weights.weight[b];
+
+                                        if (boneIdx >= 0 && boneIdx < pStudioHdr->numbones)
                                         {
-                                            numIndices += pGroup->m_pUniqueTris[s] * 3;
+                                            Vector localPos, transformed;
+                                            VectorTransform(rawPos, pBoneArray[boneIdx].poseToBone, localPos);
+                                            VectorTransform(localPos, pBoneToWorld[boneIdx], transformed);
+                                            skinnedPos += transformed * weight;
                                         }
                                     }
-                                    if (numIndices <= 0)
+                                    return skinnedPos;
+                                };
+                                for (int idx = 0; idx < numIndices - 2; idx += 3)
+                                {
+                                    int groupVertIdx0 = pGroup->m_pGroupIndexToMeshIndex[pIndices[idx]];
+                                    int groupVertIdx1 = pGroup->m_pGroupIndexToMeshIndex[pIndices[idx + 1]];
+                                    int groupVertIdx2 = pGroup->m_pGroupIndexToMeshIndex[pIndices[idx + 2]];
+                                    int v0 = globalVertexBaseIdx + pMesh->vertexoffset + groupVertIdx0;
+                                    int v1 = globalVertexBaseIdx + pMesh->vertexoffset + groupVertIdx1;
+                                    int v2 = globalVertexBaseIdx + pMesh->vertexoffset + groupVertIdx2;
+                                    Vector pos0 = SkinVertex(v0);
+                                    Vector pos1 = SkinVertex(v1);
+                                    Vector pos2 = SkinVertex(v2);
+                                    // Calculate face normal and light intensity
+                                    Vector edge1 = pos1 - pos0;
+                                    Vector edge2 = pos2 - pos0;
+                                    Vector faceNormal;
+                                    CrossProduct(edge1, edge2, faceNormal);
+                                    faceNormal.NormalizeInPlace();
+                                    float dot = faceNormal.Dot(vecLightDir);
+                                    float lightIntensity = qMax(0.0f, dot) * 0.70f + 0.30f;
+                                    QColor shadedColor(qBound(0, (int)(baseColor.red() * lightIntensity), 255), qBound(0, (int)(baseColor.green() * lightIntensity), 255), qBound(0, (int)(baseColor.blue() * lightIntensity), 255));
+                                    float d0 = 0.0f, d1 = 0.0f, d2 = 0.0f;
+                                    QPointF pt0 = Project3DPointEx(pos0.x, pos0.y, pos0.z, d0);
+                                    QPointF pt1 = Project3DPointEx(pos1.x, pos1.y, pos1.z, d1);
+                                    QPointF pt2 = Project3DPointEx(pos2.x, pos2.y, pos2.z, d2);
+                                    // Backface culling engine
+                                    float crossProduct2D = (pt1.x() - pt0.x()) * (pt2.y() - pt0.y()) - (pt1.y() - pt0.y()) * (pt2.x() - pt0.x());
+                                    if (crossProduct2D < 0.0f)
                                         continue;
-                                    int globalVertexBaseIdx = pSubModel->vertexindex / sizeof(mstudiovertex_t);
-                                    auto SkinVertex = [&](int globalVertIdx) -> Vector
-                                    {Vector &rawPos = pVertices[globalVertIdx].m_vecPosition;mstudioboneweight_t &weights = pVertices[globalVertIdx].m_BoneWeights;if (weights.numbones == 0) return rawPos;Vector skinnedPos(0, 0, 0);for (int b = 0; b < weights.numbones; ++b){int boneIdx = weights.bone[b];float weight = weights.weight[b];if (boneIdx >= 0 && boneIdx < pStudioHdr->numbones){Vector localPos;VectorTransform(rawPos, pBoneArray[boneIdx].poseToBone, localPos);Vector transformed;VectorTransform(localPos, pBoneToWorld[boneIdx], transformed);skinnedPos += transformed * weight;}}return skinnedPos; };
-                                    for (int idx = 0; idx < numIndices - 2; idx += 3)
-                                    {
-                                        int groupVertIdx0 = pGroup->m_pGroupIndexToMeshIndex[pIndices[idx]];
-                                        int groupVertIdx1 = pGroup->m_pGroupIndexToMeshIndex[pIndices[idx + 1]];
-                                        int groupVertIdx2 = pGroup->m_pGroupIndexToMeshIndex[pIndices[idx + 2]];
-                                        int v0 = globalVertexBaseIdx + pMesh->vertexoffset + groupVertIdx0;
-                                        int v1 = globalVertexBaseIdx + pMesh->vertexoffset + groupVertIdx1;
-                                        int v2 = globalVertexBaseIdx + pMesh->vertexoffset + groupVertIdx2;
-                                        Vector pos0 = SkinVertex(v0);
-                                        Vector pos1 = SkinVertex(v1);
-                                        Vector pos2 = SkinVertex(v2);
-                                        QPointF pt0 = Project3DPoint(pos0.x, pos0.y, pos0.z);
-                                        QPointF pt1 = Project3DPoint(pos1.x, pos1.y, pos1.z);
-                                        QPointF pt2 = Project3DPoint(pos2.x, pos2.y, pos2.z);
-                                        Vector2D &uv0 = pVertices[v0].m_vecTexCoord;
-                                        Vector2D &uv1 = pVertices[v1].m_vecTexCoord;
-                                        Vector2D &uv2 = pVertices[v2].m_vecTexCoord;
-                                        float x0 = uv0.x * texW;
-                                        float y0 = (1.0f - uv0.y) * texH;
-                                        float x1 = uv1.x * texW;
-                                        float y1 = (1.0f - uv1.y) * texH;
-                                        float x2 = uv2.x * texW;
-                                        float y2 = (1.0f - uv2.y) * texH;
-                                        float det = (x0 - x2) * (y1 - y2) - (x1 - x2) * (y0 - y2);
-                                        if (qAbs(det) > 0.0001f)
-                                        {
-                                            float idet = 1.0f / det;
-                                            float m11 = ((pt0.x() - pt2.x()) * (y1 - y2) - (pt1.x() - pt2.x()) * (y0 - y2)) * idet;
-                                            float m12 = ((pt1.x() - pt2.x()) * (x0 - x2) - (pt0.x() - pt2.x()) * (x1 - x2)) * idet;
-                                            float dx = pt2.x() - m11 * x2 - m12 * y2;
-                                            float m21 = ((pt0.y() - pt2.y()) * (y1 - y2) - (pt1.y() - pt2.y()) * (y0 - y2)) * idet;
-                                            float m22 = ((pt1.y() - pt2.y()) * (x0 - x2) - (pt0.y() - pt2.y()) * (x1 - x2)) * idet;
-                                            float dy = pt2.y() - m21 * x2 - m22 * y2;
-                                            QTransform affineTransform(m11, m21, 0, m12, m22, 0, dx, dy, 1);
-                                            painter.save();
-                                            painter.setTransform(affineTransform, true);
-                                            QPolygonF srcPoly;
-                                            srcPoly << QPointF(x0, y0) << QPointF(x1, y1) << QPointF(x2, y2);
-                                            painter.setPen(Qt::NoPen);
-                                            painter.setBrush(QBrush(uvGridSheet));
-                                            painter.drawPolygon(srcPoly);
-                                            painter.setBrush(submeshColor);
-                                            painter.drawPolygon(srcPoly);
-                                            painter.restore();
-                                        }
-                                        painter.setPen(QPen(QColor(43, 45, 66, 30), 0.5f, Qt::SolidLine));
-                                        painter.setBrush(Qt::NoBrush);
-                                        QPolygonF wireTriangle;
-                                        wireTriangle << pt0 << pt1 << pt2;
-                                        painter.drawPolygon(wireTriangle);
-                                    }
+                                    SortableTriangle_t tri;
+                                    tri.poly << pt0 << pt1 << pt2;
+                                    tri.color = shadedColor;
+                                    tri.avgDepth = (d0 + d1 + d2) / 3.0f;
+                                    triangleDrawList.append(tri);
                                 }
                             }
                         }
                     }
                 }
-                // ---- TRADITIONAL BONE SKELETON TREE OVERLAY GENERATOR ----
-                if (pBoneArray != nullptr)
+            }
+            // Execute Depth Sorting
+            std::sort(triangleDrawList.begin(), triangleDrawList.end(), [](const SortableTriangle_t &a, const SortableTriangle_t &b)
+                      { return a.avgDepth < b.avgDepth; });
+            // Draw the sorted polygons
+            for (const auto &tri : triangleDrawList)
+            {
+                painter.setPen(QPen(tri.color.darker(110), 0.3f, Qt::SolidLine));
+                painter.setBrush(tri.color);
+                painter.drawPolygon(tri.poly);
+            }
+            // ---- OVERLAY SKELETON TREE NODES ----
+            for (int i = 0; i < pStudioHdr->numbones; ++i)
+            {
+                float dummyD = 0.0f;
+                // FIX: Explicitly applied matrix subscripts [row][col] to extract the position coordinates from column 3
+                float bX1 = pBoneToWorld[i].m_flMatVal[0][3];
+                float bY1 = pBoneToWorld[i].m_flMatVal[1][3];
+                float bZ1 = pBoneToWorld[i].m_flMatVal[2][3];
+                QPointF p1 = Project3DPointEx(bX1, bY1, bZ1, dummyD);
+
+                painter.setBrush(QColor(241, 91, 181, 140)); 
+                painter.setPen(Qt::NoPen); 
+                painter.drawEllipse(p1, 2, 2);
+
+                int parentIdx = pBoneArray[i].parent;
+                if (parentIdx >= 0 && parentIdx < pStudioHdr->numbones)
                 {
-                    for (int i = 0; i < pStudioHdr->numbones; ++i)
-                    {
-                        // FIX: Explicitly applied multidimensional bracket tracking indices to match float array declarations [row][col]
-                        float bX1 = pBoneToWorld[i].m_flMatVal[0][3];
-                        float bY1 = pBoneToWorld[i].m_flMatVal[1][3];
-                        float bZ1 = pBoneToWorld[i].m_flMatVal[2][3];
-                        QPointF p1 = Project3DPoint(bX1, bY1, bZ1);
-                        painter.setBrush(QColor(241, 91, 181));
-                        painter.setPen(Qt::NoPen);
-                        painter.drawEllipse(p1, 3, 3);
-                        int parentIdx = pBoneArray[i].parent;
-                        if (parentIdx >= 0 && parentIdx < pStudioHdr->numbones)
-                        {
-                            // FIX: Corrected double subscript references on parent matrices
-                            float bX2 = pBoneToWorld[parentIdx].m_flMatVal[0][3];
-                            float bY2 = pBoneToWorld[parentIdx].m_flMatVal[1][3];
-                            float bZ2 = pBoneToWorld[parentIdx].m_flMatVal[2][3];
-                            QPointF p2 = Project3DPoint(bX2, bY2, bZ2);
-                            painter.setPen(QPen(QColor(241, 91, 181, 180), 1.5f, Qt::SolidLine));
-                            painter.drawLine(p1, p2);
-                        }
-                    }
+                    // FIX: Explicitly applied parent matrix subscripts to resolve row layouts safely from column 3
+                    float bX2 = pBoneToWorld[parentIdx].m_flMatVal[0][3];
+                    float bY2 = pBoneToWorld[parentIdx].m_flMatVal[1][3];
+                    float bZ2 = pBoneToWorld[parentIdx].m_flMatVal[2][3];
+                    QPointF p2 = Project3DPointEx(bX2, bY2, bZ2, dummyD);
+                    
+                    painter.setPen(QPen(QColor(241, 91, 181, 50), 1.0f, Qt::SolidLine)); 
+                    painter.drawLine(p1, p2);
                 }
             }
         }
@@ -493,18 +487,6 @@ void QModelView3::paintEvent(QPaintEvent *event)
     painter.setPen(Qt::white);
     painter.setFont(QFont("Arial", 9, QFont::Bold));
     painter.drawText(15, 25, "ModelView: WORKSTATION COMPONENT LINK ALIVE");
-    if (m_hCurrentModel != 0xFFFF && g_pMDLCache)
-    {
-        studiohdr_t *pStudioHdr = g_pMDLCache->GetStudioHdr(m_hCurrentModel);
-        if (pStudioHdr)
-        {
-            painter.setFont(QFont("Courier New", 9));
-            painter.setPen(QColor(200, 214, 229));
-            painter.drawText(15, 45, QString("Model Path : %1").arg(m_szCurrentModelPath));
-            painter.drawText(15, 60, QString("BONE LENGTH: %1 layers solved").arg(pStudioHdr->numbones));
-            painter.drawText(15, 75, QString("Sequences  : %1 clips present").arg(pStudioHdr->numlocalseq));
-        }
-    }
 }
 
 void QModelView3::mousePressEvent(QMouseEvent *event) { m_ptLastMousePosition = event->pos(); }
