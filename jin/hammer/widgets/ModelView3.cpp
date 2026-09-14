@@ -18,15 +18,12 @@ extern IMDLCache *g_pMDLCache;
 QModelView3::QModelView3(QWidget *parent)
     : QWidget(parent), m_flAnimationCycle(0.0f), m_hCurrentModel(0xFFFF), m_szCurrentModelPath(""), m_flZoomScale(1.0f), m_pOffscreenRenderTarget(nullptr), m_bIsRenderBufferBlank(true)
 {
-    // Using integer QPoint layout initialization to match your header declaration file
     m_ptRotationAngle = QPoint(20, -45);
 
-    // Throttled heartbeat clock loop to yield CPU processing ticks under WSL2 software states
     m_pAnimationFrameTimer = new QTimer(this);
     connect(m_pAnimationFrameTimer, &QTimer::timeout, this, [=]()
             {
         if (m_hCurrentModel != 0xFFFF) {
-            // Unroll the animation timeline sequence smoothly frame by frame
             m_flAnimationCycle += 0.015f; 
             if (m_flAnimationCycle > 1.0f) m_flAnimationCycle -= 1.0f;
             this->update(); 
@@ -59,7 +56,10 @@ void QModelView3::LoadModelFile(const QString &szPath)
 void QModelView3::RenderEngineFrame()
 {
     if (!g_pMaterialSystem || !g_pStudioRender || !g_pMDLCache || !isVisible())
+    {
+        m_bIsRenderBufferBlank = true;
         return;
+    }
 
     int w = qMax(64, rect().width());
     int h = qMax(64, rect().height());
@@ -80,8 +80,13 @@ void QModelView3::RenderEngineFrame()
         m_RenderOutputImage = QImage(w, h, QImage::Format_RGB32);
     }
 
+    m_RenderOutputImage.fill(QColor(43, 45, 66));
+
     if (!m_pOffscreenRenderTarget || !m_pOffscreenRenderTarget->IsRenderTarget())
+    {
+        m_bIsRenderBufferBlank = true;
         return;
+    }
 
     g_pMaterialSystem->BeginFrame(0.0f);
     {
@@ -100,7 +105,7 @@ void QModelView3::RenderEngineFrame()
 
                 if (pStudioHdr && pHardwareData)
                 {
-                    pRenderContext->SetAmbientLight(0.4f, 0.4f, 0.4f);
+                    pRenderContext->SetAmbientLight(1.0f, 1.0f, 1.0f);
 
                     pRenderContext->MatrixMode(MATERIAL_PROJECTION);
                     pRenderContext->PushMatrix();
@@ -110,7 +115,8 @@ void QModelView3::RenderEngineFrame()
                     pRenderContext->MatrixMode(MATERIAL_VIEW);
                     pRenderContext->PushMatrix();
                     pRenderContext->LoadIdentity();
-                    pRenderContext->Translate(0.0f, -30.0f, -90.0f * m_flZoomScale);
+                    // Frame zoom translation adjustments to capture the model bounds perfectly
+                    pRenderContext->Translate(0.0f, -30.0f, -65.0f * m_flZoomScale);
                     pRenderContext->Rotate(m_ptRotationAngle.x(), 1.0f, 0.0f, 0.0f);
                     pRenderContext->Rotate(m_ptRotationAngle.y(), 0.0f, 1.0f, 0.0f);
 
@@ -118,32 +124,16 @@ void QModelView3::RenderEngineFrame()
                     pRenderContext->PushMatrix();
                     pRenderContext->LoadIdentity();
 
-                    // SW_HAMMER_TOOL 2D SUBSCRIPT MATRIX ALIGNMENT:
-                    // Explicitly map coordinates to index 3 (translational column) across rows 0, 1, and 2.
-                    // This resolves the matrix float assignment compile error completely.
                     matrix3x4_t pBoneToWorld[MAXSTUDIOBONES];
                     for (int i = 0; i < pStudioHdr->numbones; i++)
                     {
                         SetIdentityMatrix(pBoneToWorld[i]);
-                        mstudiobone_t *pBone = (mstudiobone_t *)((byte *)pStudioHdr + pStudioHdr->boneindex) + i;
-
-                        pBoneToWorld[i][0][3] = pBone->pos.x;
-                        pBoneToWorld[i][1][3] = pBone->pos.y;
-                        pBoneToWorld[i][2][3] = pBone->pos.z;
                     }
 
                     g_pStudioRender->LockBoneMatrices(pStudioHdr->numbones);
                     g_pStudioRender->UnlockBoneMatrices();
 
                     pRenderContext->LoadIdentity();
-
-                    static IMaterial *pToolMaterial = nullptr;
-                    if (!pToolMaterial)
-                    {
-                        pToolMaterial = g_pMaterialSystem->FindMaterial("debug/debugvertexcolor", TEXTURE_GROUP_OTHER);
-                    }
-                    if (pToolMaterial)
-                        pRenderContext->Bind(pToolMaterial);
 
                     DrawModelInfo_t modelInfo;
                     modelInfo.m_pStudioHdr = pStudioHdr;
@@ -154,7 +144,12 @@ void QModelView3::RenderEngineFrame()
 
                     ::StudioRenderConfig_t studioCfg;
                     memset(&studioCfg, 0, sizeof(::StudioRenderConfig_t));
+                    studioCfg.drawEntities = 1;
+                    studioCfg.bSoftwareSkin = false;
+                    studioCfg.bSoftwareLighting = false;
                     g_pStudioRender->UpdateConfig(studioCfg);
+
+                    g_pStudioRender->ForcedMaterialOverride(nullptr);
 
                     g_pStudioRender->DrawModel(nullptr, modelInfo, pBoneToWorld, NULL, NULL, Vector(0, 0, 0), 0);
 
@@ -166,11 +161,24 @@ void QModelView3::RenderEngineFrame()
                     pRenderContext->PopMatrix();
                 }
             }
-            unsigned char *pDstBits = m_RenderOutputImage.bits();
+
+            g_pMaterialSystem->Flush(true);
+
+            QImage engineBuffer(w, h, QImage::Format_ARGB32);
+            engineBuffer.fill(0);
+
+            unsigned char *pDstBits = engineBuffer.bits();
             pRenderContext->ReadPixels(0, 0, w, h, pDstBits, IMAGE_FORMAT_ARGB8888);
 
-            // SW_HAMMER_TOOL SAFE SHIELD: Maintain pure software wireframe stability for headless WSL2 runs
-            m_bIsRenderBufferBlank = true;
+            if (engineBuffer.pixelColor(0, 0).alpha() == 0)
+            {
+                m_bIsRenderBufferBlank = true;
+            }
+            else
+            {
+                m_RenderOutputImage = engineBuffer.convertToFormat(QImage::Format_RGB32);
+                m_bIsRenderBufferBlank = false;
+            }
 
             pRenderContext->PopRenderTargetAndViewport();
         }
@@ -180,6 +188,7 @@ void QModelView3::RenderEngineFrame()
 
 void QModelView3::paintEvent(QPaintEvent *event)
 {
+    // Execute frame setup triggers
     RenderEngineFrame();
 
     QPainter painter(this);
@@ -188,51 +197,148 @@ void QModelView3::paintEvent(QPaintEvent *event)
     int w = rect().width();
     int h = rect().height();
 
+    // 1. Render engine GPU output frame if valid
     if (!m_bIsRenderBufferBlank && !m_RenderOutputImage.isNull())
     {
         painter.drawImage(0, 0, m_RenderOutputImage);
     }
     else
     {
+        // 2. Headless Fallback Viewer Layer
         painter.fillRect(rect(), QColor(43, 45, 66));
 
         if (m_hCurrentModel != 0xFFFF && g_pMDLCache)
         {
             studiohdr_t *pStudioHdr = g_pMDLCache->GetStudioHdr(m_hCurrentModel);
-            if (pStudioHdr && pStudioHdr->numbones > 0)
+            studiohwdata_t *pHardwareData = g_pMDLCache->GetHardwareData(m_hCurrentModel);
+
+            if (pStudioHdr && pHardwareData && pHardwareData->m_NumLODs > 0 && pHardwareData->m_pLODs != nullptr)
             {
                 float radX = qDegreesToRadians((float)m_ptRotationAngle.x());
                 float radY = qDegreesToRadians((float)m_ptRotationAngle.y());
 
-                auto Project3DBone = [&](float x, float y, float z) -> QPointF
+                // Projection matrix lambda transformations
+                auto Project3DPoint = [&](float x, float y, float z) -> QPointF
                 {
                     float x1 = x;
                     float y1 = y * qCos(radX) - z * qSin(radX);
                     float z1 = y * qSin(radX) + z * qCos(radX);
                     float x2 = x1 * qCos(radY) + z1 * qSin(radY);
 
-                    float sX = (w / 2.0f) + (x2 * m_flZoomScale * 0.4f);
-                    float sY = (h / 2.0f) + (y1 * m_flZoomScale * 0.4f);
+                    // Centering scale matched to unskinned reference model metrics
+                    float sX = (w / 2.0f) + (x2 * m_flZoomScale * 1.8f); 
+                    float sY = (h / 2.0f) + (y1 * m_flZoomScale * 1.8f) + 40.0f; 
                     return QPointF(sX, sY);
                 };
 
-                mstudiobone_t *pBoneArray = (mstudiobone_t *)((byte *)pStudioHdr + pStudioHdr->boneindex);
-                for (int i = 0; i < pStudioHdr->numbones; ++i)
+                // ---- TRUE 3D LINKER-SAFE SOFTWARE MODEL WIREFRAME MESH GENERATOR ----
+                studioloddata_t *pLOD = &pHardwareData->m_pLODs[0];
+                
+                if (pLOD && pLOD->m_pMeshData != nullptr)
                 {
-                    mstudiobone_t *pBone = &pBoneArray[i];
-                    QPointF p1 = Project3DBone(pBone->pos.x, pBone->pos.y, pBone->pos.z);
+                    painter.setBrush(Qt::NoBrush);
+                    painter.setPen(QPen(QColor(0, 180, 216, 75), 1.0f, Qt::SolidLine)); // Clear semi-translucent cyan outline
 
-                    painter.setBrush(QColor(241, 91, 181));
-                    painter.setPen(Qt::NoPen);
-                    painter.drawEllipse(p1, 3, 3);
-
-                    if (pBone->parent >= 0 && pBone->parent < pStudioHdr->numbones)
+                    for (int bodyPart = 0; bodyPart < pStudioHdr->numbodyparts; ++bodyPart)
                     {
-                        mstudiobone_t *pParent = &pBoneArray[pBone->parent];
-                        QPointF p2 = Project3DBone(pParent->pos.x, pParent->pos.y, pParent->pos.z);
+                        mstudiobodyparts_t *pBodyPart = pStudioHdr->pBodypart(bodyPart);
+                        if (!pBodyPart || pBodyPart->nummodels <= 0) continue;
 
-                        painter.setPen(QPen(QColor(0, 180, 216), 1.5f, Qt::SolidLine));
-                        painter.drawLine(p1, p2);
+                        mstudiomodel_t *pSubModel = pBodyPart->pModel(0);
+                        if (!pSubModel) continue;
+
+                        for (int meshIndex = 0; meshIndex < pSubModel->nummeshes; ++meshIndex)
+                        {
+                            mstudiomesh_t *pMesh = pSubModel->pMesh(meshIndex);
+                            if (!pMesh) continue;
+
+                            studiomeshdata_t *pMeshData = &pLOD->m_pMeshData[pMesh->meshid];
+                            if (!pMeshData || pMeshData->m_NumGroup <= 0 || pMeshData->m_pMeshGroup == nullptr) continue;
+
+                            // FIX: Extract the raw unskinned vertex data stream array address 
+                            // directly from the internal submesh structures to bypass the unlinked symbol.
+                            mstudiovertex_t *pVertices = nullptr;
+                            const mstudio_modelvertexdata_t *pModelVertData = pMesh->vertexdata.pModelVertexData();
+                            if (pModelVertData && pModelVertData->GetVertexData() != nullptr)
+                            {
+                                pVertices = (mstudiovertex_t *)pModelVertData->GetVertexData();
+                            }
+
+                            if (pVertices != nullptr)
+                            {
+                                for (int groupIdx = 0; groupIdx < pMeshData->m_NumGroup; ++groupIdx)
+                                {
+                                    studiomeshgroup_t *pGroup = &pMeshData->m_pMeshGroup[groupIdx];
+                                    if (!pGroup || pGroup->m_pIndices == nullptr || pGroup->m_pGroupIndexToMeshIndex == nullptr) continue;
+
+                                    unsigned short *pIndices = pGroup->m_pIndices;
+                                    
+                                    int numIndices = 0;
+                                    if (pGroup->m_pUniqueTris != nullptr)
+                                    {
+                                        for (int s = 0; s < pGroup->m_NumStrips; ++s)
+                                        {
+                                            numIndices += pGroup->m_pUniqueTris[s] * 3;
+                                        }
+                                    }
+
+                                    if (numIndices <= 0) continue;
+
+                                    // Safely map index buffers to vertex positions
+                                    int globalVertexBaseIdx = pSubModel->vertexindex / sizeof(mstudiovertex_t);
+
+                                    for (int idx = 0; idx < numIndices - 2; idx += 3)
+                                    {
+                                        int groupVertIdx0 = pGroup->m_pGroupIndexToMeshIndex[pIndices[idx]];
+                                        int groupVertIdx1 = pGroup->m_pGroupIndexToMeshIndex[pIndices[idx + 1]];
+                                        int groupVertIdx2 = pGroup->m_pGroupIndexToMeshIndex[pIndices[idx + 2]];
+
+                                        int meshVertIdx0 = pMesh->vertexoffset + groupVertIdx0;
+                                        int meshVertIdx1 = pMesh->vertexoffset + groupVertIdx1;
+                                        int meshVertIdx2 = pMesh->vertexoffset + groupVertIdx2;
+
+                                        int v0 = globalVertexBaseIdx + meshVertIdx0;
+                                        int v1 = globalVertexBaseIdx + meshVertIdx1;
+                                        int v2 = globalVertexBaseIdx + meshVertIdx2;
+
+                                        Vector &pos0 = pVertices[v0].m_vecPosition;
+                                        Vector &pos1 = pVertices[v1].m_vecPosition;
+                                        Vector &pos2 = pVertices[v2].m_vecPosition;
+
+                                        QPolygonF wireTriangle;
+                                        wireTriangle << Project3DPoint(pos0.x, pos0.y, pos0.z)
+                                                     << Project3DPoint(pos1.x, pos1.y, pos1.z)
+                                                     << Project3DPoint(pos2.x, pos2.y, pos2.z);
+
+                                        painter.drawPolygon(wireTriangle);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // ---- TRADITIONAL BONE SKELETON TREE OVERLAY GENERATOR ----
+                mstudiobone_t *pBoneArray = (mstudiobone_t *)((byte *)pStudioHdr + pStudioHdr->boneindex);
+                if (pBoneArray != nullptr)
+                {
+                    for (int i = 0; i < pStudioHdr->numbones; ++i)
+                    {
+                        mstudiobone_t *pBone = &pBoneArray[i];
+                        QPointF p1 = Project3DPoint(pBone->pos.x, pBone->pos.y, pBone->pos.z);
+
+                        painter.setBrush(QColor(241, 91, 181)); 
+                        painter.setPen(Qt::NoPen);
+                        painter.drawEllipse(p1, 3, 3);
+
+                        if (pBone->parent >= 0 && pBone->parent < pStudioHdr->numbones)
+                        {
+                            mstudiobone_t *pParent = &pBoneArray[pBone->parent];
+                            QPointF p2 = Project3DPoint(pParent->pos.x, pParent->pos.y, pParent->pos.z);
+
+                            painter.setPen(QPen(QColor(241, 91, 181, 180), 1.5f, Qt::SolidLine));
+                            painter.drawLine(p1, p2);
+                        }
                     }
                 }
             }
@@ -252,11 +358,12 @@ void QModelView3::paintEvent(QPaintEvent *event)
             painter.setFont(QFont("Courier New", 9));
             painter.setPen(QColor(200, 214, 229));
             painter.drawText(15, 45, QString("Model Path : %1").arg(m_szCurrentModelPath));
-            painter.drawText(15, 60, QString("Bones      : %1 layers solved").arg(pStudioHdr->numbones));
+            painter.drawText(15, 60, QString("BONE LENGTH: %1 layers solved").arg(pStudioHdr->numbones));
             painter.drawText(15, 75, QString("Sequences  : %1 clips present").arg(pStudioHdr->numlocalseq));
         }
     }
 }
+
 void QModelView3::mousePressEvent(QMouseEvent *event) { m_ptLastMousePosition = event->pos(); }
 void QModelView3::mouseMoveEvent(QMouseEvent *event)
 {
