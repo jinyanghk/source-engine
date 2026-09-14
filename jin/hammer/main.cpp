@@ -32,9 +32,7 @@ IMDLCache *g_pMDLCache;
 
 #if defined(USE_SDL)
 #include "appframework/ilaunchermgr.h"
-//ILauncherMgr *g_pLauncherMgr = NULL;	// set in CMaterialSystem::Connect
 
-// Forward declare the class used by the return type
 class GLMDisplayDB;
 struct CShowPixelsParams;
 struct CStackCrawlParams;
@@ -42,18 +40,25 @@ struct SDL_Cursor;
 
 class CDummyLauncherMgr : public ILauncherMgr
 {
+private:
+    void* m_pActiveWindowRef;
+    void* m_pActiveGLContext;
+
 public:
-    // Core crash fix: Return an empty data block instead of NULL
+    CDummyLauncherMgr() : m_pActiveWindowRef(nullptr), m_pActiveGLContext(nullptr) {}
+
+    // Method to dynamically assign window pointers from the UI widgets
+    void SetActiveWindowRef(void* pWindowRef) { m_pActiveWindowRef = pWindowRef; }
+    void SetActiveGLContext(void* pContext) { m_pActiveGLContext = pContext; }
+
     virtual GLMDisplayDB* GetDisplayDB() override 
     { 
         static char dummyDisplayDB = {0}; 
         return reinterpret_cast<GLMDisplayDB*>(&dummyDisplayDB); 
     }
 
-    // Fixed methods
     virtual bool CreateGameWindow( const char *pTitle, bool bWindowed, int nWidth, int nHeight ) override { return true; }
 
-    // Pure virtual stubs required to make the class instantiable
     virtual bool Connect( CreateInterfaceFn factory ) override { return true; }
     virtual void Disconnect() override {}
     virtual void *QueryInterface( const char *pInterfaceName ) override { return nullptr; }
@@ -75,18 +80,33 @@ public:
     virtual void GetNativeDisplayInfo( int nDisplay, uint &nWidth, uint &nHeight, uint &nRefreshHz ) override { nWidth = 1920; nHeight = 1080; nRefreshHz = 60; }
     virtual void RenderedSize( uint &width, uint &height, bool set ) override {}
     virtual void DisplayedSize( uint &width, uint &height) override {}
-    virtual PseudoGLContextPtr GetMainContext() override { return nullptr; }
-    virtual PseudoGLContextPtr GetGLContextForWindow( void* windowref ) override { return nullptr; }
-    virtual PseudoGLContextPtr CreateExtraContext() override { return nullptr; }
+    
+    // Return mock context allocations instead of nullptr to validate engine render context updates
+    virtual PseudoGLContextPtr GetMainContext() override 
+    { 
+        return m_pActiveGLContext ? (PseudoGLContextPtr)m_pActiveGLContext : (PseudoGLContextPtr)0xDEADBEEF; 
+    }
+    
+    virtual PseudoGLContextPtr GetGLContextForWindow( void* windowref ) override 
+    { 
+        return m_pActiveGLContext ? (PseudoGLContextPtr)m_pActiveGLContext : (PseudoGLContextPtr)0xDEADBEEF; 
+    }
+    
+    virtual PseudoGLContextPtr CreateExtraContext() override { return (PseudoGLContextPtr)0xDEADBEEF; }
     virtual void DeleteContext( PseudoGLContextPtr hContext ) override {}
     virtual bool MakeContextCurrent( PseudoGLContextPtr hContext ) override { return true; }
     virtual void GetDesiredPixelFormatAttribsAndRendererInfo( uint **ptrOut, uint *countOut, GLMRendererInfoFields *rendInfoOut ) override {}
 
-    // Newly added remaining stubs from the compiler log
     virtual void ShowPixels( CShowPixelsParams *params ) override {}
     virtual void GetStackCrawl( CStackCrawlParams *params ) override {}
     virtual void WaitUntilUserInput( int msSleepTime ) override {}
-    virtual void *GetWindowRef() override { return nullptr; }
+    
+    // Expose the active window reference dynamically
+    virtual void *GetWindowRef() override 
+    { 
+        return m_pActiveWindowRef; 
+    }
+    
     virtual void SetMouseVisible( bool bState ) override {}
     virtual void SetMouseCursor( SDL_Cursor *hCursor ) override {}
     virtual void SetForbidMouseGrab( bool bForbidMouseGrab ) override {}
@@ -95,23 +115,18 @@ public:
     virtual double GetPrevGLSwapWindowTime() override { return 0.0; }
 };
 
-static CDummyLauncherMgr s_DummyLauncherMgr;
+// Global instance to allow interface pointer retrieval across compilation units
+CDummyLauncherMgr s_DummyLauncherMgr;
+#endif
 
-// This factory function intercepts requests for SDLMgrInterface001
-void* HammerExtraFactory( const char *pInterfaceName, int *pReturnCode )
+// SW_HAMMER_TOOL: Standalone utility function to update the window binding reference
+extern "C" void Hammer_SetLauncherWindowRef(void* pWindowRef)
 {
-    if ( strcmp( pInterfaceName, "SDLMgrInterface001" ) == 0 )
-    {
-        if ( pReturnCode ) *pReturnCode = 0; // IFACE_OK
-        return &s_DummyLauncherMgr;
-    }
-    if ( pReturnCode ) *pReturnCode = 1; // IFACE_FAILED
-    return nullptr;
+#if defined(USE_SDL)
+    s_DummyLauncherMgr.SetActiveWindowRef(pWindowRef);
+#endif
 }
 
-// This macro registers your dummy instance directly to the engine's local CreateInterface factory
-//EXPOSE_SINGLE_INTERFACE_GLOBALVAR( CDummyLauncherMgr, ILauncherMgr, "SDLMgrInterface001", s_DummyLauncherMgr );
-#endif
 
 //-----------------------------------------------------------------------------
 // The application object

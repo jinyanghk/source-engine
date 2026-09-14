@@ -53,6 +53,9 @@ void QModelView3::LoadModelFile(const QString &szPath)
     this->update();
 }
 
+// SW_HAMMER_TOOL: Declare the external setter utility function
+extern "C" void Hammer_SetLauncherWindowRef(void *pWindowRef);
+
 void QModelView3::RenderEngineFrame()
 {
     if (!g_pMaterialSystem || !g_pStudioRender || !g_pMDLCache || !isVisible())
@@ -60,6 +63,9 @@ void QModelView3::RenderEngineFrame()
         m_bIsRenderBufferBlank = true;
         return;
     }
+
+    // Pass your Qt widget's window handle down through the engine launcher managers
+    Hammer_SetLauncherWindowRef(reinterpret_cast<void *>(this->winId()));
 
     int w = qMax(64, rect().width());
     int h = qMax(64, rect().height());
@@ -225,54 +231,81 @@ void QModelView3::paintEvent(QPaintEvent *event)
                     float z1 = y * qSin(radX) + z * qCos(radX);
                     float x2 = x1 * qCos(radY) + z1 * qSin(radY);
 
-                    // Centering scale matched to unskinned reference model metrics
-                    float sX = (w / 2.0f) + (x2 * m_flZoomScale * 1.8f); 
-                    float sY = (h / 2.0f) + (y1 * m_flZoomScale * 1.8f) + 40.0f; 
+                    // Calibrated centering scale matching unskinned metrics
+                    float sX = (w / 2.0f) + (x2 * m_flZoomScale * 1.8f);
+                    float sY = (h / 2.0f) + (y1 * m_flZoomScale * 1.8f) + 40.0f;
                     return QPointF(sX, sY);
                 };
 
-                // ---- TRUE 3D LINKER-SAFE SOFTWARE MODEL WIREFRAME MESH GENERATOR ----
+                // ---- RESOLVE ACCURATE SKELETAL HIERARCHY MATRICES ----
+                matrix3x4_t pBoneToWorld[MAXSTUDIOBONES];
+                mstudiobone_t *pBoneArray = (mstudiobone_t *)((byte *)pStudioHdr + pStudioHdr->boneindex);
+
+                if (pBoneArray != nullptr)
+                {
+                    for (int i = 0; i < pStudioHdr->numbones; i++)
+                    {
+                        matrix3x4_t bonematrix;
+                        QuaternionMatrix(pBoneArray[i].quat, pBoneArray[i].pos, bonematrix);
+
+                        int parentIdx = pBoneArray[i].parent;
+                        if (parentIdx == -1)
+                        {
+                            MatrixCopy(bonematrix, pBoneToWorld[i]);
+                        }
+                        else if (parentIdx >= 0 && parentIdx < pStudioHdr->numbones)
+                        {
+                            ConcatTransforms(pBoneToWorld[parentIdx], bonematrix, pBoneToWorld[i]);
+                        }
+                    }
+                }
+
+                // ---- TRUE 3D SOFTWARE SKINNING WIREFRAME MESH GENERATOR ----
                 studioloddata_t *pLOD = &pHardwareData->m_pLODs[0];
-                
+
                 if (pLOD && pLOD->m_pMeshData != nullptr)
                 {
                     painter.setBrush(Qt::NoBrush);
-                    painter.setPen(QPen(QColor(0, 180, 216, 75), 1.0f, Qt::SolidLine)); // Clear semi-translucent cyan outline
+                    painter.setPen(QPen(QColor(0, 180, 216, 65), 1.0f, Qt::SolidLine)); // Translucent Cyan outline
 
                     for (int bodyPart = 0; bodyPart < pStudioHdr->numbodyparts; ++bodyPart)
                     {
                         mstudiobodyparts_t *pBodyPart = pStudioHdr->pBodypart(bodyPart);
-                        if (!pBodyPart || pBodyPart->nummodels <= 0) continue;
+                        if (!pBodyPart || pBodyPart->nummodels <= 0)
+                            continue;
 
                         mstudiomodel_t *pSubModel = pBodyPart->pModel(0);
-                        if (!pSubModel) continue;
+                        if (!pSubModel)
+                            continue;
 
-                        for (int meshIndex = 0; meshIndex < pSubModel->nummeshes; ++meshIndex)
+                        mstudiovertex_t *pVertices = nullptr;
+                        const mstudio_meshvertexdata_t *pMeshVertData = pSubModel->pMesh(0) ? &pSubModel->pMesh(0)->vertexdata : nullptr;
+
+                        if (pMeshVertData && pMeshVertData->pModelVertexData())
                         {
-                            mstudiomesh_t *pMesh = pSubModel->pMesh(meshIndex);
-                            if (!pMesh) continue;
+                            pVertices = (mstudiovertex_t *)pMeshVertData->pModelVertexData()->GetVertexData();
+                        }
 
-                            studiomeshdata_t *pMeshData = &pLOD->m_pMeshData[pMesh->meshid];
-                            if (!pMeshData || pMeshData->m_NumGroup <= 0 || pMeshData->m_pMeshGroup == nullptr) continue;
-
-                            // FIX: Extract the raw unskinned vertex data stream array address 
-                            // directly from the internal submesh structures to bypass the unlinked symbol.
-                            mstudiovertex_t *pVertices = nullptr;
-                            const mstudio_modelvertexdata_t *pModelVertData = pMesh->vertexdata.pModelVertexData();
-                            if (pModelVertData && pModelVertData->GetVertexData() != nullptr)
+                        if (pVertices != nullptr)
+                        {
+                            for (int meshIndex = 0; meshIndex < pSubModel->nummeshes; ++meshIndex)
                             {
-                                pVertices = (mstudiovertex_t *)pModelVertData->GetVertexData();
-                            }
+                                mstudiomesh_t *pMesh = pSubModel->pMesh(meshIndex);
+                                if (!pMesh)
+                                    continue;
 
-                            if (pVertices != nullptr)
-                            {
+                                studiomeshdata_t *pMeshData = &pLOD->m_pMeshData[pMesh->meshid];
+                                if (!pMeshData || pMeshData->m_NumGroup <= 0 || pMeshData->m_pMeshGroup == nullptr)
+                                    continue;
+
                                 for (int groupIdx = 0; groupIdx < pMeshData->m_NumGroup; ++groupIdx)
                                 {
                                     studiomeshgroup_t *pGroup = &pMeshData->m_pMeshGroup[groupIdx];
-                                    if (!pGroup || pGroup->m_pIndices == nullptr || pGroup->m_pGroupIndexToMeshIndex == nullptr) continue;
+                                    if (!pGroup || pGroup->m_pIndices == nullptr || pGroup->m_pGroupIndexToMeshIndex == nullptr)
+                                        continue;
 
                                     unsigned short *pIndices = pGroup->m_pIndices;
-                                    
+
                                     int numIndices = 0;
                                     if (pGroup->m_pUniqueTris != nullptr)
                                     {
@@ -282,10 +315,40 @@ void QModelView3::paintEvent(QPaintEvent *event)
                                         }
                                     }
 
-                                    if (numIndices <= 0) continue;
+                                    if (numIndices <= 0)
+                                        continue;
 
-                                    // Safely map index buffers to vertex positions
                                     int globalVertexBaseIdx = pSubModel->vertexindex / sizeof(mstudiovertex_t);
+
+                                    // Software bone skinning pipeline lambda
+                                    auto SkinVertex = [&](int globalVertIdx) -> Vector
+                                    {
+                                        Vector &rawPos = pVertices[globalVertIdx].m_vecPosition;
+                                        mstudioboneweight_t &weights = pVertices[globalVertIdx].m_BoneWeights;
+
+                                        if (weights.numbones == 0)
+                                            return rawPos;
+
+                                        Vector skinnedPos(0, 0, 0);
+                                        for (int b = 0; b < weights.numbones; ++b)
+                                        {
+                                            int boneIdx = weights.bone[b];
+                                            float weight = weights.weight[b];
+
+                                            if (boneIdx >= 0 && boneIdx < pStudioHdr->numbones)
+                                            {
+                                                // FIX: Transform vertex into bone local space BEFORE multiplying by bone world matrix
+                                                Vector localPos;
+                                                VectorTransform(rawPos, pBoneArray[boneIdx].poseToBone, localPos);
+
+                                                Vector transformed;
+                                                VectorTransform(localPos, pBoneToWorld[boneIdx], transformed);
+
+                                                skinnedPos += transformed * weight;
+                                            }
+                                        }
+                                        return skinnedPos;
+                                    };
 
                                     for (int idx = 0; idx < numIndices - 2; idx += 3)
                                     {
@@ -293,17 +356,13 @@ void QModelView3::paintEvent(QPaintEvent *event)
                                         int groupVertIdx1 = pGroup->m_pGroupIndexToMeshIndex[pIndices[idx + 1]];
                                         int groupVertIdx2 = pGroup->m_pGroupIndexToMeshIndex[pIndices[idx + 2]];
 
-                                        int meshVertIdx0 = pMesh->vertexoffset + groupVertIdx0;
-                                        int meshVertIdx1 = pMesh->vertexoffset + groupVertIdx1;
-                                        int meshVertIdx2 = pMesh->vertexoffset + groupVertIdx2;
+                                        int v0 = globalVertexBaseIdx + pMesh->vertexoffset + groupVertIdx0;
+                                        int v1 = globalVertexBaseIdx + pMesh->vertexoffset + groupVertIdx1;
+                                        int v2 = globalVertexBaseIdx + pMesh->vertexoffset + groupVertIdx2;
 
-                                        int v0 = globalVertexBaseIdx + meshVertIdx0;
-                                        int v1 = globalVertexBaseIdx + meshVertIdx1;
-                                        int v2 = globalVertexBaseIdx + meshVertIdx2;
-
-                                        Vector &pos0 = pVertices[v0].m_vecPosition;
-                                        Vector &pos1 = pVertices[v1].m_vecPosition;
-                                        Vector &pos2 = pVertices[v2].m_vecPosition;
+                                        Vector pos0 = SkinVertex(v0);
+                                        Vector pos1 = SkinVertex(v1);
+                                        Vector pos2 = SkinVertex(v2);
 
                                         QPolygonF wireTriangle;
                                         wireTriangle << Project3DPoint(pos0.x, pos0.y, pos0.z)
@@ -319,23 +378,26 @@ void QModelView3::paintEvent(QPaintEvent *event)
                 }
 
                 // ---- TRADITIONAL BONE SKELETON TREE OVERLAY GENERATOR ----
-                mstudiobone_t *pBoneArray = (mstudiobone_t *)((byte *)pStudioHdr + pStudioHdr->boneindex);
                 if (pBoneArray != nullptr)
                 {
                     for (int i = 0; i < pStudioHdr->numbones; ++i)
                     {
-                        mstudiobone_t *pBone = &pBoneArray[i];
-                        QPointF p1 = Project3DPoint(pBone->pos.x, pBone->pos.y, pBone->pos.z);
+                        // Safely extract the translation values out of our matrix columns to plot bone points
+                        float bX1 = pBoneToWorld[i][0][3];
+                        float bY1 = pBoneToWorld[i][1][3];
+                        float bZ1 = pBoneToWorld[i][2][3];
+                        QPointF p1 = Project3DPoint(bX1, bY1, bZ1);
 
-                        painter.setBrush(QColor(241, 91, 181)); 
+                        painter.setBrush(QColor(241, 91, 181));
                         painter.setPen(Qt::NoPen);
                         painter.drawEllipse(p1, 3, 3);
-
-                        if (pBone->parent >= 0 && pBone->parent < pStudioHdr->numbones)
+                        int parentIdx = pBoneArray[i].parent;
+                        if (parentIdx >= 0 && parentIdx < pStudioHdr->numbones)
                         {
-                            mstudiobone_t *pParent = &pBoneArray[pBone->parent];
-                            QPointF p2 = Project3DPoint(pParent->pos.x, pParent->pos.y, pParent->pos.z);
-
+                            float bX2 = pBoneToWorld[parentIdx][0][3];
+                            float bY2 = pBoneToWorld[parentIdx][1][3];
+                            float bZ2 = pBoneToWorld[parentIdx][2][3];
+                            QPointF p2 = Project3DPoint(bX2, bY2, bZ2);
                             painter.setPen(QPen(QColor(241, 91, 181, 180), 1.5f, Qt::SolidLine));
                             painter.drawLine(p1, p2);
                         }
@@ -344,12 +406,10 @@ void QModelView3::paintEvent(QPaintEvent *event)
             }
         }
     }
-
     // Status Text Overlays
     painter.setPen(Qt::white);
     painter.setFont(QFont("Arial", 9, QFont::Bold));
     painter.drawText(15, 25, "ModelView: WORKSTATION COMPONENT LINK ALIVE");
-
     if (m_hCurrentModel != 0xFFFF && g_pMDLCache)
     {
         studiohdr_t *pStudioHdr = g_pMDLCache->GetStudioHdr(m_hCurrentModel);
