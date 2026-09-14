@@ -45,4 +45,6 @@ private:
     QImage   m_RenderOutputImage;       // Thread-safe image buffer to pass pixels to QPainter
     bool     m_bIsRenderBufferBlank; // Tracker to handle headless driver software fallbacks
 
+    QPointF m_ptCameraPanOffset; // Tracks Left-Click/Right-Click screen panning shifts
+
 };

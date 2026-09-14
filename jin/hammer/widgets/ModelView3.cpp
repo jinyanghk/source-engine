@@ -16,7 +16,7 @@ extern IStudioRender *g_pStudioRender;
 extern IMDLCache *g_pMDLCache;
 
 QModelView3::QModelView3(QWidget *parent)
-    : QWidget(parent), m_flAnimationCycle(0.0f), m_hCurrentModel(0xFFFF), m_szCurrentModelPath(""), m_flZoomScale(1.0f), m_pOffscreenRenderTarget(nullptr), m_bIsRenderBufferBlank(true)
+    : QWidget(parent), m_flAnimationCycle(0.0f), m_hCurrentModel(0xFFFF), m_szCurrentModelPath(""), m_flZoomScale(1.0f), m_pOffscreenRenderTarget(nullptr), m_bIsRenderBufferBlank(true), m_ptCameraPanOffset(QPointF(0, 0))
 {
     m_ptRotationAngle = QPoint(20, -45);
 
@@ -226,14 +226,15 @@ void QModelView3::paintEvent(QPaintEvent *event)
                 // Projection matrix lambda transformations
                 auto Project3DPoint = [&](float x, float y, float z) -> QPointF
                 {
+                    // Apply 3D Rotations (Orbit)
                     float x1 = x;
                     float y1 = y * qCos(radX) - z * qSin(radX);
                     float z1 = y * qSin(radX) + z * qCos(radX);
                     float x2 = x1 * qCos(radY) + z1 * qSin(radY);
 
-                    // Calibrated centering scale matching unskinned metrics
-                    float sX = (w / 2.0f) + (x2 * m_flZoomScale * 1.8f);
-                    float sY = (h / 2.0f) + (y1 * m_flZoomScale * 1.8f) + 40.0f;
+                    // Apply Perspective Zoom and Pan offsets smoothly
+                    float sX = (w / 2.0f) + (x2 * m_flZoomScale * 1.8f) + m_ptCameraPanOffset.x(); 
+                    float sY = (h / 2.0f) + (y1 * m_flZoomScale * 1.8f) + 40.0f + m_ptCameraPanOffset.y(); 
                     return QPointF(sX, sY);
                 };
 
@@ -425,20 +426,33 @@ void QModelView3::paintEvent(QPaintEvent *event)
 }
 
 void QModelView3::mousePressEvent(QMouseEvent *event) { m_ptLastMousePosition = event->pos(); }
+
 void QModelView3::mouseMoveEvent(QMouseEvent *event)
 {
+    QPointF delta = event->position() - m_ptLastMousePosition;
+    m_ptLastMousePosition = event->pos();
+
     if (event->buttons() & Qt::LeftButton)
     {
-        m_ptRotationAngle.setY(m_ptRotationAngle.y() + (event->position().x() - m_ptLastMousePosition.x()) * 0.5f);
-        m_ptRotationAngle.setX(m_ptRotationAngle.x() - (event->position().y() - m_ptLastMousePosition.y()) * 0.5f);
-        m_ptLastMousePosition = event->pos();
+        // Orbit control loop
+        m_ptRotationAngle.setY(m_ptRotationAngle.y() + delta.x() * 0.5f);
+        m_ptRotationAngle.setX(m_ptRotationAngle.x() - delta.y() * 0.5f);
+        this->update();
+    }
+    else if (event->buttons() & Qt::RightButton)
+    {
+        // Pan control loop
+        m_ptCameraPanOffset.setX(m_ptCameraPanOffset.x() + delta.x());
+        m_ptCameraPanOffset.setY(m_ptCameraPanOffset.y() + delta.y());
         this->update();
     }
 }
+
 void QModelView3::wheelEvent(QWheelEvent *event)
 {
     m_flZoomScale += event->angleDelta().y() > 0 ? 0.1f : -0.1f;
     m_flZoomScale = qBound(0.1f, m_flZoomScale, 5.0f);
     this->update();
 }
+
 void QModelView3::resizeEvent(QResizeEvent *event) { QWidget::resizeEvent(event); }
