@@ -47,9 +47,11 @@ def build(bld):
 		'widgets/ModelView.cpp',
 		'widgets/ModelView2.cpp',
 		'widgets/ModelView3.cpp',
+		'widgets/MapView.cpp',
 		# Everything else
 		'main.cpp',
 		'mainwindow.cpp',
+		'MainWindow2.cpp',
 		#'hammer.cpp',
     ]
 
@@ -83,7 +85,9 @@ def build(bld):
 		'widgets/ModelView.h',
 		'widgets/ModelView2.h',
 		'widgets/ModelView3.h',
+		'widgets/MapView.h',
 		'mainwindow.h',
+		'MainWindow2.h',
 	]
 
 	includes = [
@@ -94,6 +98,7 @@ def build(bld):
 		'../../public/tier1',
 		'../../public/tier2',
 		'../../thirdparty/SDL',
+		'../../hammer',
 	]
 
 	defines = ['SW_HAMMER_TOOL']

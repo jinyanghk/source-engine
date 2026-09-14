@@ -3,6 +3,7 @@
 #include <unistd.h> // Required for _exit() on Linux / POSIX systems
 
 #include "mainwindow.h"
+#include "MainWindow2.h"
 
 #include "appframework/AppFramework.h"
 #include "tier0/dbg.h"
