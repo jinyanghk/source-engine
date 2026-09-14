@@ -235,7 +235,6 @@ void QModelView3::paintEvent(QPaintEvent *event)
                 float radX = qDegreesToRadians((float)m_ptRotationAngle.x());
                 float radY = qDegreesToRadians((float)m_ptRotationAngle.y());
 
-                // Projection matrix lambda transformations factoring pan and scale positions
                 auto Project3DPoint = [&](float x, float y, float z) -> QPointF
                 {
                     float x1 = x;
@@ -259,7 +258,6 @@ void QModelView3::paintEvent(QPaintEvent *event)
                         Vector bonePos = pBoneArray[i].pos;
                         Quaternion boneQuat = pBoneArray[i].quat;
 
-                        // Procedural Animation Wave Controller: Organic breathing wave cycle
                         if (pBoneArray[i].parent != -1)
                         {
                             float waveFactor = qSin(m_flAnimationCycle * M_PI * 2.0f + i * 0.2f) * 0.3f;
@@ -276,6 +274,32 @@ void QModelView3::paintEvent(QPaintEvent *event)
                         else
                             ConcatTransforms(pBoneToWorld[parentIdx], bonematrix, pBoneToWorld[i]);
                     }
+                }
+
+                // ---- INITIALIZE PROCEDURAL UV ALIGNMENT CALIBRATION TEXTURE SHEET ----
+                static QImage uvGridSheet;
+                int texW = 256, texH = 256;
+                if (uvGridSheet.isNull())
+                {
+                    uvGridSheet = QImage(texW, texH, QImage::Format_RGB32);
+                    QPainter texPainter(&uvGridSheet);
+                    texPainter.fillRect(uvGridSheet.rect(), Qt::white);
+                    for (int y = 0; y < texH; y += 32)
+                    {
+                        for (int x = 0; x < texW; x += 32)
+                        {
+                            if (((x / 32) + (y / 32)) % 2 == 0)
+                            {
+                                texPainter.fillRect(x, y, 32, 32, QColor(0, 180, 216, 220));
+                            }
+                            else
+                            {
+                                texPainter.fillRect(x, y, 32, 32, QColor(241, 91, 181, 220));
+                            }
+                        }
+                    }
+                    texPainter.setPen(QPen(Qt::black, 2));
+                    texPainter.drawRect(0, 0, texW - 1, texH - 1);
                 }
 
                 // ---- ADVANCED MATERIAL MAPPED WIREFRAME & MESH SURFACE RENDERER ----
@@ -303,8 +327,6 @@ void QModelView3::paintEvent(QPaintEvent *event)
 
                         if (pVertices != nullptr)
                         {
-                            short *pSkinRefArray = pStudioHdr->pSkinref(0);
-
                             for (int meshIndex = 0; meshIndex < pSubModel->nummeshes; ++meshIndex)
                             {
                                 mstudiomesh_t *pMesh = pSubModel->pMesh(meshIndex);
@@ -314,24 +336,6 @@ void QModelView3::paintEvent(QPaintEvent *event)
                                 studiomeshdata_t *pMeshData = &pLOD->m_pMeshData[pMesh->meshid];
                                 if (!pMeshData || pMeshData->m_NumGroup <= 0 || pMeshData->m_pMeshGroup == nullptr)
                                     continue;
-
-                                // ---- FIX: RESOLVE COLOR BY HASHING THE TRUE STRING NAME ----
-                                QColor meshColor(139, 149, 165, 180); // Default fallback color
-
-                                if (pSkinRefArray && pMesh->material < pStudioHdr->numtextures)
-                                {
-                                    mstudiotexture_t *pTextureTable = pStudioHdr->pTexture(pSkinRefArray[pMesh->material]);
-                                    if (pTextureTable && pTextureTable->pszName())
-                                    {
-                                        // Generates a stable unique color hue for each submesh based on its .vmt file key
-                                        uint hash = qHash(QString(pTextureTable->pszName()));
-                                        meshColor = QColor::fromHsl((hash % 360), 150, 130, 210); // Fully opaque, nicely saturated HSL distribution
-                                    }
-                                }
-
-                                // Apply the resolved color profiles
-                                painter.setPen(QPen(meshColor.darker(140), 0.5f, Qt::SolidLine));
-                                painter.setBrush(meshColor);
 
                                 for (int groupIdx = 0; groupIdx < pMeshData->m_NumGroup; ++groupIdx)
                                 {
@@ -355,7 +359,6 @@ void QModelView3::paintEvent(QPaintEvent *event)
 
                                     int globalVertexBaseIdx = pSubModel->vertexindex / sizeof(mstudiovertex_t);
 
-                                    // Software bone skinning pipeline lambda
                                     auto SkinVertex = [&](int globalVertIdx) -> Vector
                                     {
                                         Vector &rawPos = pVertices[globalVertIdx].m_vecPosition;
@@ -397,8 +400,49 @@ void QModelView3::paintEvent(QPaintEvent *event)
                                         Vector pos0 = SkinVertex(v0);
                                         Vector pos1 = SkinVertex(v1);
                                         Vector pos2 = SkinVertex(v2);
+
+                                        QPointF pt0 = Project3DPoint(pos0.x, pos0.y, pos0.z);
+                                        QPointF pt1 = Project3DPoint(pos1.x, pos1.y, pos1.z);
+                                        QPointF pt2 = Project3DPoint(pos2.x, pos2.y, pos2.z);
+
+                                        Vector2D &uv0 = pVertices[v0].m_vecTexCoord;
+                                        Vector2D &uv1 = pVertices[v1].m_vecTexCoord;
+                                        Vector2D &uv2 = pVertices[v2].m_vecTexCoord;
+                                        // Map texture space bounds explicitly (fractional UV flipped for texture layout consistency)
+                                        float x0 = uv0.x * texW;
+                                        float y0 = (1.0f - uv0.y) * texH;
+                                        float x1 = uv1.x * texW;
+                                        float y1 = (1.0f - uv1.y) * texH;
+                                        float x2 = uv2.x * texW;
+                                        float y2 = (1.0f - uv2.y) * texH;
+                                        // ---- FIX: ROBUST 3-POINT AFFINE TRIANGLE TRANSFORM MATRIX SOLVER ----
+                                        // Solves the exact linear barycentric equations: Target = Source * Transform
+                                        float det = (x0 - x2) * (y1 - y2) - (x1 - x2) * (y0 - y2);
+                                        if (qAbs(det) > 0.0001f)
+                                        {
+                                            float idet = 1.0f / det;
+                                            float m11 = ((pt0.x() - pt2.x()) * (y1 - y2) - (pt1.x() - pt2.x()) * (y0 - y2)) * idet;
+                                            float m12 = ((pt1.x() - pt2.x()) * (x0 - x2) - (pt0.x() - pt2.x()) * (x1 - x2)) * idet;
+                                            float dx = pt2.x() - m11 * x2 - m12 * y2;
+                                            float m21 = ((pt0.y() - pt2.y()) * (y1 - y2) - (pt1.y() - pt2.y()) * (y0 - y2)) * idet;
+                                            float m22 = ((pt1.y() - pt2.y()) * (x0 - x2) - (pt0.y() - pt2.y()) * (x1 - x2)) * idet;
+                                            float dy = pt2.y() - m21 * x2 - m22 * y2;
+                                            QTransform affineTransform(m11, m21, 0, m12, m22, 0, dx, dy, 1);
+                                            painter.save();
+                                            painter.setTransform(affineTransform, true);
+                                            // Mask out a precise triangle polygon target matching the texture space area
+                                            QPolygonF srcPoly;
+                                            srcPoly << QPointF(x0, y0) << QPointF(x1, y1) << QPointF(x2, y2);
+                                            painter.setPen(Qt::NoPen);
+                                            painter.setBrush(QBrush(uvGridSheet));
+                                            painter.drawPolygon(srcPoly);
+                                            painter.restore();
+                                        }
+                                        // Render fine outline tracing edges to preserve structural mesh clarity
+                                        painter.setPen(QPen(QColor(43, 45, 66, 40), 0.5f, Qt::SolidLine));
+                                        painter.setBrush(Qt::NoBrush);
                                         QPolygonF wireTriangle;
-                                        wireTriangle << Project3DPoint(pos0.x, pos0.y, pos0.z) << Project3DPoint(pos1.x, pos1.y, pos1.z) << Project3DPoint(pos2.x, pos2.y, pos2.z);
+                                        wireTriangle << pt0 << pt1 << pt2;
                                         painter.drawPolygon(wireTriangle);
                                     }
                                 }
@@ -411,22 +455,25 @@ void QModelView3::paintEvent(QPaintEvent *event)
                 {
                     for (int i = 0; i < pStudioHdr->numbones; ++i)
                     {
-                        // FIX: Explicitly pull the world space translation fields from the final matrix column indices
-                        float bX1 = pBoneToWorld[i][0][3];
-                        float bY1 = pBoneToWorld[i][1][3];
-                        float bZ1 = pBoneToWorld[i][2][3];
+                        // FIX: Updated member array access to use m_flMatVal to line up perfectly with your headers
+                        float bX1 = pBoneToWorld[i].m_flMatVal[0][3];
+                        float bY1 = pBoneToWorld[i].m_flMatVal[1][3];
+                        float bZ1 = pBoneToWorld[i].m_flMatVal[2][3];
                         QPointF p1 = Project3DPoint(bX1, bY1, bZ1);
-                        painter.setBrush(QColor(241, 91, 181));
+
+                        painter.setBrush(QColor(241, 91, 181)); 
                         painter.setPen(Qt::NoPen);
                         painter.drawEllipse(p1, 3, 3);
+
                         int parentIdx = pBoneArray[i].parent;
                         if (parentIdx >= 0 && parentIdx < pStudioHdr->numbones)
                         {
-                            // FIX: Explicitly pull parent world coordinates from row mappings
-                            float bX2 = pBoneToWorld[parentIdx][0][3];
-                            float bY2 = pBoneToWorld[parentIdx][1][3];
-                            float bZ2 = pBoneToWorld[parentIdx][2][3];
+                            // FIX: Updated parent matrix lookup field to utilize m_flMatVal [row][col]
+                            float bX2 = pBoneToWorld[parentIdx].m_flMatVal[0][3];
+                            float bY2 = pBoneToWorld[parentIdx].m_flMatVal[1][3];
+                            float bZ2 = pBoneToWorld[parentIdx].m_flMatVal[2][3];
                             QPointF p2 = Project3DPoint(bX2, bY2, bZ2);
+
                             painter.setPen(QPen(QColor(241, 91, 181, 180), 1.5f, Qt::SolidLine));
                             painter.drawLine(p1, p2);
                         }
