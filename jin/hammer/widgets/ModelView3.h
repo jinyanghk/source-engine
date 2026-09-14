@@ -20,6 +20,12 @@ public:
 
     void LoadModelFile(const QString &szFilePath);
 
+    int GetSequenceCount();
+    const char* GetSequenceName(int index);
+    void SetActiveSequence(int index);
+    void SetAnimationCycle(float flCycle);
+    void SetPlaybackPaused(bool bPaused);
+
 protected:
     void paintEvent(QPaintEvent *event) override;
     void mousePressEvent(QMouseEvent *event) override;
@@ -48,4 +54,6 @@ private:
     QPointF m_ptCameraPanOffset; // Tracks Left-Click/Right-Click screen panning shifts
     QMap<QString, QImage> m_MaterialTextureCache;
 
+    int m_nActiveSequenceIndex = 0;
+    bool m_bPlaybackPaused = false;
 };

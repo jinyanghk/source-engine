@@ -14,6 +14,12 @@
 #include <QGridLayout>
 #include <QStandardItemModel>
 #include <QSplitter>
+#include <QTreeWidget>
+#include <QVBoxLayout>
+#include <QHBoxLayout>
+#include <QComboBox>
+#include <QSlider>
+#include <QPushButton>
 
 #include "widgets/HammerViewportWidget.h"
 #include "widgets/MaterialPreview.h"
@@ -56,7 +62,12 @@ private:
     QSplitter *m_leftSplitter;
     QSplitter *m_rightSplitter;
 
-    QModelView3 *m_modelView;
+    QModelView3 *m_pModelViewer;
+    QTreeWidget *m_pModelTreeWidget;
+
+    // Utility functions to parse virtual VPK index pathways
+    void PopulateModelTreeFromVPK();
+    void AddVirtualPathToTree(const QString &szVirtualPath);
 };
 
 #endif // MAINWINDOW_H
