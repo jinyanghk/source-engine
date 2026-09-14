@@ -43,13 +43,22 @@ class CDummyLauncherMgr : public ILauncherMgr
 private:
     void* m_pActiveWindowRef;
     void* m_pActiveGLContext;
+    uint m_nRenderWidth;
+    uint m_nRenderHeight;
 
 public:
-    CDummyLauncherMgr() : m_pActiveWindowRef(nullptr), m_pActiveGLContext(nullptr) {}
+    CDummyLauncherMgr() 
+        : m_pActiveWindowRef(nullptr), 
+          m_nRenderWidth(1024), 
+          m_nRenderHeight(768)
+    {
+        // Allocate a dedicated layout byte block to act as a real, stable GL context allocation block
+        static char s_MockGLContextData[512] = {0};
+        m_pActiveGLContext = reinterpret_cast<void*>(&s_MockGLContextData[0]);
+    }
 
-    // Method to dynamically assign window pointers from the UI widgets
     void SetActiveWindowRef(void* pWindowRef) { m_pActiveWindowRef = pWindowRef; }
-    void SetActiveGLContext(void* pContext) { m_pActiveGLContext = pContext; }
+    void UpdateRenderSize(uint w, uint h) { m_nRenderWidth = w; m_nRenderHeight = h; }
 
     virtual GLMDisplayDB* GetDisplayDB() override 
     { 
@@ -57,7 +66,12 @@ public:
         return reinterpret_cast<GLMDisplayDB*>(&dummyDisplayDB); 
     }
 
-    virtual bool CreateGameWindow( const char *pTitle, bool bWindowed, int nWidth, int nHeight ) override { return true; }
+    virtual bool CreateGameWindow( const char *pTitle, bool bWindowed, int nWidth, int nHeight ) override 
+    { 
+        m_nRenderWidth = nWidth; 
+        m_nRenderHeight = nHeight; 
+        return true; 
+    }
 
     virtual bool Connect( CreateInterfaceFn factory ) override { return true; }
     virtual void Disconnect() override {}
@@ -72,27 +86,47 @@ public:
     virtual void SetWindowFullScreen( bool bFullScreen, int nWidth, int nHeight ) override {}
     virtual bool IsWindowFullScreen() override { return false; }
     virtual void MoveWindow( int x, int y ) override {}
-    virtual void SizeWindow( int width, int tall ) override {}
+    virtual void SizeWindow( int width, int tall ) override { m_nRenderWidth = width; m_nRenderHeight = tall; }
     virtual void PumpWindowsMessageLoop() override {}
     virtual void DestroyGameWindow() override {}
     virtual void SetApplicationIcon( const char *pchAppIconFile ) override {}
     virtual void GetMouseDelta( int &x, int &y, bool bIgnoreNextMouseDelta = false ) override {}
-    virtual void GetNativeDisplayInfo( int nDisplay, uint &nWidth, uint &nHeight, uint &nRefreshHz ) override { nWidth = 1920; nHeight = 1080; nRefreshHz = 60; }
-    virtual void RenderedSize( uint &width, uint &height, bool set ) override {}
-    virtual void DisplayedSize( uint &width, uint &height) override {}
     
-    // Return mock context allocations instead of nullptr to validate engine render context updates
+    virtual void GetNativeDisplayInfo( int nDisplay, uint &nWidth, uint &nHeight, uint &nRefreshHz ) override 
+    { 
+        nWidth = m_nRenderWidth; 
+        nHeight = m_nRenderHeight; 
+        nRefreshHz = 60; 
+    }
+    
+    virtual void RenderedSize( uint &width, uint &height, bool set ) override 
+    { 
+        if (set) { m_nRenderWidth = width; m_nRenderHeight = height; }
+        else { width = m_nRenderWidth; height = m_nRenderHeight; }
+    }
+    
+    virtual void DisplayedSize( uint &width, uint &height) override 
+    { 
+        width = m_nRenderWidth; 
+        height = m_nRenderHeight; 
+    }
+    
+    // FIX: Return our valid context handle pointer block instead of NULL
     virtual PseudoGLContextPtr GetMainContext() override 
     { 
-        return m_pActiveGLContext ? (PseudoGLContextPtr)m_pActiveGLContext : (PseudoGLContextPtr)0xDEADBEEF; 
+        return reinterpret_cast<PseudoGLContextPtr>(m_pActiveGLContext); 
     }
     
     virtual PseudoGLContextPtr GetGLContextForWindow( void* windowref ) override 
     { 
-        return m_pActiveGLContext ? (PseudoGLContextPtr)m_pActiveGLContext : (PseudoGLContextPtr)0xDEADBEEF; 
+        return reinterpret_cast<PseudoGLContextPtr>(m_pActiveGLContext); 
     }
     
-    virtual PseudoGLContextPtr CreateExtraContext() override { return (PseudoGLContextPtr)0xDEADBEEF; }
+    virtual PseudoGLContextPtr CreateExtraContext() override 
+    { 
+        return reinterpret_cast<PseudoGLContextPtr>(m_pActiveGLContext); 
+    }
+    
     virtual void DeleteContext( PseudoGLContextPtr hContext ) override {}
     virtual bool MakeContextCurrent( PseudoGLContextPtr hContext ) override { return true; }
     virtual void GetDesiredPixelFormatAttribsAndRendererInfo( uint **ptrOut, uint *countOut, GLMRendererInfoFields *rendInfoOut ) override {}
@@ -100,13 +134,7 @@ public:
     virtual void ShowPixels( CShowPixelsParams *params ) override {}
     virtual void GetStackCrawl( CStackCrawlParams *params ) override {}
     virtual void WaitUntilUserInput( int msSleepTime ) override {}
-    
-    // Expose the active window reference dynamically
-    virtual void *GetWindowRef() override 
-    { 
-        return m_pActiveWindowRef; 
-    }
-    
+    virtual void *GetWindowRef() override { return m_pActiveWindowRef; }
     virtual void SetMouseVisible( bool bState ) override {}
     virtual void SetMouseCursor( SDL_Cursor *hCursor ) override {}
     virtual void SetForbidMouseGrab( bool bForbidMouseGrab ) override {}
@@ -115,17 +143,17 @@ public:
     virtual double GetPrevGLSwapWindowTime() override { return 0.0; }
 };
 
-// Global instance to allow interface pointer retrieval across compilation units
 CDummyLauncherMgr s_DummyLauncherMgr;
-#endif
 
-// SW_HAMMER_TOOL: Standalone utility function to update the window binding reference
-extern "C" void Hammer_SetLauncherWindowRef(void* pWindowRef)
+// SW_HAMMER_TOOL: Extended standalone utility function to track window binding state
+extern "C" void Hammer_SetLauncherWindowContext(void* pWindowRef, int width, int height)
 {
 #if defined(USE_SDL)
     s_DummyLauncherMgr.SetActiveWindowRef(pWindowRef);
+    s_DummyLauncherMgr.UpdateRenderSize(static_cast<uint>(width), static_cast<uint>(height));
 #endif
 }
+#endif
 
 
 //-----------------------------------------------------------------------------

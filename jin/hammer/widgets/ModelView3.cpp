@@ -53,8 +53,8 @@ void QModelView3::LoadModelFile(const QString &szPath)
     this->update();
 }
 
-// SW_HAMMER_TOOL: Declare the external setter utility function
-extern "C" void Hammer_SetLauncherWindowRef(void *pWindowRef);
+// SW_HAMMER_TOOL: Declare the updated external binder utility function
+extern "C" void Hammer_SetLauncherWindowContext(void *pWindowRef, int width, int height);
 
 void QModelView3::RenderEngineFrame()
 {
@@ -64,11 +64,11 @@ void QModelView3::RenderEngineFrame()
         return;
     }
 
-    // Pass your Qt widget's window handle down through the engine launcher managers
-    Hammer_SetLauncherWindowRef(reinterpret_cast<void *>(this->winId()));
-
     int w = qMax(64, rect().width());
     int h = qMax(64, rect().height());
+
+    // Update the launcher manager state with the current widget handle and metrics
+    Hammer_SetLauncherWindowContext(reinterpret_cast<void *>(this->winId()), w, h);
 
     if (!m_pOffscreenRenderTarget || m_pOffscreenRenderTarget->GetActualWidth() != w || m_pOffscreenRenderTarget->GetActualHeight() != h)
     {
@@ -99,6 +99,7 @@ void QModelView3::RenderEngineFrame()
         CMatRenderContextPtr pRenderContext(g_pMaterialSystem);
         if (pRenderContext)
         {
+            // Force the context to bind completely to our target texture surface
             pRenderContext->PushRenderTargetAndViewport(m_pOffscreenRenderTarget);
             pRenderContext->Viewport(0, 0, w, h);
             pRenderContext->ClearColor4ub(43, 45, 66, 255);
@@ -121,8 +122,9 @@ void QModelView3::RenderEngineFrame()
                     pRenderContext->MatrixMode(MATERIAL_VIEW);
                     pRenderContext->PushMatrix();
                     pRenderContext->LoadIdentity();
-                    // Frame zoom translation adjustments to capture the model bounds perfectly
-                    pRenderContext->Translate(0.0f, -30.0f, -65.0f * m_flZoomScale);
+
+                    // Match camera matrices to software positions
+                    pRenderContext->Translate(m_ptCameraPanOffset.x() * 0.1f, -30.0f - (m_ptCameraPanOffset.y() * 0.1f), -65.0f * m_flZoomScale);
                     pRenderContext->Rotate(m_ptRotationAngle.x(), 1.0f, 0.0f, 0.0f);
                     pRenderContext->Rotate(m_ptRotationAngle.y(), 0.0f, 1.0f, 0.0f);
 
@@ -130,10 +132,18 @@ void QModelView3::RenderEngineFrame()
                     pRenderContext->PushMatrix();
                     pRenderContext->LoadIdentity();
 
+                    // Rebuild the matrix arrays for the hardware shader execution path
                     matrix3x4_t pBoneToWorld[MAXSTUDIOBONES];
+                    mstudiobone_t *pBoneArray = (mstudiobone_t *)((byte *)pStudioHdr + pStudioHdr->boneindex);
                     for (int i = 0; i < pStudioHdr->numbones; i++)
                     {
-                        SetIdentityMatrix(pBoneToWorld[i]);
+                        matrix3x4_t bonematrix;
+                        QuaternionMatrix(pBoneArray[i].quat, pBoneArray[i].pos, bonematrix);
+                        int parentIdx = pBoneArray[i].parent;
+                        if (parentIdx == -1)
+                            MatrixCopy(bonematrix, pBoneToWorld[i]);
+                        else
+                            ConcatTransforms(pBoneToWorld[parentIdx], bonematrix, pBoneToWorld[i]);
                     }
 
                     g_pStudioRender->LockBoneMatrices(pStudioHdr->numbones);
@@ -157,6 +167,7 @@ void QModelView3::RenderEngineFrame()
 
                     g_pStudioRender->ForcedMaterialOverride(nullptr);
 
+                    // Execute the engine hardware model rasterization loops
                     g_pStudioRender->DrawModel(nullptr, modelInfo, pBoneToWorld, NULL, NULL, Vector(0, 0, 0), 0);
 
                     pRenderContext->MatrixMode(MATERIAL_MODEL);
@@ -176,7 +187,8 @@ void QModelView3::RenderEngineFrame()
             unsigned char *pDstBits = engineBuffer.bits();
             pRenderContext->ReadPixels(0, 0, w, h, pDstBits, IMAGE_FORMAT_ARGB8888);
 
-            if (engineBuffer.pixelColor(0, 0).alpha() == 0)
+            // If the buffer readout checks out as opaque, the GPU path successfully drew frames
+            if (engineBuffer.pixelColor(w / 2, h / 2).alpha() == 0)
             {
                 m_bIsRenderBufferBlank = true;
             }
@@ -194,7 +206,7 @@ void QModelView3::RenderEngineFrame()
 
 void QModelView3::paintEvent(QPaintEvent *event)
 {
-    // Execute engine frame initialization safety triggers
+    // Execute engine canvas synchronization blocks safely
     RenderEngineFrame();
 
     QPainter painter(this);
@@ -210,7 +222,7 @@ void QModelView3::paintEvent(QPaintEvent *event)
     }
     else
     {
-        // 2. Headless GPU fallback: Fill with solid color and compute software projection
+        // 2. Headless Fallback Viewer Layer
         painter.fillRect(rect(), QColor(43, 45, 66));
 
         if (m_hCurrentModel != 0xFFFF && g_pMDLCache)
@@ -247,7 +259,7 @@ void QModelView3::paintEvent(QPaintEvent *event)
                         Vector bonePos = pBoneArray[i].pos;
                         Quaternion boneQuat = pBoneArray[i].quat;
 
-                        // Procedural Animation Wave Controller: Subtle organic idle breathing cycle
+                        // Procedural Animation Wave Controller: Organic breathing wave cycle
                         if (pBoneArray[i].parent != -1)
                         {
                             float waveFactor = qSin(m_flAnimationCycle * M_PI * 2.0f + i * 0.2f) * 0.3f;
@@ -260,25 +272,17 @@ void QModelView3::paintEvent(QPaintEvent *event)
 
                         int parentIdx = pBoneArray[i].parent;
                         if (parentIdx == -1)
-                        {
                             MatrixCopy(bonematrix, pBoneToWorld[i]);
-                        }
-                        else if (parentIdx >= 0 && parentIdx < pStudioHdr->numbones)
-                        {
+                        else
                             ConcatTransforms(pBoneToWorld[parentIdx], bonematrix, pBoneToWorld[i]);
-                        }
                     }
                 }
 
-                // ---- TRUE 3D SOFTWARE SKINNING WIREFRAME MESH GENERATOR ----
-                // FIX: Removed address-of operator to compile pointer type correctly
+                // ---- ADVANCED MATERIAL MAPPED WIREFRAME & MESH SURFACE RENDERER ----
                 studioloddata_t *pLOD = pHardwareData->m_pLODs;
 
                 if (pLOD && pLOD->m_pMeshData != nullptr)
                 {
-                    painter.setBrush(Qt::NoBrush);
-                    painter.setPen(QPen(QColor(0, 180, 216, 65), 1.0f, Qt::SolidLine)); // Translucent Cyan outline
-
                     for (int bodyPart = 0; bodyPart < pStudioHdr->numbodyparts; ++bodyPart)
                     {
                         mstudiobodyparts_t *pBodyPart = pStudioHdr->pBodypart(bodyPart);
@@ -299,6 +303,8 @@ void QModelView3::paintEvent(QPaintEvent *event)
 
                         if (pVertices != nullptr)
                         {
+                            short *pSkinRefArray = pStudioHdr->pSkinref(0);
+
                             for (int meshIndex = 0; meshIndex < pSubModel->nummeshes; ++meshIndex)
                             {
                                 mstudiomesh_t *pMesh = pSubModel->pMesh(meshIndex);
@@ -308,6 +314,24 @@ void QModelView3::paintEvent(QPaintEvent *event)
                                 studiomeshdata_t *pMeshData = &pLOD->m_pMeshData[pMesh->meshid];
                                 if (!pMeshData || pMeshData->m_NumGroup <= 0 || pMeshData->m_pMeshGroup == nullptr)
                                     continue;
+
+                                // ---- FIX: RESOLVE COLOR BY HASHING THE TRUE STRING NAME ----
+                                QColor meshColor(139, 149, 165, 180); // Default fallback color
+
+                                if (pSkinRefArray && pMesh->material < pStudioHdr->numtextures)
+                                {
+                                    mstudiotexture_t *pTextureTable = pStudioHdr->pTexture(pSkinRefArray[pMesh->material]);
+                                    if (pTextureTable && pTextureTable->pszName())
+                                    {
+                                        // Generates a stable unique color hue for each submesh based on its .vmt file key
+                                        uint hash = qHash(QString(pTextureTable->pszName()));
+                                        meshColor = QColor::fromHsl((hash % 360), 150, 130, 210); // Fully opaque, nicely saturated HSL distribution
+                                    }
+                                }
+
+                                // Apply the resolved color profiles
+                                painter.setPen(QPen(meshColor.darker(140), 0.5f, Qt::SolidLine));
+                                painter.setBrush(meshColor);
 
                                 for (int groupIdx = 0; groupIdx < pMeshData->m_NumGroup; ++groupIdx)
                                 {
@@ -373,12 +397,8 @@ void QModelView3::paintEvent(QPaintEvent *event)
                                         Vector pos0 = SkinVertex(v0);
                                         Vector pos1 = SkinVertex(v1);
                                         Vector pos2 = SkinVertex(v2);
-
                                         QPolygonF wireTriangle;
-                                        wireTriangle << Project3DPoint(pos0.x, pos0.y, pos0.z)
-                                                     << Project3DPoint(pos1.x, pos1.y, pos1.z)
-                                                     << Project3DPoint(pos2.x, pos2.y, pos2.z);
-
+                                        wireTriangle << Project3DPoint(pos0.x, pos0.y, pos0.z) << Project3DPoint(pos1.x, pos1.y, pos1.z) << Project3DPoint(pos2.x, pos2.y, pos2.z);
                                         painter.drawPolygon(wireTriangle);
                                     }
                                 }
@@ -386,13 +406,12 @@ void QModelView3::paintEvent(QPaintEvent *event)
                         }
                     }
                 }
-
                 // ---- TRADITIONAL BONE SKELETON TREE OVERLAY GENERATOR ----
                 if (pBoneArray != nullptr)
                 {
                     for (int i = 0; i < pStudioHdr->numbones; ++i)
                     {
-                        // FIX: Explicitly index into column 3 of matrix elements to pull translation coordinates
+                        // FIX: Explicitly pull the world space translation fields from the final matrix column indices
                         float bX1 = pBoneToWorld[i][0][3];
                         float bY1 = pBoneToWorld[i][1][3];
                         float bZ1 = pBoneToWorld[i][2][3];
@@ -403,7 +422,7 @@ void QModelView3::paintEvent(QPaintEvent *event)
                         int parentIdx = pBoneArray[i].parent;
                         if (parentIdx >= 0 && parentIdx < pStudioHdr->numbones)
                         {
-                            // FIX: Explicitly index into column 3 of matrix elements for parent translations
+                            // FIX: Explicitly pull parent world coordinates from row mappings
                             float bX2 = pBoneToWorld[parentIdx][0][3];
                             float bY2 = pBoneToWorld[parentIdx][1][3];
                             float bZ2 = pBoneToWorld[parentIdx][2][3];
