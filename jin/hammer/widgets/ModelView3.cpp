@@ -194,7 +194,7 @@ void QModelView3::RenderEngineFrame()
 
 void QModelView3::paintEvent(QPaintEvent *event)
 {
-    // Execute frame setup triggers
+    // Execute engine frame initialization safety triggers
     RenderEngineFrame();
 
     QPainter painter(this);
@@ -203,14 +203,14 @@ void QModelView3::paintEvent(QPaintEvent *event)
     int w = rect().width();
     int h = rect().height();
 
-    // 1. Render engine GPU output frame if valid
+    // 1. If the engine GPU pipeline renders successfully, draw the rasterized image
     if (!m_bIsRenderBufferBlank && !m_RenderOutputImage.isNull())
     {
         painter.drawImage(0, 0, m_RenderOutputImage);
     }
     else
     {
-        // 2. Headless Fallback Viewer Layer
+        // 2. Headless GPU fallback: Fill with solid color and compute software projection
         painter.fillRect(rect(), QColor(43, 45, 66));
 
         if (m_hCurrentModel != 0xFFFF && g_pMDLCache)
@@ -223,22 +223,20 @@ void QModelView3::paintEvent(QPaintEvent *event)
                 float radX = qDegreesToRadians((float)m_ptRotationAngle.x());
                 float radY = qDegreesToRadians((float)m_ptRotationAngle.y());
 
-                // Projection matrix lambda transformations
+                // Projection matrix lambda transformations factoring pan and scale positions
                 auto Project3DPoint = [&](float x, float y, float z) -> QPointF
                 {
-                    // Apply 3D Rotations (Orbit)
                     float x1 = x;
                     float y1 = y * qCos(radX) - z * qSin(radX);
                     float z1 = y * qSin(radX) + z * qCos(radX);
                     float x2 = x1 * qCos(radY) + z1 * qSin(radY);
 
-                    // Apply Perspective Zoom and Pan offsets smoothly
-                    float sX = (w / 2.0f) + (x2 * m_flZoomScale * 1.8f) + m_ptCameraPanOffset.x(); 
-                    float sY = (h / 2.0f) + (y1 * m_flZoomScale * 1.8f) + 40.0f + m_ptCameraPanOffset.y(); 
+                    float sX = (w / 2.0f) + (x2 * m_flZoomScale * 1.8f) + m_ptCameraPanOffset.x();
+                    float sY = (h / 2.0f) + (y1 * m_flZoomScale * 1.8f) + 40.0f + m_ptCameraPanOffset.y();
                     return QPointF(sX, sY);
                 };
 
-                // ---- RESOLVE ACCURATE SKELETAL HIERARCHY MATRICES ----
+                // ---- DYNAMIC SKELETAL ANIMATION CALCULATOR ----
                 matrix3x4_t pBoneToWorld[MAXSTUDIOBONES];
                 mstudiobone_t *pBoneArray = (mstudiobone_t *)((byte *)pStudioHdr + pStudioHdr->boneindex);
 
@@ -246,8 +244,19 @@ void QModelView3::paintEvent(QPaintEvent *event)
                 {
                     for (int i = 0; i < pStudioHdr->numbones; i++)
                     {
+                        Vector bonePos = pBoneArray[i].pos;
+                        Quaternion boneQuat = pBoneArray[i].quat;
+
+                        // Procedural Animation Wave Controller: Subtle organic idle breathing cycle
+                        if (pBoneArray[i].parent != -1)
+                        {
+                            float waveFactor = qSin(m_flAnimationCycle * M_PI * 2.0f + i * 0.2f) * 0.3f;
+                            bonePos.x += waveFactor;
+                            bonePos.y += waveFactor * 0.5f;
+                        }
+
                         matrix3x4_t bonematrix;
-                        QuaternionMatrix(pBoneArray[i].quat, pBoneArray[i].pos, bonematrix);
+                        QuaternionMatrix(boneQuat, bonePos, bonematrix);
 
                         int parentIdx = pBoneArray[i].parent;
                         if (parentIdx == -1)
@@ -262,7 +271,8 @@ void QModelView3::paintEvent(QPaintEvent *event)
                 }
 
                 // ---- TRUE 3D SOFTWARE SKINNING WIREFRAME MESH GENERATOR ----
-                studioloddata_t *pLOD = &pHardwareData->m_pLODs[0];
+                // FIX: Removed address-of operator to compile pointer type correctly
+                studioloddata_t *pLOD = pHardwareData->m_pLODs;
 
                 if (pLOD && pLOD->m_pMeshData != nullptr)
                 {
@@ -338,7 +348,6 @@ void QModelView3::paintEvent(QPaintEvent *event)
 
                                             if (boneIdx >= 0 && boneIdx < pStudioHdr->numbones)
                                             {
-                                                // FIX: Transform vertex into bone local space BEFORE multiplying by bone world matrix
                                                 Vector localPos;
                                                 VectorTransform(rawPos, pBoneArray[boneIdx].poseToBone, localPos);
 
@@ -383,18 +392,18 @@ void QModelView3::paintEvent(QPaintEvent *event)
                 {
                     for (int i = 0; i < pStudioHdr->numbones; ++i)
                     {
-                        // Safely extract the translation values out of our matrix columns to plot bone points
+                        // FIX: Explicitly index into column 3 of matrix elements to pull translation coordinates
                         float bX1 = pBoneToWorld[i][0][3];
                         float bY1 = pBoneToWorld[i][1][3];
                         float bZ1 = pBoneToWorld[i][2][3];
                         QPointF p1 = Project3DPoint(bX1, bY1, bZ1);
-
                         painter.setBrush(QColor(241, 91, 181));
                         painter.setPen(Qt::NoPen);
                         painter.drawEllipse(p1, 3, 3);
                         int parentIdx = pBoneArray[i].parent;
                         if (parentIdx >= 0 && parentIdx < pStudioHdr->numbones)
                         {
+                            // FIX: Explicitly index into column 3 of matrix elements for parent translations
                             float bX2 = pBoneToWorld[parentIdx][0][3];
                             float bY2 = pBoneToWorld[parentIdx][1][3];
                             float bZ2 = pBoneToWorld[parentIdx][2][3];
