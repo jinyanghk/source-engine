@@ -22,7 +22,6 @@
 //-----------------------------------------------------------------------------
 // Global systems
 //-----------------------------------------------------------------------------
-//IHammer *g_pHammer;
 IMaterialSystem *g_pMaterialSystem;
 IFileSystem *g_pFileSystem;
 IDataCache *g_pDataCache;
@@ -41,120 +40,132 @@ struct SDL_Cursor;
 class CDummyLauncherMgr : public ILauncherMgr
 {
 private:
-    void* m_pActiveWindowRef;
-    void* m_pActiveGLContext;
-    uint m_nRenderWidth;
-    uint m_nRenderHeight;
+	void *m_pActiveWindowRef;
+	void *m_pActiveGLContext;
+	uint m_nRenderWidth;
+	uint m_nRenderHeight;
 
 public:
-    CDummyLauncherMgr() 
-        : m_pActiveWindowRef(nullptr), 
-          m_nRenderWidth(1024), 
-          m_nRenderHeight(768)
-    {
-        // Allocate a dedicated layout byte block to act as a real, stable GL context allocation block
-        static char s_MockGLContextData[512] = {0};
-        m_pActiveGLContext = reinterpret_cast<void*>(&s_MockGLContextData[0]);
-    }
+	CDummyLauncherMgr()
+		: m_pActiveWindowRef(nullptr),
+		  m_nRenderWidth(1024),
+		  m_nRenderHeight(768)
+	{
+		static char s_MockGLContextData[512] = {0};
+		m_pActiveGLContext = reinterpret_cast<void *>(&s_MockGLContextData[0]);
+	}
 
-    void SetActiveWindowRef(void* pWindowRef) { m_pActiveWindowRef = pWindowRef; }
-    void UpdateRenderSize(uint w, uint h) { m_nRenderWidth = w; m_nRenderHeight = h; }
+	void SetActiveWindowRef(void *pWindowRef) { m_pActiveWindowRef = pWindowRef; }
+	void UpdateRenderSize(uint w, uint h)
+	{
+		m_nRenderWidth = w;
+		m_nRenderHeight = h;
+	}
 
-    virtual GLMDisplayDB* GetDisplayDB() override 
-    { 
-        static char dummyDisplayDB = {0}; 
-        return reinterpret_cast<GLMDisplayDB*>(&dummyDisplayDB); 
-    }
+	virtual GLMDisplayDB *GetDisplayDB() override
+	{
+		static char dummyDisplayDB = {0};
+		return reinterpret_cast<GLMDisplayDB *>(&dummyDisplayDB);
+	}
 
-    virtual bool CreateGameWindow( const char *pTitle, bool bWindowed, int nWidth, int nHeight ) override 
-    { 
-        m_nRenderWidth = nWidth; 
-        m_nRenderHeight = nHeight; 
-        return true; 
-    }
+	virtual bool CreateGameWindow(const char *pTitle, bool bWindowed, int nWidth, int nHeight) override
+	{
+		m_nRenderWidth = nWidth;
+		m_nRenderHeight = nHeight;
+		return true;
+	}
 
-    virtual bool Connect( CreateInterfaceFn factory ) override { return true; }
-    virtual void Disconnect() override {}
-    virtual void *QueryInterface( const char *pInterfaceName ) override { return nullptr; }
-    virtual InitReturnVal_t Init() override { return INIT_OK; }
-    virtual void Shutdown() override {}
-    virtual void IncWindowRefCount() override {}
-    virtual void DecWindowRefCount() override {}
-    virtual int GetEvents( CCocoaEvent *pEvents, int nMaxEventsToReturn, bool debugEvents = false ) override { return 0; }
-    virtual int PeekAndRemoveKeyboardEvents( bool *pbEsc, bool *pbReturn, bool *pbSpace, bool debugEvents = false ) override { return 0; }
-    virtual void SetCursorPosition( int x, int y ) override {}
-    virtual void SetWindowFullScreen( bool bFullScreen, int nWidth, int nHeight ) override {}
-    virtual bool IsWindowFullScreen() override { return false; }
-    virtual void MoveWindow( int x, int y ) override {}
-    virtual void SizeWindow( int width, int tall ) override { m_nRenderWidth = width; m_nRenderHeight = tall; }
-    virtual void PumpWindowsMessageLoop() override {}
-    virtual void DestroyGameWindow() override {}
-    virtual void SetApplicationIcon( const char *pchAppIconFile ) override {}
-    virtual void GetMouseDelta( int &x, int &y, bool bIgnoreNextMouseDelta = false ) override {}
-    
-    virtual void GetNativeDisplayInfo( int nDisplay, uint &nWidth, uint &nHeight, uint &nRefreshHz ) override 
-    { 
-        nWidth = m_nRenderWidth; 
-        nHeight = m_nRenderHeight; 
-        nRefreshHz = 60; 
-    }
-    
-    virtual void RenderedSize( uint &width, uint &height, bool set ) override 
-    { 
-        if (set) { m_nRenderWidth = width; m_nRenderHeight = height; }
-        else { width = m_nRenderWidth; height = m_nRenderHeight; }
-    }
-    
-    virtual void DisplayedSize( uint &width, uint &height) override 
-    { 
-        width = m_nRenderWidth; 
-        height = m_nRenderHeight; 
-    }
-    
-    // FIX: Return our valid context handle pointer block instead of NULL
-    virtual PseudoGLContextPtr GetMainContext() override 
-    { 
-        return reinterpret_cast<PseudoGLContextPtr>(m_pActiveGLContext); 
-    }
-    
-    virtual PseudoGLContextPtr GetGLContextForWindow( void* windowref ) override 
-    { 
-        return reinterpret_cast<PseudoGLContextPtr>(m_pActiveGLContext); 
-    }
-    
-    virtual PseudoGLContextPtr CreateExtraContext() override 
-    { 
-        return reinterpret_cast<PseudoGLContextPtr>(m_pActiveGLContext); 
-    }
-    
-    virtual void DeleteContext( PseudoGLContextPtr hContext ) override {}
-    virtual bool MakeContextCurrent( PseudoGLContextPtr hContext ) override { return true; }
-    virtual void GetDesiredPixelFormatAttribsAndRendererInfo( uint **ptrOut, uint *countOut, GLMRendererInfoFields *rendInfoOut ) override {}
+	virtual bool Connect(CreateInterfaceFn factory) override { return true; }
+	virtual void Disconnect() override {}
+	virtual void *QueryInterface(const char *pInterfaceName) override { return nullptr; }
+	virtual InitReturnVal_t Init() override { return INIT_OK; }
+	virtual void Shutdown() override {}
+	virtual void IncWindowRefCount() override {}
+	virtual void DecWindowRefCount() override {}
+	virtual int GetEvents(CCocoaEvent *pEvents, int nMaxEventsToReturn, bool debugEvents = false) override { return 0; }
+	virtual int PeekAndRemoveKeyboardEvents(bool *pbEsc, bool *pbReturn, bool *pbSpace, bool debugEvents = false) override { return 0; }
+	virtual void SetCursorPosition(int x, int y) override {}
+	virtual void SetWindowFullScreen(bool bFullScreen, int nWidth, int nHeight) override {}
+	virtual bool IsWindowFullScreen() override { return false; }
+	virtual void MoveWindow(int x, int y) override {}
+	virtual void SizeWindow(int width, int tall) override
+	{
+		m_nRenderWidth = width;
+		m_nRenderHeight = tall;
+	}
+	virtual void PumpWindowsMessageLoop() override {}
+	virtual void DestroyGameWindow() override {}
+	virtual void SetApplicationIcon(const char *pchAppIconFile) override {}
+	virtual void GetMouseDelta(int &x, int &y, bool bIgnoreNextMouseDelta = false) override {}
 
-    virtual void ShowPixels( CShowPixelsParams *params ) override {}
-    virtual void GetStackCrawl( CStackCrawlParams *params ) override {}
-    virtual void WaitUntilUserInput( int msSleepTime ) override {}
-    virtual void *GetWindowRef() override { return m_pActiveWindowRef; }
-    virtual void SetMouseVisible( bool bState ) override {}
-    virtual void SetMouseCursor( SDL_Cursor *hCursor ) override {}
-    virtual void SetForbidMouseGrab( bool bForbidMouseGrab ) override {}
-    virtual void OnFrameRendered() override {}
-    virtual void SetGammaRamp( const uint16 *pRed, const uint16 *pGreen, const uint16 *pBlue ) override {}
-    virtual double GetPrevGLSwapWindowTime() override { return 0.0; }
+	virtual void GetNativeDisplayInfo(int nDisplay, uint &nWidth, uint &nHeight, uint &nRefreshHz) override
+	{
+		nWidth = m_nRenderWidth;
+		nHeight = m_nRenderHeight;
+		nRefreshHz = 60;
+	}
+
+	virtual void RenderedSize(uint &width, uint &height, bool set) override
+	{
+		if (set)
+		{
+			m_nRenderWidth = width;
+			m_nRenderHeight = height;
+		}
+		else
+		{
+			width = m_nRenderWidth;
+			height = m_nRenderHeight;
+		}
+	}
+
+	virtual void DisplayedSize(uint &width, uint &height) override
+	{
+		width = m_nRenderWidth;
+		height = m_nRenderHeight;
+	}
+
+	virtual PseudoGLContextPtr GetMainContext() override
+	{
+		return reinterpret_cast<PseudoGLContextPtr>(m_pActiveGLContext);
+	}
+
+	virtual PseudoGLContextPtr GetGLContextForWindow(void *windowref) override
+	{
+		return reinterpret_cast<PseudoGLContextPtr>(m_pActiveGLContext);
+	}
+
+	virtual PseudoGLContextPtr CreateExtraContext() override
+	{
+		return reinterpret_cast<PseudoGLContextPtr>(m_pActiveGLContext);
+	}
+
+	virtual void DeleteContext(PseudoGLContextPtr hContext) override {}
+	virtual bool MakeContextCurrent(PseudoGLContextPtr hContext) override { return true; }
+	virtual void GetDesiredPixelFormatAttribsAndRendererInfo(uint **ptrOut, uint *countOut, GLMRendererInfoFields *rendInfoOut) override {}
+
+	virtual void ShowPixels(CShowPixelsParams *params) override {}
+	virtual void GetStackCrawl(CStackCrawlParams *params) override {}
+	virtual void WaitUntilUserInput(int msSleepTime) override {}
+	virtual void *GetWindowRef() override { return m_pActiveWindowRef; }
+	virtual void SetMouseVisible(bool bState) override {}
+	virtual void SetMouseCursor(SDL_Cursor *hCursor) override {}
+	virtual void SetForbidMouseGrab(bool bForbidMouseGrab) override {}
+	virtual void OnFrameRendered() override {}
+	virtual void SetGammaRamp(const uint16 *pRed, const uint16 *pGreen, const uint16 *pBlue) override {}
+	virtual double GetPrevGLSwapWindowTime() override { return 0.0; }
 };
 
 CDummyLauncherMgr s_DummyLauncherMgr;
 
-// SW_HAMMER_TOOL: Extended standalone utility function to track window binding state
-extern "C" void Hammer_SetLauncherWindowContext(void* pWindowRef, int width, int height)
+extern "C" void Hammer_SetLauncherWindowContext(void *pWindowRef, int width, int height)
 {
 #if defined(USE_SDL)
-    s_DummyLauncherMgr.SetActiveWindowRef(pWindowRef);
-    s_DummyLauncherMgr.UpdateRenderSize(static_cast<uint>(width), static_cast<uint>(height));
+	s_DummyLauncherMgr.SetActiveWindowRef(pWindowRef);
+	s_DummyLauncherMgr.UpdateRenderSize(static_cast<uint>(width), static_cast<uint>(height));
 #endif
 }
 #endif
-
 
 //-----------------------------------------------------------------------------
 // The application object
@@ -162,93 +173,75 @@ extern "C" void Hammer_SetLauncherWindowContext(void* pWindowRef, int width, int
 class CHammerApp : public CAppSystemGroup
 {
 public:
-	// Methods of IApplication
-	virtual bool Create( );
-	virtual bool PreInit( );
-	virtual int Main( );
+	virtual bool Create();
+	virtual bool PreInit();
+	virtual int Main();
 	virtual void PostShutdown();
 	virtual void Destroy();
 };
 
-//-----------------------------------------------------------------------------
-// Define the application object
-//-----------------------------------------------------------------------------
-CHammerApp	g_ApplicationObject;
+CHammerApp g_ApplicationObject;
 
-int main( int argc, char *argv[] )
+int main(int argc, char *argv[])
 {
-    CommandLine()->CreateCmdLine( argc, argv );
-
-    // FIX: Instead of calling Create/PreInit manually, pass control over to Run().
-    // This activates ConnectSystems(), waking up the shader, inputsystem, and material contexts!
-    return g_ApplicationObject.Run();
+	CommandLine()->CreateCmdLine(argc, argv);
+	return g_ApplicationObject.Run();
 }
 
 //-----------------------------------------------------------------------------
 // Create all singleton systems
 //-----------------------------------------------------------------------------
-bool CHammerApp::Create( )
+bool CHammerApp::Create()
 {
-	// Save some memory so engine/hammer isn't so painful
-	CommandLine()->AppendParm( "-disallowhwmorph", NULL );
+	CommandLine()->AppendParm("-disallowhwmorph", NULL);
 
-    // 1. Manually instantiate your dummy launcher manager onto the global engine scope
-    static CDummyLauncherMgr s_DummyLauncherMgr;
-    g_pLauncherMgr = &s_DummyLauncherMgr;
+	static CDummyLauncherMgr s_DummyLauncherMgr;
+	g_pLauncherMgr = &s_DummyLauncherMgr;
 
 	IAppSystem *pSystem;
 
-	// Add in the cvar factory
-	AppModule_t cvarModule = LoadModule( VStdLib_GetICVarFactory() );
-	pSystem = AddSystem( cvarModule, CVAR_INTERFACE_VERSION );
-	if ( !pSystem )
+	AppModule_t cvarModule = LoadModule(VStdLib_GetICVarFactory());
+	pSystem = AddSystem(cvarModule, CVAR_INTERFACE_VERSION);
+	if (!pSystem)
 		return false;
-	
+
 	bool bSteam;
 	char pFileSystemDLL[MAX_PATH];
-	if ( FileSystem_GetFileSystemDLLName( pFileSystemDLL, MAX_PATH, bSteam ) != FS_OK )
+	if (FileSystem_GetFileSystemDLLName(pFileSystemDLL, MAX_PATH, bSteam) != FS_OK)
 		return false;
 
-	AppModule_t fileSystemModule = LoadModule( pFileSystemDLL );
-	g_pFileSystem = (IFileSystem*)AddSystem( fileSystemModule, FILESYSTEM_INTERFACE_VERSION );
+	AppModule_t fileSystemModule = LoadModule(pFileSystemDLL);
+	g_pFileSystem = (IFileSystem *)AddSystem(fileSystemModule, FILESYSTEM_INTERFACE_VERSION);
 
-	FileSystem_SetBasePaths( g_pFileSystem );
+	FileSystem_SetBasePaths(g_pFileSystem);
 
-	AppSystemInfo_t appSystems[] = 
-	{
-		{ "materialsystem.dll",		MATERIAL_SYSTEM_INTERFACE_VERSION },
-		{ "inputsystem.dll",		INPUTSYSTEM_INTERFACE_VERSION },
-		{ "studiorender.dll",		STUDIO_RENDER_INTERFACE_VERSION },
-		{ "vphysics.dll",			VPHYSICS_INTERFACE_VERSION },
-		{ "datacache.dll",			DATACACHE_INTERFACE_VERSION },
-		{ "datacache.dll",			MDLCACHE_INTERFACE_VERSION },
-		{ "datacache.dll",			STUDIO_DATA_CACHE_INTERFACE_VERSION },
-		//{ "vguimatsurface.dll",		VGUI_SURFACE_INTERFACE_VERSION },
-		//{ "vgui2.dll",				VGUI_IVGUI_INTERFACE_VERSION },
-		//{ "hammer_dll.dll",			INTERFACEVERSION_HAMMER },
-		{ "", "" }	// Required to terminate the list
-	};
+	AppSystemInfo_t appSystems[] =
+		{
+			{"materialsystem.dll", MATERIAL_SYSTEM_INTERFACE_VERSION},
+			{"inputsystem.dll", INPUTSYSTEM_INTERFACE_VERSION},
+			{"studiorender.dll", STUDIO_RENDER_INTERFACE_VERSION},
+			{"vphysics.dll", VPHYSICS_INTERFACE_VERSION},
+			{"datacache.dll", DATACACHE_INTERFACE_VERSION},
+			{"datacache.dll", MDLCACHE_INTERFACE_VERSION},
+			{"datacache.dll", STUDIO_DATA_CACHE_INTERFACE_VERSION},
+			{"", ""}};
 
-	if ( !AddSystems( appSystems ) ) 
+	if (!AddSystems(appSystems))
 		return false;
 
-	// Connect to interfaces loaded in AddSystems that we need locally
-	g_pMaterialSystem = (IMaterialSystem*)FindSystem( MATERIAL_SYSTEM_INTERFACE_VERSION );
-	//g_pHammer = (IHammer*)FindSystem( INTERFACEVERSION_HAMMER );
-	g_pDataCache = (IDataCache*)FindSystem( DATACACHE_INTERFACE_VERSION );
-	g_pInputSystem = (IInputSystem*)FindSystem( INPUTSYSTEM_INTERFACE_VERSION );
-	g_pStudioRender = (IStudioRender*)FindSystem( STUDIO_RENDER_INTERFACE_VERSION );
-	g_pMDLCache = (IMDLCache*)FindSystem( MDLCACHE_INTERFACE_VERSION );
-	
-	if ( !g_pLauncherMgr )
+	g_pMaterialSystem = (IMaterialSystem *)FindSystem(MATERIAL_SYSTEM_INTERFACE_VERSION);
+	g_pDataCache = (IDataCache *)FindSystem(DATACACHE_INTERFACE_VERSION);
+	g_pInputSystem = (IInputSystem *)FindSystem(INPUTSYSTEM_INTERFACE_VERSION);
+	g_pStudioRender = (IStudioRender *)FindSystem(STUDIO_RENDER_INTERFACE_VERSION);
+	g_pMDLCache = (IMDLCache *)FindSystem(MDLCACHE_INTERFACE_VERSION);
+
+	if (!g_pLauncherMgr)
 	{
 		static CDummyLauncherMgr s_DummyLauncherMgr;
 		g_pLauncherMgr = &s_DummyLauncherMgr;
 	}
 
-	// This has to be done before connection.
-	//g_pMaterialSystem->SetShaderAPI( "shaderapiempty.dll" );
-    g_pMaterialSystem->SetShaderAPI( "shaderapidx9.dll" );
+	g_pMaterialSystem->SetShaderAPI("shaderapidx9.dll");
 
 	return true;
 }
@@ -258,23 +251,20 @@ void CHammerApp::Destroy()
 	g_pFileSystem = NULL;
 	g_pMaterialSystem = NULL;
 	g_pDataCache = NULL;
-	//g_pHammer = NULL;
 	g_pInputSystem = NULL;
 }
 
-
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
-SpewRetval_t HammerSpewFunc( SpewType_t type, tchar const *pMsg )
+SpewRetval_t HammerSpewFunc(SpewType_t type, tchar const *pMsg)
 {
-	if ( type == SPEW_ASSERT )
+	if (type == SPEW_ASSERT)
 	{
 		return SPEW_DEBUGGER;
 	}
-	else if( type == SPEW_ERROR )
+	else if (type == SPEW_ERROR)
 	{
-		//MessageBox( NULL, pMsg, "Hammer Error", MB_OK | MB_ICONSTOP );
-		Msg ("Hammer Error %s\n", pMsg);
+		Msg("Hammer Error %s\n", pMsg);
 		return SPEW_ABORT;
 	}
 	else
@@ -291,10 +281,6 @@ bool CHammerApp::PreInit( )
 	SpewOutputFunc( HammerSpewFunc );
     printf ("GetVProjectCmdLineValue() = %s\n", GetVProjectCmdLineValue());
 
-	//
-	// Init the game and mod dirs in the file system.
-	// This needs to happen before calling Init on the material system.
-	//
 	CFSSearchPathsInit initInfo;
 	initInfo.m_pFileSystem = g_pFileSystem;
 	initInfo.m_pDirectoryName = "hl2";
@@ -304,44 +290,38 @@ bool CHammerApp::PreInit( )
 		Error( "Unable to load search paths!\n" );
 	}
 
-	// Required to run through the editor
-	g_pMaterialSystem->EnableEditorMaterials();
+    // ---- FIX: MOUNT VPK PACKAGES THROUGH VALIDATED FILESYSTEM INTERFACE ----
+    // We add the archive search paths directly through g_pFileSystem.
+    // This makes the engine map the inside of the VPK texture bundles right to the "GAME" path id pool.
+    if (g_pFileSystem)
+    {
+        g_pFileSystem->AddSearchPath("hl2/hl2_textures.vpk", "GAME");
+        g_pFileSystem->AddSearchPath("hl2/hl2_misc.vpk", "GAME");
+        g_pFileSystem->AddSearchPath("hl2", "GAME");
+    }
 
-	// needed for VGUI model rendering
+	g_pMaterialSystem->EnableEditorMaterials();
 	g_pMaterialSystem->SetAdapter( 0, MATERIAL_INIT_ALLOCATE_FULLSCREEN_TEXTURE );
 
 	return true; 
 }
 
-void CHammerApp::PostShutdown()
-{
-}
-
-
+void CHammerApp::PostShutdown() {}
 //-----------------------------------------------------------------------------
 // main application
 //-----------------------------------------------------------------------------
-int CHammerApp::Main( )
+int CHammerApp::Main()
 {
-    // FIX: Boot up the Qt Framework workspace window context inside Main().
-    // At this precise moment, every single engine module is 100% connected, alive,
-    // and ready to draw graphics variables!
-    int argc = 0;
-    char *argv[] = { nullptr };
-    QApplication app( argc, argv );
-
-    auto pWin = new MainWindow( nullptr );
-    pWin->setAttribute( Qt::WA_DeleteOnClose );
-    pWin->show();
-    
-    int result = QApplication::exec();
-
+	int argc = 0;
+	char *argv[] = {nullptr};
+	QApplication app(argc, argv);
+	auto pWin = new MainWindow(nullptr);
+	pWin->setAttribute(Qt::WA_DeleteOnClose);
+	pWin->show();
+	int result = QApplication::exec();
 #ifdef SW_HAMMER_TOOL
-    // SW_HAMMER_TOOL SHUTDOWN SHIELD: Bypassing legacy global destructors 
-    // inside tier0 / materialsystem libraries to prevent invalid memory 
-    // free passes during shared library unloading cycles.
-    _exit( result ); 
+	_exit(result);
 #else
-    return result;
+	return result;
 #endif
 }
