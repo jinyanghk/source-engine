@@ -36,31 +36,12 @@ public:
 private:
     void createMenuBar();
     void createToolBars();
-    void createDockWidgets();
-    void createCentralWidget();
     void createStatusBar();
-    void applyStyleSheet();
 
     QMenuBar *m_menuBar;
     QToolBar *m_mainToolBar;
     QToolBar *m_viewToolBar;
     QStatusBar *m_statusBar;
-
-    QDockWidget *m_hierarchyDock;
-    QDockWidget *m_textureDock;
-    QDockWidget *m_propertyDock;
-    QDockWidget *m_consoleDock;
-
-    QWidget *m_centralWidget;
-    QGridLayout *m_viewLayout;
-    QLabel *m_view3D;
-    QLabel *m_viewTop;
-    QLabel *m_viewFront;
-    QLabel *m_viewSide;
-
-    QSplitter *m_mainSplitter;
-    QSplitter *m_leftSplitter;
-    QSplitter *m_rightSplitter;
 
     QModelView3 *m_pModelViewer;
     QTreeWidget *m_pModelTreeWidget;

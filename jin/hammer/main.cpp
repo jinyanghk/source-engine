@@ -21,16 +21,8 @@
 #include "tier0/icommandline.h"
 
 //-----------------------------------------------------------------------------
-// Global systems
+// CDummyLauncherMgr
 //-----------------------------------------------------------------------------
-IMaterialSystem *g_pMaterialSystem;
-IFileSystem *g_pFileSystem;
-IDataCache *g_pDataCache;
-IInputSystem *g_pInputSystem;
-IStudioRender *g_pStudioRender;
-IMDLCache *g_pMDLCache;
-
-#if defined(USE_SDL)
 #include "appframework/ilaunchermgr.h"
 
 class GLMDisplayDB;
@@ -161,12 +153,19 @@ CDummyLauncherMgr s_DummyLauncherMgr;
 
 extern "C" void Hammer_SetLauncherWindowContext(void *pWindowRef, int width, int height)
 {
-#if defined(USE_SDL)
 	s_DummyLauncherMgr.SetActiveWindowRef(pWindowRef);
 	s_DummyLauncherMgr.UpdateRenderSize(static_cast<uint>(width), static_cast<uint>(height));
-#endif
 }
-#endif
+
+//-----------------------------------------------------------------------------
+// Global systems
+//-----------------------------------------------------------------------------
+IMaterialSystem *g_pMaterialSystem;
+IFileSystem *g_pFileSystem;
+IDataCache *g_pDataCache;
+IInputSystem *g_pInputSystem;
+IStudioRender *g_pStudioRender;
+IMDLCache *g_pMDLCache;
 
 //-----------------------------------------------------------------------------
 // The application object
@@ -194,7 +193,7 @@ int main(int argc, char *argv[])
 //-----------------------------------------------------------------------------
 bool CHammerApp::Create()
 {
-	CommandLine()->AppendParm("-disallowhwmorph", NULL);
+	CommandLine()->AppendParm("-hammer", NULL);
 
 	static CDummyLauncherMgr s_DummyLauncherMgr;
 	g_pLauncherMgr = &s_DummyLauncherMgr;
@@ -280,7 +279,7 @@ SpewRetval_t HammerSpewFunc(SpewType_t type, tchar const *pMsg)
 bool CHammerApp::PreInit( )
 {
 	SpewOutputFunc( HammerSpewFunc );
-    printf ("GetVProjectCmdLineValue() = %s\n", GetVProjectCmdLineValue());
+    //printf ("GetVProjectCmdLineValue() = %s\n", GetVProjectCmdLineValue());
 
 	CFSSearchPathsInit initInfo;
 	initInfo.m_pFileSystem = g_pFileSystem;
