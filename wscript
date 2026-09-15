@@ -67,8 +67,6 @@ projects={
 		'launcher_main',
 		'materialsystem',
 		'materialsystem/shaderapiempty',
-		#'materialsystem/shaderapigl',
-		#'materialsystem/shaderapivk',
 		'materialsystem/shaderapidx9',
 		'materialsystem/shaderlib',
 		'materialsystem/stdshaders',

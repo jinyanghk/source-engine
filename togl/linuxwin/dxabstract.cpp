@@ -3728,7 +3728,7 @@ HRESULT IDirect3DDevice9::SetRenderTarget(DWORD RenderTargetIndex,IDirect3DSurfa
 	
 	Assert( RenderTargetIndex < 4 );
 
-	#ifdef SW_HAMMER_TOOL
+#ifdef SW_HAMMER_TOOL
 	// SW_HAMMER_TOOL DEVICE TARGET SHIELD: If SetRenderTarget is invoked during offline
 	// material compiling or MRT index purges when the underlying device context is unallocated,
 	// short-circuit the execution safely to prevent a NULL pointer dereference crash.
