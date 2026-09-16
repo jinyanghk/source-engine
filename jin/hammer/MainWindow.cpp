@@ -580,29 +580,42 @@ void Hammer2DGridView::mouseReleaseEvent(QMouseEvent *event)
 //-----------------------------------------------------------------------------
 // MainWindow Framework Methods
 //-----------------------------------------------------------------------------
-MainWindow::MainWindow(QWidget *parent) // (Adjust if renamed to MainWindow)
-    : QMainWindow(parent), m_nextBrushId(3), m_nextEntityId(1), m_selectedBrushId(-1), m_activeTool(TOOL_SELECT), m_currentEntityClass("info_player_start")
+MainWindow::MainWindow(QWidget *parent) 
+    : QMainWindow(parent), 
+      m_nextBrushId(3), 
+      m_nextEntityId(1), 
+      m_selectedBrushId(-1), 
+      m_activeTool(TOOL_SELECT), 
+      m_currentEntityClass("info_player_start"), 
+      m_bIsSingle3DMode(false)
 {
+    // 1. Configure the primary window frame metrics
     resize(1300, 850);
     setWindowTitle(tr("Qt6 Hammer Engine - Multi-Viewport Split Grid System"));
     
+    // 2. Allocate the unified background grid manager scene graph
     m_pGridScene = new QGraphicsScene(this);
     m_pGridScene->setSceneRect(-16384, -16384, 32768, 32768);
     
+    // 3. Instantiate orthographic viewports
     Hammer2DGridView *topView   = new Hammer2DGridView(Hammer2DGridView::VIEW_TOP, this);
     Hammer2DGridView *frontView = new Hammer2DGridView(Hammer2DGridView::VIEW_FRONT, this);
     Hammer2DGridView *sideView  = new Hammer2DGridView(Hammer2DGridView::VIEW_SIDE, this);
     
+    // 4. Assign the shared graph manager context
     topView->setScene(m_pGridScene); 
     frontView->setScene(m_pGridScene); 
     sideView->setScene(m_pGridScene);
     
+    // 5. Append instances to our central class member tracker list
     m_views.append(topView); 
     m_views.append(frontView); 
     m_views.append(sideView);
     
-    m_p3DViewport = new QModelView(this); // Swapped to ModelView5
+    // 6. Allocate your live skeletal animation 3D engine canvas
+    m_p3DViewport = new QModelView(this);
     
+    // 7. Assemble split structural layout containers
     QSplitter *vSplitterLeft = new QSplitter(Qt::Vertical, this);
     vSplitterLeft->addWidget(topView); 
     vSplitterLeft->addWidget(frontView); 
@@ -613,39 +626,142 @@ MainWindow::MainWindow(QWidget *parent) // (Adjust if renamed to MainWindow)
     vSplitterRight->addWidget(sideView); 
     vSplitterRight->setSizes(QList<int>({400, 400}));
     
-    QSplitter *hMainSplitter = new QSplitter(Qt::Horizontal, this);
-    hMainSplitter->addWidget(vSplitterLeft); 
-    hMainSplitter->addWidget(vSplitterRight); 
-    hMainSplitter->setSizes(QList<int>({600, 600}));
+    // 8. Capture the root frame splitter reference into our class member pointer
+    m_hMainSplitter = new QSplitter(Qt::Horizontal, this);
+    m_hMainSplitter->addWidget(vSplitterLeft); 
+    m_hMainSplitter->addWidget(vSplitterRight);
+    m_hMainSplitter->setSizes(QList<int>({600, 600}));
 
+    // 9. Attach layout signals network routing paths
     for (auto view : m_views)
     {
-        connect(view, &Hammer2DGridView::brushCreated, this, &MainWindow::onBrushCreated);
+        connect(view, &Hammer2DGridView::brushCreated,  this, &MainWindow::onBrushCreated);
         connect(view, &Hammer2DGridView::brushSelected, this, &MainWindow::onBrushSelected);
-        connect(view, &Hammer2DGridView::brushMoved, this, &MainWindow::onBrushMoved);
-        connect(view, &Hammer2DGridView::brushResized, this, &MainWindow::onBrushResized);
-        connect(view, &Hammer2DGridView::entityPlaced, this, &MainWindow::onEntityPlaced);
+        connect(view, &Hammer2DGridView::brushMoved,    this, &MainWindow::onBrushMoved);
+        connect(view, &Hammer2DGridView::brushResized,  this, &MainWindow::onBrushResized);
+        connect(view, &Hammer2DGridView::entityPlaced,  this, &MainWindow::onEntityPlaced);
     }
+    
+    // 10. Generate control menus and toolbox items widgets
     createMenuBarActions();
     createSidebarToolbox();
+    createViewMenuActions();
 
+    // 11. Wrap components inside our central main widget container layout
     QWidget *mainContainer = new QWidget(this);
     QHBoxLayout *mainLayout = new QHBoxLayout(mainContainer);
     mainLayout->setContentsMargins(0, 0, 0, 0);
     mainLayout->setSpacing(2);
-    mainLayout->addWidget(hMainSplitter, 1);
-    setCentralWidget(mainContainer);
     
+    // Default launch state: Start with the traditional 4-Way multi-split layout
+    mainLayout->addWidget(m_hMainSplitter, 1);
+    setCentralWidget(mainContainer);
+
+    // 12. Seed mock records and synchronize structural visibility passes
     generateMockBrushes();
     syncAllViews();
     
-    // FIXED: Instead of forcing a rigid centerOn calculation that breaks local coordinates transforms,
-    // we center on the active world center and apply our 1.5x zoom factor natively.
-    for (auto view : m_views) {
+    // 13. Initialize unique camera zoom focus rules on the world center axis origin lines
+    for (auto view : m_views) 
+    {
         view->resetTransform();
         view->scale(1.5, 1.5);
         view->centerOn(0, 0);
     }
+}
+
+// 2. Add this new layout initialization helper method:
+void MainWindow::createViewMenuActions()
+{
+    QMenu *viewMenu = menuBar()->addMenu(tr("&View"));
+    QActionGroup *viewGroup = new QActionGroup(this);
+    viewGroup->setExclusive(true);
+
+    m_pActView4Way = viewMenu->addAction(tr("4 Viewports Split Layout"));
+    m_pActView4Way->setCheckable(true);
+    m_pActView4Way->setChecked(true); // Default active
+    m_pActView4Way->setShortcut(QKeySequence(Qt::Key_F2)); // F2 maps to 4-Way
+    viewGroup->addAction(m_pActView4Way);
+    connect(m_pActView4Way, &QAction::triggered, this, &MainWindow::toggleViewModeSplit4Way);
+
+    m_pActView3D = viewMenu->addAction(tr("Single 3D Perspective Viewport"));
+    m_pActView3D->setCheckable(true);
+    m_pActView3D->setShortcut(QKeySequence(Qt::Key_F3)); // F3 maps to full 3D Alyx view
+    viewGroup->addAction(m_pActView3D);
+    connect(m_pActView3D, &QAction::triggered, this, &MainWindow::toggleViewModeSingle3D);
+}
+
+// 3. Add the layout swapper slots to the bottom of MainWindow.cpp:
+void MainWindow::toggleViewModeSingle3D(bool checked)
+{
+    if (!checked || m_bIsSingle3DMode) return;
+    m_bIsSingle3DMode = true;
+
+    statusBar()->showMessage(tr("Switched to Maximized 3D perspective viewport."), 2000);
+
+    // FIXED: Find and cache splitter proportions before modifying parent trees
+    QSplitter *vSplitterLeft = qobject_cast<QSplitter*>(m_hMainSplitter->widget(0));
+    QSplitter *vSplitterRight = qobject_cast<QSplitter*>(m_hMainSplitter->widget(1));
+    if (vSplitterLeft)  m_cachedLeftSizes  = vSplitterLeft->sizes();
+    if (vSplitterRight) m_cachedRightSizes = vSplitterRight->sizes();
+
+    m_hMainSplitter->hide();
+    m_p3DViewport->setParent(nullptr);
+
+    QWidget *pOldCentral = centralWidget();
+    if (pOldCentral) {
+        pOldCentral->setParent(nullptr);
+    }
+
+    QWidget *container = new QWidget(this);
+    QVBoxLayout *layout = new QVBoxLayout(container);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->addWidget(m_p3DViewport);
+    
+    setCentralWidget(container);
+    m_p3DViewport->show();
+    m_p3DViewport->update();
+}
+
+void MainWindow::toggleViewModeSplit4Way(bool checked)
+{
+    if (!checked || !m_bIsSingle3DMode) return;
+    m_bIsSingle3DMode = false;
+
+    statusBar()->showMessage(tr("Restored traditional 4-way multi-split layout."), 2000);
+
+    m_p3DViewport->setParent(nullptr);
+
+    QSplitter *vSplitterLeft = qobject_cast<QSplitter*>(m_hMainSplitter->widget(0));
+    QSplitter *vSplitterRight = qobject_cast<QSplitter*>(m_hMainSplitter->widget(1));
+
+    if (vSplitterRight) {
+        vSplitterRight->insertWidget(0, m_p3DViewport);
+    }
+
+    // FIXED: Re-apply the cached sizing metrics back onto the splitter matrices immediately!
+    if (vSplitterLeft && !m_cachedLeftSizes.isEmpty()) {
+        vSplitterLeft->setSizes(m_cachedLeftSizes);
+    }
+    if (vSplitterRight && !m_cachedRightSizes.isEmpty()) {
+        vSplitterRight->setSizes(m_cachedRightSizes);
+    }
+
+    QWidget *pOldCentral = centralWidget();
+    if (pOldCentral) {
+        pOldCentral->setParent(nullptr);
+        delete pOldCentral;
+    }
+
+    QWidget *container = new QWidget(this);
+    QHBoxLayout *layout = new QHBoxLayout(container);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->addWidget(m_hMainSplitter);
+    
+    m_hMainSplitter->show();
+    setCentralWidget(container);
+    
+    syncAllViews();
 }
 
 void MainWindow::createSidebarToolbox()

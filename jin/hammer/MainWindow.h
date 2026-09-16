@@ -140,6 +140,9 @@ private slots:
     void onToolChanged(EditTool tool);
     void onEntityClassChanged(const QString& classname);
 
+    void toggleViewModeSingle3D(bool checked);
+    void toggleViewModeSplit4Way(bool checked);
+
 private:
     QGraphicsScene *m_pGridScene;
     QVector<Hammer2DGridView*> m_views;
@@ -156,6 +159,15 @@ private:
     QComboBox *m_pEntityClassCombo;
     QActionGroup *m_pToolActionGroup;
 
+    QSplitter *m_hMainSplitter; // Extracted as member so we can swap it out safely
+    QAction *m_pActView3D;      // Action for Single 3D mode
+    QAction *m_pActView4Way;    // Action for Split 4-Way mode
+    bool m_bIsSingle3DMode;     // Tracks active state
+
+    QList<int> m_cachedLeftSizes;  // Caches Top/Front proportions
+    QList<int> m_cachedRightSizes; // Caches 3D View/Side proportions
+
+    void createViewMenuActions(); // Helper to populate the View menu
     void createMenuBarActions();
     void createSidebarToolbox();
     void generateMockBrushes();
