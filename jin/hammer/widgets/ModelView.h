@@ -3,8 +3,30 @@
 #include <QWidget>
 #include <QString>
 #include <QPoint>
-#include <QVector3D>
+#include <QTimer>
+#include <QImage>
 #include <QVector>
+#include <QColor>
+#include "mathlib/vector.h"
+
+typedef unsigned short MDLHandle_t;
+class ITexture;
+
+struct MapBrush;
+
+struct ModelViewBrush {
+    int id;
+    Vector mins;
+    Vector maxs;
+    QColor color;
+};
+
+struct ModelViewEntity {
+    int id;
+    QString classname;
+    Vector origin;
+    QColor color;
+};
 
 class QModelView : public QWidget
 {
@@ -14,11 +36,19 @@ public:
     explicit QModelView(QWidget *parent = nullptr);
     virtual ~QModelView();
 
-    // Call this function when an asset is selected in the sidebar file tree
     void LoadModelFile(const QString &szFilePath);
+    void updateBrushes(const MapBrush* pBrushes, int count, int selectedId);
+    
+    // EXPLICIT FIXED DECLARATION: Makes the method visible to MainWindow3
+    void updateEntities(const ModelViewEntity* pEntities, int count);
+
+    int GetSequenceCount();
+    const char* GetSequenceName(int index);
+    void SetActiveSequence(int index);
+    void SetAnimationCycle(float flCycle);
+    void SetPlaybackPaused(bool bPaused);
 
 protected:
-    // Native Qt drawing and mouse viewport manipulation handlers
     void paintEvent(QPaintEvent *event) override;
     void mousePressEvent(QMouseEvent *event) override;
     void mouseMoveEvent(QMouseEvent *event) override;
@@ -26,28 +56,29 @@ protected:
     void resizeEvent(QResizeEvent *event) override;
 
 private:
-    void RenderEngineFrame(); // Safely pumps the engine's caching timeline tickers
-    void GenerateMockWireframeMesh(); // Builds a clean fallback preview mesh based on parsed dimensions
+    void RenderEngineFrame();
 
-    QString m_szCurrentModelPath;
-    QString m_szModelNameHeader;
-    int m_nNumBonesParsed;
-    int m_nNumTrianglesParsed;
+    QString      m_szCurrentModelPath;
+    MDLHandle_t  m_hCurrentModel;
+    float        m_flAnimationCycle;
 
-    // Viewport layout tracking variables (Panning & Zoom limits)
-    float m_flZoomScale;
-    QPoint m_ptRotationAngle;
-    QPoint m_ptLastMousePosition;
-    bool m_bIsDragging;
+    float   m_flZoomScale;
+    QPoint  m_ptRotationAngle;
+    QPoint  m_ptLastMousePosition;
+    bool    m_bIsDragging;
+    
+    QTimer*  m_pAnimationFrameTimer;
+    ITexture* m_pOffscreenRenderTarget;
+    QImage   m_RenderOutputImage;      
+    bool     m_bIsRenderBufferBlank; 
 
-    // Lightweight mock structure for wireframe visualization tracking
-    struct WireframeVertex_t {
-        QVector3D position;
-    };
-    struct WireframeEdge_t {
-        int v1, v2;
-    };
+    QPointF m_ptCameraPanOffset; 
+    QMap<QString, QImage> m_MaterialTextureCache;
 
-    QVector<WireframeVertex_t> m_MeshVertices;
-    QVector<WireframeEdge_t>   m_MeshEdges;
+    int m_nActiveSequenceIndex = 0;
+    bool m_bPlaybackPaused = false;
+
+    QVector<ModelViewBrush> m_mapBrushes;
+    QVector<ModelViewEntity> m_mapEntities; // Array to retain entity nodes locally
+    int m_selectedBrushId = -1;
 };

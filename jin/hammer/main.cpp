@@ -2,7 +2,7 @@
 
 #include <unistd.h> // Required for _exit() on Linux / POSIX systems
 
-#include "MainWindow3.h"
+#include "MainWindow.h"
 
 #include "appframework/AppFramework.h"
 #include "tier0/dbg.h"
@@ -314,7 +314,7 @@ int CHammerApp::Main()
 	int argc = 0;
 	char *argv[] = {nullptr};
 	QApplication app(argc, argv);
-	auto pWin = new MainWindow3(nullptr);
+	auto pWin = new MainWindow(nullptr);
 	pWin->setAttribute(Qt::WA_DeleteOnClose);
 	pWin->show();
 	int result = QApplication::exec();
