@@ -47,11 +47,13 @@ def build(bld):
 		'widgets/ModelView.cpp',
 		'widgets/ModelView2.cpp',
 		'widgets/ModelView3.cpp',
+		'widgets/ModelView4.cpp',
 		'widgets/MapView.cpp',
 		# Everything else
 		'main.cpp',
 		'mainwindow.cpp',
 		'MainWindow2.cpp',
+		'MainWindow3.cpp',
 		#'hammer.cpp',
     ]
 
@@ -85,9 +87,11 @@ def build(bld):
 		'widgets/ModelView.h',
 		'widgets/ModelView2.h',
 		'widgets/ModelView3.h',
+		'widgets/ModelView4.h',
 		'widgets/MapView.h',
 		'mainwindow.h',
 		'MainWindow2.h',
+		'MainWindow3.h',
 	]
 
 	includes = [
