@@ -9,7 +9,6 @@
 #include <tier0/dbg.h>
 
 #if defined( POSIX )
-#include <sys/io.h>
 #include <sys/stat.h>
 #endif
 
