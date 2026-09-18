@@ -321,26 +321,6 @@ void Hammer3DView::paintEvent(QPaintEvent *event)
                             if (!pMeshData || pMeshData->m_NumGroup <= 0 || pMeshData->m_pMeshGroup == nullptr)
                                 continue;
                             QColor baseColor(145, 150, 160);
-                            if (pSkinRefArray && pMesh->material < pStudioHdr->numtextures)
-                            {
-                                mstudiotexture_t *pTextureTable = pStudioHdr->pTexture(pSkinRefArray[pMesh->material]);
-                                if (pTextureTable && pTextureTable->pszName())
-                                {
-                                    QString szMatName = QString(pTextureTable->pszName()).toLower();
-                                    if (szMatName.contains("face") || szMatName.contains("head") || szMatName.contains("skin"))
-                                        baseColor = QColor(228, 185, 161);
-                                    else if (szMatName.contains("jacket") || szMatName.contains("coat") || szMatName.contains("vance") || szMatName.contains("antlion"))
-                                        baseColor = QColor(112, 78, 54);
-                                    else if (szMatName.contains("jean") || szMatName.contains("pant") || szMatName.contains("leg"))
-                                        baseColor = QColor(64, 88, 118);
-                                    else if (szMatName.contains("hair"))
-                                        baseColor = QColor(50, 42, 36);
-                                    else if (szMatName.contains("boot") || szMatName.contains("shoe"))
-                                        baseColor = QColor(42, 42, 42);
-                                    else if (szMatName.contains("eye"))
-                                        baseColor = QColor(120, 160, 120);
-                                }
-                            }
                             for (int groupIdx = 0; groupIdx < pMeshData->m_NumGroup; ++groupIdx)
                             {
                                 studiomeshgroup_t *pGroup = &pMeshData->m_pMeshGroup[groupIdx];

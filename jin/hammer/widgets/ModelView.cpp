@@ -18,19 +18,10 @@ extern IMDLCache *g_pMDLCache;
 extern "C" void Hammer_SetLauncherWindowContext(void *pWindowRef, int width, int height);
 static matrix3x4_t s_InterceptedBoneTransforms[MAXSTUDIOBONES];
 
-// FIXED: Provide full structural layout fields so the compiler can access elements
-struct MapBrush
-{
-    int id;
-    Vector mins;
-    Vector maxs;
-    QColor color;
-};
-
 QModelView::QModelView(QWidget *parent)
     : QWidget(parent), m_flAnimationCycle(0.0f), m_hCurrentModel(0xFFFF), m_szCurrentModelPath(""),
       m_flZoomScale(2.5f), m_pOffscreenRenderTarget(nullptr), m_bIsRenderBufferBlank(true),
-      m_ptCameraPanOffset(QPointF(0, 0)), m_selectedBrushId(-1)
+      m_ptCameraPanOffset(QPointF(0, 0))
 {
     m_ptRotationAngle = QPoint(-20, 45); // Classic Hammer oblique view angle rules orientation setup
     m_nActiveSequenceIndex = 0;
@@ -56,31 +47,6 @@ QModelView::~QModelView()
     {
         m_pOffscreenRenderTarget->DecrementReferenceCount();
     }
-}
-
-void QModelView::updateBrushes(const MapBrush *pBrushes, int count, int selectedId)
-{
-    m_mapBrushes.clear();
-    m_selectedBrushId = selectedId;
-
-    // Convert elements safely via layout field matching copy pass
-    if (pBrushes && count > 0)
-    {
-        m_mapBrushes.reserve(count);
-        for (int i = 0; i < count; ++i)
-        {
-            ModelViewBrush b;
-            b.id = pBrushes[i].id;
-
-            // Map raw Source Vector objects directly
-            b.mins = pBrushes[i].mins;
-            b.maxs = pBrushes[i].maxs;
-            b.color = pBrushes[i].color;
-
-            m_mapBrushes.append(b);
-        }
-    }
-    this->update(); // Enforce layout refresh pass
 }
 
 void QModelView::LoadModelFile(const QString &szPath)
@@ -413,33 +379,6 @@ void QModelView::paintEvent(QPaintEvent *event)
             }
         }
     }
-    // ---- FIX 2: OVERLAY WIREFRAME MAP BRUSHES PARALLEL LAYER ----
-    for (const auto &brush : m_mapBrushes)
-    {
-        bool isSelected = (brush.id == m_selectedBrushId);
-        QColor displayColor = isSelected ? QColor(255, 0, 0) : brush.color;
-        painter.setPen(QPen(displayColor, isSelected ? 2.0f : 1.0f, Qt::SolidLine));
-        QPointF p0 = Project3DPointEx(brush.mins.x, brush.mins.y, brush.mins.z);
-        QPointF p1 = Project3DPointEx(brush.maxs.x, brush.mins.y, brush.mins.z);
-        QPointF p2 = Project3DPointEx(brush.maxs.x, brush.maxs.y, brush.mins.z);
-        QPointF p3 = Project3DPointEx(brush.mins.x, brush.maxs.y, brush.mins.z);
-        QPointF p4 = Project3DPointEx(brush.mins.x, brush.mins.y, brush.maxs.z);
-        QPointF p5 = Project3DPointEx(brush.maxs.x, brush.mins.y, brush.maxs.z);
-        QPointF p6 = Project3DPointEx(brush.maxs.x, brush.maxs.y, brush.maxs.z);
-        QPointF p7 = Project3DPointEx(brush.mins.x, brush.maxs.y, brush.maxs.z);
-        painter.drawLine(p0, p1);
-        painter.drawLine(p1, p2);
-        painter.drawLine(p2, p3);
-        painter.drawLine(p3, p0);
-        painter.drawLine(p4, p5);
-        painter.drawLine(p5, p6);
-        painter.drawLine(p6, p7);
-        painter.drawLine(p7, p4);
-        painter.drawLine(p0, p4);
-        painter.drawLine(p1, p5);
-        painter.drawLine(p2, p6);
-        painter.drawLine(p3, p7);
-    }
     painter.setPen(Qt::white);
     painter.setFont(QFont("Arial", 9, QFont::Bold));
     painter.drawText(15, 25, "ModelView: 3D MAP WORKSPACE WIREFRAME ACTIVE");
@@ -478,16 +417,3 @@ const char *QModelView::GetSequenceName(int index)
 void QModelView::SetActiveSequence(int index) { Q_UNUSED(index); }
 void QModelView::SetAnimationCycle(float flCycle) { Q_UNUSED(flCycle); }
 void QModelView::SetPlaybackPaused(bool bPaused) { Q_UNUSED(bPaused); }
-
-// Replace the updateEntities function block in widgets/ModelView4.cpp with this:
-void QModelView::updateEntities(const ModelViewEntity* pEntities, int count)
-{
-    m_mapEntities.clear();
-    if (pEntities && count > 0) {
-        m_mapEntities.reserve(count);
-        for (int i = 0; i < count; ++i) {
-            m_mapEntities.append(pEntities[i]);
-        }
-    }
-    this->update(); // Re-trigger the 3D paintEvent pass
-}

@@ -21,9 +21,7 @@
 #include <QSlider>
 #include <QPushButton>
 
-#include "widgets/HammerViewportWidget.h"
-#include "widgets/MaterialPreview.h"
-#include "widgets/ModelView3.h"
+#include "widgets/ModelView.h"
 
 class MainWindow : public QMainWindow
 {
@@ -43,7 +41,7 @@ private:
     QToolBar *m_viewToolBar;
     QStatusBar *m_statusBar;
 
-    QModelView3 *m_pModelViewer;
+    QModelView *m_pModelViewer;
     QTreeWidget *m_pModelTreeWidget;
 
     // Utility functions to parse virtual VPK index pathways

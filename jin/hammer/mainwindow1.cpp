@@ -1,4 +1,4 @@
-#include "mainwindow.h"
+#include "mainwindow1.h"
 
 #include <QFile>
 #include <QTextStream>
@@ -35,7 +35,7 @@ MainWindow::MainWindow(QWidget *parent)
     pRightLayout->setContentsMargins(4, 4, 4, 4);
 
     // Instantiate our active animated canvas widget
-    m_pModelViewer = new QModelView3(pRightContainerShell);
+    m_pModelViewer = new QModelView(pRightContainerShell);
     pRightLayout->addWidget(m_pModelViewer, 1); // Stretch to fill layout space maps
 
     // ---- ADVANCED TIMELINE CONTROLS TOOLBAR PANEL ----

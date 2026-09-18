@@ -12,22 +12,6 @@
 typedef unsigned short MDLHandle_t;
 class ITexture;
 
-struct MapBrush;
-
-struct ModelViewBrush {
-    int id;
-    Vector mins;
-    Vector maxs;
-    QColor color;
-};
-
-struct ModelViewEntity {
-    int id;
-    QString classname;
-    Vector origin;
-    QColor color;
-};
-
 class QModelView : public QWidget
 {
     Q_OBJECT
@@ -37,11 +21,6 @@ public:
     virtual ~QModelView();
 
     void LoadModelFile(const QString &szFilePath);
-    void updateBrushes(const MapBrush* pBrushes, int count, int selectedId);
-    
-    // EXPLICIT FIXED DECLARATION: Makes the method visible to MainWindow3
-    void updateEntities(const ModelViewEntity* pEntities, int count);
-
     int GetSequenceCount();
     const char* GetSequenceName(int index);
     void SetActiveSequence(int index);
@@ -77,8 +56,4 @@ private:
 
     int m_nActiveSequenceIndex = 0;
     bool m_bPlaybackPaused = false;
-
-    QVector<ModelViewBrush> m_mapBrushes;
-    QVector<ModelViewEntity> m_mapEntities; // Array to retain entity nodes locally
-    int m_selectedBrushId = -1;
 };
