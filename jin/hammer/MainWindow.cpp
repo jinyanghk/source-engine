@@ -2,6 +2,7 @@
 #include "widgets/Hammer2DGridView.h"
 #include "widgets/Hammer3DView.h"
 #include "VmfIO.h"
+#include "FgdManager.h"
 
 #include <QScrollBar>
 #include <cmath>
@@ -15,94 +16,106 @@
 #include <QToolBar>
 #include <QLabel>
 
-MainWindow::MainWindow(QWidget *parent) 
+MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent), 
-      m_nextBrushId(3), 
-      m_nextEntityId(1), 
-      m_selectedBrushId(-1), 
+      m_selectedBrushId(-1),
       m_activeTool(TOOL_SELECT), 
       m_currentEntityClass("info_player_start"), 
-      m_bIsSingle3DMode(false)
+      m_bIsSingle3DMode(false),
+      m_pGridScene(nullptr),
+      m_p3DViewport(nullptr),
+      m_pEntityTreeView(nullptr),
+      m_pEntityFilterEdit(nullptr),
+      m_pEntityTreeModel(nullptr),
+      m_pEntityFilterProxyModel(nullptr),
+      m_pToolActionGroup(nullptr),
+      m_hMainSplitter(nullptr),
+      m_pActView3D(nullptr),
+      m_pActView4Way(nullptr)
 {
-    // 1. Configure the primary window frame metrics
-    resize(1300, 850);
-    setWindowTitle(tr("Qt6 Hammer Engine - Multi-Viewport Split Grid System"));
-    
-    // 2. Allocate the unified background grid manager scene graph
-    m_pGridScene = new QGraphicsScene(this);
-    m_pGridScene->setSceneRect(-16384, -16384, 32768, 32768);
-    
-    // 3. Instantiate orthographic viewports
-    Hammer2DGridView *topView   = new Hammer2DGridView(Hammer2DGridView::VIEW_TOP, this);
-    Hammer2DGridView *frontView = new Hammer2DGridView(Hammer2DGridView::VIEW_FRONT, this);
-    Hammer2DGridView *sideView  = new Hammer2DGridView(Hammer2DGridView::VIEW_SIDE, this);
-    
-    // 4. Assign the shared graph manager context
-    topView->setScene(m_pGridScene); 
-    frontView->setScene(m_pGridScene); 
-    sideView->setScene(m_pGridScene);
-    
-    // 5. Append instances to our central class member tracker list
-    m_views.append(topView); 
-    m_views.append(frontView); 
-    m_views.append(sideView);
-    
-    // 6. Allocate your live skeletal animation 3D engine canvas
-    m_p3DViewport = new Hammer3DView(this);
-    
-    // 7. Assemble split structural layout containers
-    QSplitter *vSplitterLeft = new QSplitter(Qt::Vertical, this);
-    vSplitterLeft->addWidget(topView); 
-    vSplitterLeft->addWidget(frontView); 
-    vSplitterLeft->setSizes(QList<int>({400, 400}));
-    
-    QSplitter *vSplitterRight = new QSplitter(Qt::Vertical, this);
-    vSplitterRight->addWidget(m_p3DViewport); 
-    vSplitterRight->addWidget(sideView); 
-    vSplitterRight->setSizes(QList<int>({400, 400}));
-    
-    // 8. Capture the root frame splitter reference into our class member pointer
-    m_hMainSplitter = new QSplitter(Qt::Horizontal, this);
-    m_hMainSplitter->addWidget(vSplitterLeft); 
-    m_hMainSplitter->addWidget(vSplitterRight);
-    m_hMainSplitter->setSizes(QList<int>({600, 600}));
-
-    // 9. Attach layout signals network routing paths
-    for (auto view : m_views)
+    // 1. Core Data Initializations: Load the compiled game data configurations (FGD)
+    if (!FgdManager::Instance().LoadFgdFile("halflife2.fgd")) 
     {
-        connect(view, &Hammer2DGridView::brushCreated,  this, &MainWindow::onBrushCreated);
-        connect(view, &Hammer2DGridView::brushSelected, this, &MainWindow::onBrushSelected);
-        connect(view, &Hammer2DGridView::brushMoved,    this, &MainWindow::onBrushMoved);
-        connect(view, &Hammer2DGridView::brushResized,  this, &MainWindow::onBrushResized);
-        connect(view, &Hammer2DGridView::entityPlaced,  this, &MainWindow::onEntityPlaced);
+        qDebug() << "[HammerEditor] WARNING: Failed to locate or parse halflife2.fgd!";
     }
-    
-    // 10. Generate control menus and toolbox items widgets
-    createMenuBarActions();
-    createSidebarToolbox();
-    createViewMenuActions();
 
-    // 11. Wrap components inside our central main widget container layout
+    // 2. Setup standard global application scene context models
+    m_pGridScene = new QGraphicsScene(this);
+    m_pGridScene->setSceneRect(-8192, -8192, 16384, 16384);
+
+    // 3. Establish the base central widget layouts container
     QWidget *mainContainer = new QWidget(this);
+    setCentralWidget(mainContainer);
     QHBoxLayout *mainLayout = new QHBoxLayout(mainContainer);
     mainLayout->setContentsMargins(0, 0, 0, 0);
-    mainLayout->setSpacing(2);
-    
-    // Default launch state: Start with the traditional 4-Way multi-split layout
-    mainLayout->addWidget(m_hMainSplitter, 1);
-    setCentralWidget(mainContainer);
+    mainLayout->setSpacing(0);
 
-    // 12. Seed mock records and synchronize structural visibility passes
+    // 4. Instantiate our high-level layout partitioning controls splitter
+    m_hMainSplitter = new QSplitter(Qt::Horizontal, mainContainer);
+    m_hMainSplitter->setStyleSheet("QSplitter::handle { background-color: #3c3c3c; width: 4px; }");
+    mainLayout->addWidget(m_hMainSplitter);
+
+    // 5. Construct the central Grid Layout viewport array context container
+    QSplitter *vLeftSplitter = new QSplitter(Qt::Vertical, m_hMainSplitter);
+    QSplitter *hTopGridSplitter = new QSplitter(Qt::Horizontal, vLeftSplitter);
+    QSplitter *hBottomGridSplitter = new QSplitter(Qt::Horizontal, vLeftSplitter);
+
+    vLeftSplitter->addWidget(hTopGridSplitter);
+    vLeftSplitter->addWidget(hBottomGridSplitter);
+    m_hMainSplitter->addWidget(vLeftSplitter);
+
+    // 6. Allocate our 2D Viewports matching classic Hammer layout dimensions
+    // Top Row viewports layout splits
+    Hammer2DGridView *pTopXY = new Hammer2DGridView(Hammer2DGridView::VIEW_TOP, hTopGridSplitter);
+    pTopXY->setScene(m_pGridScene);
+    m_views.append(pTopXY);
+    hTopGridSplitter->addWidget(pTopXY);
+
+    // Top Right: Allocate our accelerated, sequence-stable 3D graphics workspace view
+    m_p3DViewport = new Hammer3DView(hTopGridSplitter);
+    hTopGridSplitter->addWidget(m_p3DViewport);
+
+    // Bottom Row viewports layout splits
+    Hammer2DGridView *pFrontXZ = new Hammer2DGridView(Hammer2DGridView::VIEW_FRONT, hBottomGridSplitter);
+    pFrontXZ->setScene(m_pGridScene);
+    m_views.append(pFrontXZ);
+    hBottomGridSplitter->addWidget(pFrontXZ);
+
+    Hammer2DGridView *pSideYZ = new Hammer2DGridView(Hammer2DGridView::VIEW_SIDE, hBottomGridSplitter);
+    pSideYZ->setScene(m_pGridScene);
+    m_views.append(pSideYZ);
+    hBottomGridSplitter->addWidget(pSideYZ);
+
+    // Connect all our cross-viewport modification signals straight down to our slots
+    for (auto view : m_views)
+    {
+        connect(view, &Hammer2DGridView::brushCreated, this, &MainWindow::onBrushCreated);
+        connect(view, &Hammer2DGridView::brushSelected, this, &MainWindow::onBrushSelected);
+        connect(view, &Hammer2DGridView::brushMoved, this, &MainWindow::onBrushMoved);
+        connect(view, &Hammer2DGridView::brushResized, this, &MainWindow::onBrushResized);
+        connect(view, &Hammer2DGridView::entityPlaced, this, &MainWindow::onEntityPlaced);
+    }
+
+    // Set stable default grid split sizing distributions inside our nested viewports panels
+    hTopGridSplitter->setSizes(QList<int>() << 400 << 400);
+    hBottomGridSplitter->setSizes(QList<int>() << 400 << 400);
+    vLeftSplitter->setSizes(QList<int>() << 300 << 300);
+
+    // 7. Initialize standard framework actions and UI sub-dock controllers
+    createMenuBarActions();
+    createViewMenuActions();
+    createSidebarToolbox();  // Stands up the tool selections (Select, Block, Entity)
+    
+    // CALL THE RIGHT BROWSER: Build and dock our clean category prefix tree system!
+    createRightEntityBrowser();
+
+    // 8. Configure high level base window frame geometries
+    resize(1280, 800);
+    statusBar()->showMessage(tr("Qt6 Hammer Engine Ready."));
+
+    // Populate initial state maps from our document collections
     generateMockBrushes();
     syncAllViews();
-    
-    // 13. Initialize unique camera zoom focus rules on the world center axis origin lines
-    for (auto view : m_views) 
-    {
-        view->resetTransform();
-        view->scale(1.5, 1.5);
-        view->centerOn(0, 0);
-    }
 }
 
 // 2. Add this new layout initialization helper method:
@@ -206,39 +219,30 @@ void MainWindow::createSidebarToolbox()
     sidebar->setOrientation(Qt::Vertical);
     sidebar->setIconSize(QSize(24, 24));
     sidebar->setStyleSheet("background-color: #252526; border-right: 1px solid #3c3c3c; padding: 4px;");
-    addToolBar(Qt::LeftToolBarArea, sidebar);
+
     m_pToolActionGroup = new QActionGroup(this);
     m_pToolActionGroup->setExclusive(true);
 
-    // FIXED: Clean, type-safe C++ lambda closure definitions
     QAction *actSelect = sidebar->addAction(tr("Select"));
-    actSelect->setCheckable(true); actSelect->setChecked(true);
+    actSelect->setCheckable(true);
+    actSelect->setChecked(true);
     m_pToolActionGroup->addAction(actSelect);
-    connect(actSelect, &QAction::triggered, this, [this](){ onToolChanged(TOOL_SELECT); });
+    connect(actSelect, &QAction::triggered, this, [=]() { onToolChanged(TOOL_SELECT); });
 
     QAction *actBlock = sidebar->addAction(tr("Block"));
     actBlock->setCheckable(true);
     m_pToolActionGroup->addAction(actBlock);
-    connect(actBlock, &QAction::triggered, this, [this](){ onToolChanged(TOOL_BLOCK); });
+    connect(actBlock, &QAction::triggered, this, [=]() { onToolChanged(TOOL_BLOCK); });
 
     QAction *actEntity = sidebar->addAction(tr("Entity"));
     actEntity->setCheckable(true);
     m_pToolActionGroup->addAction(actEntity);
-    connect(actEntity, &QAction::triggered, this, [this](){ onToolChanged(TOOL_ENTITY); });
-    
-    sidebar->addSeparator();
+    connect(actEntity, &QAction::triggered, this, [=]() { onToolChanged(TOOL_ENTITY); });
 
-    QLabel *lblClass = new QLabel(tr(" Entity Class:"), this);
-    lblClass->setStyleSheet("color: #ffaa00; font-weight: bold; margin-top: 10px;");
-    sidebar->addWidget(lblClass);
-    m_pEntityClassCombo = new QComboBox(this);
-    m_pEntityClassCombo->addItem("info_player_start");
-    m_pEntityClassCombo->addItem("light");
-    m_pEntityClassCombo->addItem("ambient_generic");
-    m_pEntityClassCombo->addItem("npc_zombie");
-    m_pEntityClassCombo->setStyleSheet("background-color: #3c3c3c; color: white; margin: 4px; padding: 2px;");
-    sidebar->addWidget(m_pEntityClassCombo);
-    connect(m_pEntityClassCombo, &QComboBox::currentTextChanged, this, &MainWindow::onEntityClassChanged);
+    // FIXED: The old m_pEntityClassCombo logic, lblClass label, and item loops 
+    // are completely removed since they are now beautifully handled by your Right Browser tree view!
+
+    addToolBar(Qt::LeftToolBarArea, sidebar);
 }
 
 void MainWindow::onToolChanged(EditTool tool)
@@ -451,6 +455,126 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
     }
     else
         QMainWindow::keyPressEvent(event);
+}
+
+void MainWindow::createRightEntityBrowser()
+{
+    // 1. Create a dedicated container panel widget for the right side dock area
+    QWidget *rightContainer = new QWidget(this);
+    QVBoxLayout *rightLayout = new QVBoxLayout(rightContainer);
+    rightLayout->setContentsMargins(4, 4, 4, 4);
+    rightLayout->setSpacing(4);
+    rightContainer->setStyleSheet("background-color: #252526; border-left: 1px solid #3c3c3c;");
+
+    // 2. Instantiate our fast search line edit control
+    m_pEntityFilterEdit = new QLineEdit(this);
+    m_pEntityFilterEdit->setPlaceholderText(tr("Filter entities..."));
+    m_pEntityFilterEdit->setStyleSheet("background-color: #3c3c3c; color: white; border: 1px solid #555; padding: 4px; border-radius: 2px;");
+    connect(m_pEntityFilterEdit, &QLineEdit::textChanged, this, &MainWindow::onEntityFilterChanged);
+    rightLayout->addWidget(m_pEntityFilterEdit);
+
+    // 3. Build the underlying model tree architecture
+    m_pEntityTreeModel = new QStandardItemModel(this);
+    m_pEntityTreeModel->setHorizontalHeaderLabels(QStringList() << tr("Entity Classes"));
+
+    // Fetch our dynamic FGD class strings array directly from fgdlib
+    std::vector<std::string> rawPointClasses = FgdManager::Instance().GetAvailablePointClasses();
+    
+    // Fallback staging values if FGD didn't return tokens
+    if(rawPointClasses.empty()) {
+        rawPointClasses = {"info_player_start", "light", "env_shake", "env_spark", "trigger_once"};
+    }
+
+    // Map helper structures to keep track of folder nodes we create dynamically
+    QMap<QString, QStandardItem*> folderCache;
+
+    for (const auto& classnameStr : rawPointClasses)
+    {
+        QString classname = QString::fromStdString(classnameStr);
+        QStandardItem *item = new QStandardItem(classname);
+        item->setEditable(false);
+
+        // Intelligently determine a prefix folder classification name (e.g., "env", "info", "trigger")
+        int prefixIndex = classname.indexOf('_');
+        if (prefixIndex > 0)
+        {
+            QString prefix = classname.left(prefixIndex).toUpper();
+            
+            // If the folder item doesn't exist yet in our view tree model, create it!
+            if (!folderCache.contains(prefix))
+            {
+                QStandardItem *folderNode = new QStandardItem(prefix);
+                folderNode->setEditable(false);
+                folderNode->setFont(QFont("Arial", 9, QFont::Bold));
+                m_pEntityTreeModel->invisibleRootItem()->appendRow(folderNode);
+                folderCache.insert(prefix, folderNode);
+            }
+            
+            // Append the class item as a leaf under its parent prefix group node
+            folderCache[prefix]->appendRow(item);
+        }
+        else
+        {
+            // If the entity has no underscore prefix, place it cleanly at the root level
+            m_pEntityTreeModel->invisibleRootItem()->appendRow(item);
+        }
+    }
+
+    // 4. Configure our live regex search filter proxy model layers
+    m_pEntityFilterProxyModel = new QSortFilterProxyModel(this);
+    m_pEntityFilterProxyModel->setSourceModel(m_pEntityTreeModel);
+    m_pEntityFilterProxyModel->setFilterCaseSensitivity(Qt::CaseInsensitive);
+    m_pEntityFilterProxyModel->setRecursiveFilteringEnabled(true); // Ensures parent folders stay visible during deep leaf searches
+
+    // 5. Build and populate our actual Tree View viewport widget panel
+    m_pEntityTreeView = new QTreeView(this);
+    m_pEntityTreeView->setModel(m_pEntityFilterProxyModel);
+    m_pEntityTreeView->setHeaderHidden(true);
+    m_pEntityTreeView->setAnimated(true);
+    m_pEntityTreeView->setStyleSheet(
+        "QTreeView { background-color: #1e1e1e; color: #cccccc; border: 1px solid #3c3c3c; }"
+        "QTreeView::item:selected { background-color: #094771; color: white; }"
+        "QTreeView::item:hover { background-color: #2a2d2e; }"
+    );
+    
+    connect(m_pEntityTreeView->selectionModel(), &QItemSelectionModel::currentChanged, this, &MainWindow::onEntityTreeSelectionChanged);
+    rightLayout->addWidget(m_pEntityTreeView);
+
+    // 6. Integrate this container into your central splitter layout hierarchy!
+    // Simply add the container widget as a new pane to the main horizontal window layout splitter
+    m_hMainSplitter->addWidget(rightContainer);
+    
+    // Set appropriate starting horizontal panel sizing distributions
+    m_hMainSplitter->setStretchFactor(m_hMainSplitter->indexOf(rightContainer), 0);
+}
+
+void MainWindow::onEntityFilterChanged(const QString &text)
+{
+    if (m_pEntityFilterProxyModel)
+    {
+        m_pEntityFilterProxyModel->setFilterFixedString(text);
+        
+        // Auto-expand folder nodes when actively filtering text strings to show hidden matches
+        if (!text.isEmpty() && m_pEntityTreeView) {
+            m_pEntityTreeView->expandAll();
+        }
+    }
+}
+
+void MainWindow::onEntityTreeSelectionChanged(const QModelIndex &current, const QModelIndex &previous)
+{
+    Q_UNUSED(previous);
+    if (!current.isValid()) return;
+
+    // Translate the proxy index back to the true underlying source item string
+    QModelIndex sourceIndex = m_pEntityFilterProxyModel->mapToSource(current);
+    QStandardItem *item = m_pEntityTreeModel->itemFromIndex(sourceIndex);
+    
+    if (item && !item->hasChildren()) // Ensure the user didn't accidentally select a group folder header node
+    {
+        m_currentEntityClass = item->text();
+        statusBar()->showMessage(tr("Active Entity Tool Target: %1").arg(m_currentEntityClass), 2000);
+    }
 }
 
 MainWindow::~MainWindow(){}

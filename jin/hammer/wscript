@@ -60,6 +60,7 @@ def build(bld):
 		'MainWindow.cpp',
 		#'hammer.cpp',
 		'MapDocument.cpp',
+		'FgdManager.cpp',
 		'VmfIO.cpp',
     ]
 
@@ -117,7 +118,7 @@ def build(bld):
 
 	defines = ['SW_HAMMER_TOOL']
 
-	libs = ['QT6CORE', 'QT6WIDGETS', 'QT6GUI', 'QT6OPENGLWIDGETS', 'appframework', 'mathlib', 'bitmap', 'vstdlib', 'tier2', 'tier1', 'tier0', 'togl', 'SDL2']
+	libs = ['QT6CORE', 'QT6WIDGETS', 'QT6GUI', 'QT6OPENGLWIDGETS', 'fgdlib', 'appframework', 'mathlib', 'bitmap', 'vstdlib', 'tier2', 'tier1', 'tier0', 'togl', 'SDL2']
 	#libs = ['QT6CORE', 'QT6WIDGETS', 'QT6GUI', 'QT6OPENGLWIDGETS', 'appframework', 'bitmap', 'vstdlib', 'tier2', 'tier1', 'tier0',]
 
 	install_path = bld.env.BINDIR

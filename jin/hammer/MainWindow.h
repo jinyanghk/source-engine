@@ -4,7 +4,10 @@
 #include <QGraphicsScene>
 #include <QVector>
 #include <QSplitter>
-#include <QComboBox>
+#include <QTreeView>
+#include <QLineEdit>
+#include <QSortFilterProxyModel>
+#include <QStandardItemModel>
 #include <QActionGroup>
 #include <QAction>
 #include <QList>
@@ -13,7 +16,6 @@
 #include "MapDocument.h"
 #include "HammerUITypes.h"
 
-// Forward declarations of our clean UI components
 class Hammer2DGridView;
 class Hammer3DView;
 
@@ -38,7 +40,10 @@ private slots:
     void triggerSaveDialog();
     
     void onToolChanged(EditTool tool);
-    void onEntityClassChanged(const QString &classname);
+    void onEntityClassChanged(const QString &classname); // Re-added to match your cpp slot
+
+    void onEntityTreeSelectionChanged(const QModelIndex &current, const QModelIndex &previous);
+    void onEntityFilterChanged(const QString &text);
 
     void toggleViewModeSingle3D(bool checked);
     void toggleViewModeSplit4Way(bool checked);
@@ -46,24 +51,27 @@ private slots:
 private:
     QGraphicsScene *m_pGridScene;
     QVector<Hammer2DGridView*> m_views;
-    Hammer3DView *m_p3DViewport; // NEW: Pointing to our animation-free viewport panel
+    Hammer3DView *m_p3DViewport; 
     
     QVector<MapBrush> m_mapBrushes;
     QVector<MapEntity> m_mapEntities;
-    int m_nextBrushId;
-    int m_nextEntityId;
     int m_selectedBrushId;
 
     EditTool m_activeTool;
     QString m_currentEntityClass;
-    QComboBox *m_pEntityClassCombo;
-    QActionGroup *m_pToolActionGroup;
 
+    QTreeView               *m_pEntityTreeView;
+    QLineEdit               *m_pEntityFilterEdit;
+    QStandardItemModel      *m_pEntityTreeModel;
+    QSortFilterProxyModel   *m_pEntityFilterProxyModel;
+
+    QActionGroup *m_pToolActionGroup;
     QSplitter *m_hMainSplitter;
     QAction *m_pActView3D;
     QAction *m_pActView4Way;
     bool m_bIsSingle3DMode;
 
+    // Re-added size tracking caches required by your view toggle methods
     QList<int> m_cachedLeftSizes;
     QList<int> m_cachedRightSizes;
 
@@ -71,7 +79,9 @@ private:
 
     void createViewMenuActions();
     void createMenuBarActions();
-    void createSidebarToolbox();
+    void createSidebarToolbox(); // Kept original name matching your cpp definition
+    void createRightEntityBrowser();
+    
     void generateMockBrushes();
     void deleteSelectedBrush();
     void syncAllViews();
