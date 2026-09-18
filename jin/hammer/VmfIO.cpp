@@ -8,7 +8,7 @@
 // Internal helper to turn custom Vector3D arrays into standard VMF text format
 static std::string FormatVmfPlane(const Vector3D& p1, const Vector3D& p2, const Vector3D& p3) {
     std::ostringstream ss;
-    // Format required: "(x y z) (x y z) (x y z)"
+    // Format required by Valve: "(x y z) (x y z) (x y z)"
     ss << "(" << p1.x << " " << p1.y << " " << p1.z << ") "
        << "(" << p2.x << " " << p2.y << " " << p2.z << ") "
        << "(" << p3.x << " " << p3.y << " " << p3.z << ")";
@@ -66,18 +66,25 @@ bool VmfIO::SaveToFile(const std::string& filePath, const MapDocument& doc) {
     // Close down the world definition block
     file << "}\n";
 
-    // 2. Export Point Entities (NEW)
-    // Point entities sit outside the world spawn block at the file root level
+    // 2. Export Point Entities with Dynamic KeyValues
     const auto& entities = doc.GetEntities();
     for (const auto& ent : entities) {
         file << "entity\n"
              << "{\n"
              << "\t\"id\" \"" << ent.id << "\"\n"
              << "\t\"classname\" \"" << ent.classname << "\"\n"
-             << "\t\"spawnflags\" \"0\"\n"
-             // Format required: "origin" "X Y Z"
-             << "\t\"origin\" \"" << ent.origin.x << " " << ent.origin.y << " " << ent.origin.z << "\"\n"
-             << "}\n";
+             // Format coordinates: "origin" "X Y Z"
+             << "\t\"origin\" \"" << ent.origin.x << " " << ent.origin.y << " " << ent.origin.z << "\"\n";
+
+        // Dynamically loop through and export any attached user keys (angles, targetname, lights, etc.)
+        for (const auto& kv : ent.properties) {
+            // Prevent duplicate writing of base layout attributes if they were appended to the properties map
+            if (kv.key != "id" && kv.key != "classname" && kv.key != "origin") {
+                file << "\t\"" << kv.key << "\" \"" << kv.value << "\"\n";
+            }
+        }
+        
+        file << "}\n";
     }
 
     file.close();
@@ -132,36 +139,37 @@ bool VmfIO::LoadFromFile(const std::string& filePath, MapDocument& doc) {
             } else if (inSolid) {
                 doc.AddSolid(tempSolid);
                 inSolid = false;
-            } else if (inEntity) { // Complete entity definition
-                doc.CreateNewEntity(tempEntity.classname, Vector(tempEntity.origin.x, tempEntity.origin.y, tempEntity.origin.z));
+            } else if (inEntity) { 
+                // Pass the fully populated struct directly down to our document manager
+                doc.AddEntity(tempEntity); 
                 inEntity = false;
             }
             continue;
         }
 
-        // Basic string-token value extraction
         std::istringstream iss(cleanLine);
         std::string key, val;
         if (iss >> std::quoted(key) >> std::quoted(val)) {
             if (inSide) {
-                if (key == "id") {
-                    tempFace.id = std::stoi(val);
-                } else if (key == "material") {
-                    tempFace.material = val;
-                }
+                if (key == "id") tempFace.id = std::stoi(val);
+                else if (key == "material") tempFace.material = val;
             } else if (inSolid && !inSide) {
-                if (key == "id") {
-                    tempSolid.id = std::stoi(val);
-                }
-            } else if (inEntity) { // Extract explicit fields from the entity block
+                if (key == "id") tempSolid.id = std::stoi(val);
+            } 
+            else if (inEntity) { // Update our active entity variable extractor
                 if (key == "id") {
                     tempEntity.id = std::stoi(val);
                 } else if (key == "classname") {
                     tempEntity.classname = val;
                 } else if (key == "origin") {
-                    // Extract spatial values from "X Y Z" string layout
                     std::istringstream orgTokens(val);
                     orgTokens >> tempEntity.origin.x >> tempEntity.origin.y >> tempEntity.origin.z;
+                } else {
+                    // DYNAMIC PROPERTY EXTRACTION: Captures all standard target keys
+                    VmfKeyValuePair kv;
+                    kv.key = key;
+                    kv.value = val;
+                    tempEntity.properties.push_back(kv);
                 }
             }
         }

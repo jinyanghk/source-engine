@@ -1,5 +1,7 @@
 #include "FgdManager.h"
 
+#include <QDebug>
+
 #include "fgdlib/ieditortexture.h" 
 #include "fgdlib/gamedata.h"
 #include "fgdlib/gdclass.h"
@@ -72,4 +74,52 @@ bool FgdManager::FindTemplate(const std::string& classname, FgdEntityTemplate& o
     outTemplate.b = fgdColor.b;
 
     return true;
+}
+
+std::string FgdManager::GetModelPathForClass(const std::string& classname) const {
+    if (!m_pGameData) {
+        qDebug() << "[FgdManager] ERROR: m_pGameData is NULL!";
+        return "models/alyx.mdl";
+    }
+
+    GDclass* pClass = m_pGameData->ClassForName(classname.c_str());
+    if (!pClass) {
+        qDebug() << "[FgdManager] WARNING: Class not found in FGD:" << QString::fromStdString(classname);
+        return "models/alyx.mdl";
+    }
+
+    int helperCount = pClass->GetHelperCount();
+    qDebug() << "[FgdManager] Querying class:" << QString::fromStdString(classname) << "| Total Helpers found:" << helperCount;
+
+    for (int i = 0; i < helperCount; ++i) {
+        CHelperInfo* pHelper = pClass->GetHelper(i);
+        if (pHelper && pHelper->GetName()) {
+            QString helperName = QString::fromUtf8(pHelper->GetName());
+            int paramCount = pHelper->GetParameterCount();
+            
+            qDebug() << "  -> Helper index" << i << ":" << helperName << "| Parameter count:" << paramCount;
+
+            for (int p = 0; p < paramCount; ++p) {
+                if (pHelper->GetParameter(p)) {
+                    qDebug() << "     [" << p << "]:" << QString::fromUtf8(pHelper->GetParameter(p));
+                }
+            }
+
+            if (helperName.compare("studio", Qt::CaseInsensitive) == 0) {
+                if (paramCount > 0 && pHelper->GetParameter(0)) {
+                    std::string mdlPath = pHelper->GetParameter(0);
+                    
+                    if (mdlPath.size() >= 2 && mdlPath.front() == '"' && mdlPath.back() == '"') {
+                        mdlPath = mdlPath.substr(1, mdlPath.size() - 2);
+                    }
+                    
+                    qDebug() << "  >> SUCCESS: Matched studio helper! Returning path:" << QString::fromStdString(mdlPath);
+                    return mdlPath;
+                }
+            }
+        }
+    }
+
+    qDebug() << "  >> No studio helper matched for this class. Falling back to alyx.mdl.";
+    return "models/alyx.mdl";
 }

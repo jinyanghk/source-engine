@@ -25,6 +25,8 @@ public:
 
     void Clear();
 
+    void AddEntity(const VmfEntity& entity);
+
 private:
     int m_nextSolidID;  // Separated counter names for clarity
     int m_nextEntityID; // Independent entity ID counter

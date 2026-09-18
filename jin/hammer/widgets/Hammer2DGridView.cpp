@@ -143,34 +143,40 @@ void Hammer2DGridView::paintEvent(QPaintEvent *event)
         painter.drawRect(brushRect);
     }
 
-    // 2. Draw Point Entities Natively
+    // 2. Draw Point Entities Natively aligned to World Axis Transformations
     for (const auto &ent : m_entities)
     {
         qreal scrX = 0, scrY = 0;
         switch (m_orientation)
         {
-        case VIEW_TOP:
-            scrX = ent.origin.x;
-            scrY = -ent.origin.y;
+        case VIEW_TOP:   
+            scrX = ent.origin.x; 
+            scrY = -ent.origin.y; 
             break;
-        case VIEW_FRONT:
-            scrX = ent.origin.x;
-            scrY = -ent.origin.z;
+        case VIEW_FRONT: 
+            scrX = ent.origin.x; 
+            scrY = -ent.origin.z; 
             break;
-        case VIEW_SIDE:
-            scrX = ent.origin.y;
-            scrY = -ent.origin.z;
+        case VIEW_SIDE:  
+            scrX = ent.origin.y; 
+            scrY = -ent.origin.z; 
             break;
         }
 
-        qreal size = 16.0;
+        // FIX: Draw a robust 3D bounding box footprint mapped directly to world coordinates
+        // so it scales, centers, and anchors perfectly on your grid crosshair line paths!
+        qreal size = 16.0; 
         qreal half = size / 2.0;
         QRectF entRect(scrX - half, scrY - half, size, size);
 
+        // Map colors driven dynamically from your FGD configuration template definitions
         painter.setPen(QPen(ent.color, 1.5f, Qt::SolidLine));
-        painter.setBrush(QBrush(QColor(ent.color.red(), ent.color.green(), ent.color.blue(), 60)));
+        painter.setBrush(QBrush(QColor(ent.color.red(), ent.color.green(), ent.color.blue(), 45)));
+        
+        // Paint the point box outline footprint
         painter.drawRect(entRect);
 
+        // Draw internal target alignment crosshair markers centered within the block
         painter.drawLine(QPointF(scrX - half - 4, scrY), QPointF(scrX + half + 4, scrY));
         painter.drawLine(QPointF(scrX, scrY - half - 4), QPointF(scrX, scrY + half + 4));
     }

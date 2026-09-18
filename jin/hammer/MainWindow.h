@@ -15,6 +15,7 @@
 #include "mathlib/vector.h"
 #include "MapDocument.h"
 #include "HammerUITypes.h"
+#include "widgets/ModelView.h"
 
 class Hammer2DGridView;
 class Hammer3DView;
@@ -44,6 +45,7 @@ private slots:
 
     void onEntityTreeSelectionChanged(const QModelIndex &current, const QModelIndex &previous);
     void onEntityFilterChanged(const QString &text);
+    void onEntityTreeDoubleClicked(const QModelIndex &index); 
 
     void toggleViewModeSingle3D(bool checked);
     void toggleViewModeSplit4Way(bool checked);

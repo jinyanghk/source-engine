@@ -34,6 +34,7 @@ public:
     // UI Data Feed Query Targets
     std::vector<std::string> GetAvailablePointClasses() const;
     bool FindTemplate(const std::string& classname, FgdEntityTemplate& outTemplate) const;
+    std::string GetModelPathForClass(const std::string& classname) const;
 
 private:
     FgdManager();

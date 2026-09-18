@@ -3,22 +3,24 @@
 
 #include <string>
 #include <vector>
+#include "mathlib/vector.h"
 
-// Pure data structures representing Valve's VMF coordinate system
+// 1. Vector primitives matching Valve coordinates
 struct Vector3D {
     float x = 0.0f;
     float y = 0.0f;
     float z = 0.0f;
 };
 
+// 2. Brush primitive definitions
 struct VmfFace {
     int id = 0;
-    // Plane defined by 3 points: (x1 y1 z1) (x2 y2 z2) (x3 y3 z3)
-    Vector3D planePoints[3];
-    std::string material = "DEV/DEV_MEASUREGENERIC01";
     
-    // Texture mapping attributes
-    float uAxis[4] = {1.0f, 0.0f, 0.0f, 0.0f}; // [x y z shift]
+    // FIX: Declare this as an explicit 3-element array to track the 3 plane anchor points
+    Vector3D planePoints[3]; 
+    
+    std::string material = "DEV/DEV_MEASUREGENERIC01";
+    float uAxis[4] = {1.0f, 0.0f, 0.0f, 0.0f}; // Ensure brackets are here from our previous fix
     float vAxis[4] = {0.0f, -1.0f, 0.0f, 0.0f};
     float rotation = 0.0f;
     float uScale = 0.25f;
@@ -30,12 +32,18 @@ struct VmfSolid {
     std::vector<VmfFace> faces;
 };
 
+// 3. Dynamic KeyValue property structures
+struct VmfKeyValuePair {
+    std::string key;
+    std::string value;
+};
+
+// 4. CLEAN SINGLE DEFINITION: Expose the dynamic property entity structure
 struct VmfEntity {
     int id = 0;
     std::string classname = "info_player_start";
-    Vector3D origin; // Pure data coordinates
-    
-    // Future expansion for KeyValues target fields: e.g. "targetname", "spawnflags"
+    Vector origin = Vector(0.0f, 0.0f, 0.0f);
+    std::vector<VmfKeyValuePair> properties;
 };
 
 #endif // MAP_DATA_TYPES_H

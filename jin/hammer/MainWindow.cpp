@@ -256,8 +256,27 @@ void MainWindow::onEntityClassChanged(const QString &classname) { m_currentEntit
 
 void MainWindow::onEntityPlaced(const Vector &origin, const QString &classname)
 {
-    // Pass placement properties safely down to our pure C++ backend data container
+    // 1. Pipe properties safely down to our pure C++ backend data container
     m_document.CreateNewEntity(classname.toUtf8().constData(), origin);
+    
+    // 2. Query our fgdlib wrapper template definitions to map visual profiles
+    FgdEntityTemplate entTemplate;
+    QColor displayColor(0, 255, 0); // Default fallback profile color
+    
+    if (FgdManager::Instance().FindTemplate(classname.toUtf8().constData(), entTemplate))
+    {
+        // Extract the explicit editor color profile defined in the FGD schema
+        displayColor = QColor(entTemplate.r, entTemplate.g, entTemplate.b);
+    }
+    
+    // 3. Track presentation metrics locally so viewports paint unique attributes
+    MapEntity visualEnt;
+    visualEnt.id = m_mapEntities.size() + 1; // Temporary presentation ID tracking
+    visualEnt.classname = classname;
+    visualEnt.origin = origin;
+    visualEnt.color = displayColor;
+    
+    m_mapEntities.append(visualEnt);
     
     syncAllViews();
 }
@@ -295,13 +314,15 @@ void MainWindow::syncAllViews()
         visualEnt.classname = QString::fromStdString(ent.classname);
         visualEnt.origin.Init(ent.origin.x, ent.origin.y, ent.origin.z);
         
-        // Determine viewport display wireframe color profiles based on entity classification
-        if (visualEnt.classname == "info_player_start") {
-            visualEnt.color = QColor(0, 255, 0);
-        } else if (visualEnt.classname == "light") {
-            visualEnt.color = QColor(255, 255, 0);
-        } else {
-            visualEnt.color = QColor(230, 0, 255);
+        // DYNAMIC FGD INTERPRETATION: Pull unique display color specifications
+        FgdEntityTemplate entTemplate;
+        if (FgdManager::Instance().FindTemplate(ent.classname, entTemplate))
+        {
+            visualEnt.color = QColor(entTemplate.r, entTemplate.g, entTemplate.b);
+        }
+        else
+        {
+            visualEnt.color = QColor(230, 0, 255); // Fallback color magenta
         }
 
         m_mapEntities.append(visualEnt);
@@ -538,6 +559,7 @@ void MainWindow::createRightEntityBrowser()
     );
     
     connect(m_pEntityTreeView->selectionModel(), &QItemSelectionModel::currentChanged, this, &MainWindow::onEntityTreeSelectionChanged);
+    connect(m_pEntityTreeView, &QTreeView::doubleClicked, this, &MainWindow::onEntityTreeDoubleClicked);
     rightLayout->addWidget(m_pEntityTreeView);
 
     // 6. Integrate this container into your central splitter layout hierarchy!
@@ -574,6 +596,36 @@ void MainWindow::onEntityTreeSelectionChanged(const QModelIndex &current, const 
     {
         m_currentEntityClass = item->text();
         statusBar()->showMessage(tr("Active Entity Tool Target: %1").arg(m_currentEntityClass), 2000);
+    }
+}
+
+void MainWindow::onEntityTreeDoubleClicked(const QModelIndex &index)
+{
+    if (!index.isValid() || !m_pEntityFilterProxyModel || !m_pEntityTreeModel || !m_p3DViewport) 
+        return;
+
+    QModelIndex sourceIndex = m_pEntityFilterProxyModel->mapToSource(index);
+    QStandardItem *item = m_pEntityTreeModel->itemFromIndex(sourceIndex);
+    
+    if (item && !item->hasChildren())
+    {
+        QString classname = item->text();
+        std::string targetModelPath = FgdManager::Instance().GetModelPathForClass(classname.toUtf8().constData());
+        
+        QModelView* pModelViewerWindow = new QModelView(nullptr);
+        pModelViewerWindow->resize(640, 480);
+        pModelViewerWindow->setAttribute(Qt::WA_DeleteOnClose);
+
+        pModelViewerWindow->show();
+        pModelViewerWindow->raise();
+        pModelViewerWindow->activateWindow();
+
+        // FIX: Wrap the LoadModelFile inside a singleShot timer to let the 
+        // internal connection constructor queue clear its default alyx.mdl overwrite step!
+        QTimer::singleShot(200, pModelViewerWindow, [pModelViewerWindow, targetModelPath]() {
+            pModelViewerWindow->LoadModelFile(QString::fromStdString(targetModelPath));
+        });
+
     }
 }
 

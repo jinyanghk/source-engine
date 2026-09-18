@@ -37,8 +37,8 @@ QModelView::QModelView(QWidget *parent)
         emit this->update(); });
     m_pAnimationFrameTimer->start(33); // 30 FPS Refresh Thread Tick Loop
 
-    QTimer::singleShot(200, this, [=]()
-                       { LoadModelFile("models/alyx.mdl"); });
+    //QTimer::singleShot(200, this, [=]()
+    //                   { LoadModelFile("models/alyx.mdl"); });
 }
 
 QModelView::~QModelView()

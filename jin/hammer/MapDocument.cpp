@@ -94,3 +94,10 @@ void MapDocument::Clear() {
     m_nextSolidID = 1;
     m_nextEntityID = 1;
 }
+
+void MapDocument::AddEntity(const VmfEntity& entity) {
+    m_entities.push_back(entity);
+    if (entity.id >= m_nextEntityID) {
+        m_nextEntityID = entity.id + 1;
+    }
+}
