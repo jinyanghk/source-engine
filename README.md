@@ -1,8 +1,25 @@
 # Source Engine
 
-this project was forked from https://github.com/nillerusr/source-engine, focusing on linux amd64 utilities
+This project was forked from https://github.com/nillerusr/source-engine, I'm working on linux utilities and hammer editor
 
 ![lambda](jin/lambda.png)
+
+### working in progress
+
+* qt6 based hammer editor
+
+### completed
+
+* vpk
+* vbsp
+* vvis
+* vrad
+* studiomdl
+* vtex
+* vbspinfo
+* bspzip
+* glview
+* dmxconvert
 
 # How to Build?
 - [Building instructions(EN)](https://github.com/nillerusr/source-engine/wiki/Source-Engine-(EN))

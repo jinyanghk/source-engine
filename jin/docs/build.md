@@ -3,12 +3,17 @@
 ```sh
 sudo apt install build-essential pkg-config ccache libsdl2-dev libfontconfig1-dev libopenal-dev libjpeg-dev libpng-dev libcurl4-gnutls-dev libbz2-dev libedit-dev
 ```
+
+```sh
+sudo apt install qt6-base-dev qt6-tools-dev
+```
+
 ### build
 
 ```sh
 python3 ./waf configure -T debug --prefix=hl2 --build-games=hl2 --disable-warns
 
-python3 ./waf build -p -v 
+python3 ./waf build
 
 python3 ./waf install
 ```
