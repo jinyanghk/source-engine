@@ -1,10 +1,10 @@
-#include "Hammer2DGridView.h"
+#include "Map2DView.h"
 #include <QScrollBar>
 #include <QPainter>
 #include <cmath>
 #include <algorithm>
 
-Hammer2DGridView::Hammer2DGridView(ViewOrientation orientation, QWidget *parent)
+Map2DView::Map2DView(ViewOrientation orientation, QWidget *parent)
     : QGraphicsView(parent), m_orientation(orientation), m_gridSize(32),
       m_isPanning(false), m_editMode(MODE_NONE), m_selectedBrushId(-1), m_activeHandle(HANDLE_NONE),
       m_activeTool(TOOL_SELECT), m_currentEntityClass("info_player_start")
@@ -20,10 +20,10 @@ Hammer2DGridView::Hammer2DGridView(ViewOrientation orientation, QWidget *parent)
     setMouseTracking(true);
 }
 
-float Hammer2DGridView::snapToGrid(float value) const { return std::round(value / m_gridSize) * m_gridSize; }
-QPointF Hammer2DGridView::snapToGrid(const QPointF &scenePos) const { return QPointF(snapToGrid(scenePos.x()), snapToGrid(scenePos.y())); }
+float Map2DView::snapToGrid(float value) const { return std::round(value / m_gridSize) * m_gridSize; }
+QPointF Map2DView::snapToGrid(const QPointF &scenePos) const { return QPointF(snapToGrid(scenePos.x()), snapToGrid(scenePos.y())); }
 
-void Hammer2DGridView::setGridSize(int size)
+void Map2DView::setGridSize(int size)
 {
     if (size >= 1 && size <= 1024)
     {
@@ -33,7 +33,7 @@ void Hammer2DGridView::setGridSize(int size)
     }
 }
 
-void Hammer2DGridView::projectTo2D(const Vector &mins, const Vector &maxs, qreal &x, qreal &y, qreal &w, qreal &h)
+void Map2DView::projectTo2D(const Vector &mins, const Vector &maxs, qreal &x, qreal &y, qreal &w, qreal &h)
 {
     switch (m_orientation)
     {
@@ -58,7 +58,7 @@ void Hammer2DGridView::projectTo2D(const Vector &mins, const Vector &maxs, qreal
     }
 }
 
-void Hammer2DGridView::unprojectFrom2D(qreal x, qreal y, qreal w, qreal h, Vector &targetMins, Vector &targetMaxs)
+void Map2DView::unprojectFrom2D(qreal x, qreal y, qreal w, qreal h, Vector &targetMins, Vector &targetMaxs)
 {
     qreal x1 = x;
     qreal x2 = x + w;
@@ -93,7 +93,7 @@ void Hammer2DGridView::unprojectFrom2D(qreal x, qreal y, qreal w, qreal h, Vecto
     }
 }
 
-void Hammer2DGridView::convertDeltaTo3D(const QPointF &delta2D, Vector &outDelta3D)
+void Map2DView::convertDeltaTo3D(const QPointF &delta2D, Vector &outDelta3D)
 {
     outDelta3D.Init(0, 0, 0);
     switch (m_orientation)
@@ -110,7 +110,7 @@ void Hammer2DGridView::convertDeltaTo3D(const QPointF &delta2D, Vector &outDelta
     }
 }
 
-void Hammer2DGridView::updateSceneData(const QVector<MapBrush> &brushes, const QVector<MapEntity> &entities, int selectedId, EditTool activeTool, const QString &entityClass)
+void Map2DView::updateSceneData(const QVector<MapBrush> &brushes, const QVector<MapEntity> &entities, int selectedId, EditTool activeTool, const QString &entityClass)
 {
     m_brushes = brushes;
     m_entities = entities;
@@ -121,7 +121,7 @@ void Hammer2DGridView::updateSceneData(const QVector<MapBrush> &brushes, const Q
     viewport()->update();
 }
 
-void Hammer2DGridView::paintEvent(QPaintEvent *event)
+void Map2DView::paintEvent(QPaintEvent *event)
 {
     QGraphicsView::paintEvent(event);
 
@@ -195,7 +195,7 @@ void Hammer2DGridView::paintEvent(QPaintEvent *event)
     }
 }
 
-void Hammer2DGridView::updateHandlePositions()
+void Map2DView::updateHandlePositions()
 {
     if (m_selectedBrushId == -1)
     {
@@ -236,7 +236,7 @@ void Hammer2DGridView::updateHandlePositions()
     m_handleRects[HANDLE_LEFT] = QRectF(r.left() - half, r.center().y() - half, handleSize, handleSize);
 }
 
-int Hammer2DGridView::getBrushIdAtPosition(const QPointF &scenePos)
+int Map2DView::getBrushIdAtPosition(const QPointF &scenePos)
 {
     for (int i = m_entities.size() - 1; i >= 0; --i)
     {
@@ -272,7 +272,7 @@ int Hammer2DGridView::getBrushIdAtPosition(const QPointF &scenePos)
     return -1;
 }
 
-Hammer2DGridView::HandleIndex Hammer2DGridView::hitTestHandles(const QPointF &scenePos)
+Map2DView::HandleIndex Map2DView::hitTestHandles(const QPointF &scenePos)
 {
     if (m_selectedBrushId == -1 || m_activeTool != TOOL_SELECT)
         return HANDLE_NONE;
@@ -284,7 +284,7 @@ Hammer2DGridView::HandleIndex Hammer2DGridView::hitTestHandles(const QPointF &sc
     return HANDLE_NONE;
 }
 
-void Hammer2DGridView::updateCursorForHandle(HandleIndex handle)
+void Map2DView::updateCursorForHandle(HandleIndex handle)
 {
     switch (handle)
     {
@@ -310,7 +310,7 @@ void Hammer2DGridView::updateCursorForHandle(HandleIndex handle)
     }
 }
 
-void Hammer2DGridView::drawBackground(QPainter *painter, const QRectF &rect)
+void Map2DView::drawBackground(QPainter *painter, const QRectF &rect)
 {
     QGraphicsView::drawBackground(painter, rect);
     qreal left = rect.left();
@@ -346,7 +346,7 @@ void Hammer2DGridView::drawBackground(QPainter *painter, const QRectF &rect)
         painter->drawLine(QPointF(left, y), QPointF(right, y));
     }
 }
-void Hammer2DGridView::drawForeground(QPainter *painter, const QRectF &rect)
+void Map2DView::drawForeground(QPainter *painter, const QRectF &rect)
 {
     QGraphicsView::drawForeground(painter, rect);
     painter->setPen(Qt::yellow);
@@ -381,7 +381,7 @@ void Hammer2DGridView::drawForeground(QPainter *painter, const QRectF &rect)
         }
     }
 }
-void Hammer2DGridView::wheelEvent(QWheelEvent *event)
+void Map2DView::wheelEvent(QWheelEvent *event)
 {
     qreal scaleFactor = 1.15;
     if (event->angleDelta().y() > 0)
@@ -391,7 +391,7 @@ void Hammer2DGridView::wheelEvent(QWheelEvent *event)
     updateHandlePositions();
     viewport()->update();
 }
-void Hammer2DGridView::mousePressEvent(QMouseEvent *event)
+void Map2DView::mousePressEvent(QMouseEvent *event)
 {
     if (event->button() == Qt::MiddleButton || (event->button() == Qt::LeftButton && (event->modifiers() & Qt::ShiftModifier)))
     {
@@ -458,7 +458,7 @@ void Hammer2DGridView::mousePressEvent(QMouseEvent *event)
     }
     QGraphicsView::mousePressEvent(event);
 }
-void Hammer2DGridView::mouseMoveEvent(QMouseEvent *event)
+void Map2DView::mouseMoveEvent(QMouseEvent *event)
 {
     QPointF scenePos = mapToScene(event->pos());
     if (m_isPanning)
@@ -548,7 +548,7 @@ void Hammer2DGridView::mouseMoveEvent(QMouseEvent *event)
     }
     QGraphicsView::mouseMoveEvent(event);
 }
-void Hammer2DGridView::mouseReleaseEvent(QMouseEvent *event)
+void Map2DView::mouseReleaseEvent(QMouseEvent *event)
 {
     if (m_isPanning)
     {

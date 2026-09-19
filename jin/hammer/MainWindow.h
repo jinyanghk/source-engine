@@ -17,8 +17,8 @@
 #include "HammerUITypes.h"
 #include "widgets/ModelView.h"
 
-class Hammer2DGridView;
-class Hammer3DView;
+class Map2DView;
+class Map3DView;
 
 class MainWindow : public QMainWindow
 {
@@ -52,8 +52,8 @@ private slots:
 
 private:
     QGraphicsScene *m_pGridScene;
-    QVector<Hammer2DGridView*> m_views;
-    Hammer3DView *m_p3DViewport; 
+    QVector<Map2DView*> m_views;
+    Map3DView *m_p3DViewport; 
     
     QVector<MapBrush> m_mapBrushes;
     QVector<MapEntity> m_mapEntities;

@@ -1,6 +1,6 @@
 #include "MainWindow.h"
-#include "widgets/Hammer2DGridView.h"
-#include "widgets/Hammer3DView.h"
+#include "widgets/Map2DView.h"
+#include "widgets/Map3DView.h"
 #include "VmfIO.h"
 #include "FgdManager.h"
 
@@ -66,22 +66,22 @@ MainWindow::MainWindow(QWidget *parent)
 
     // 6. Allocate our 2D Viewports matching classic Hammer layout dimensions
     // Top Row viewports layout splits
-    Hammer2DGridView *pTopXY = new Hammer2DGridView(Hammer2DGridView::VIEW_TOP, hTopGridSplitter);
+    Map2DView *pTopXY = new Map2DView(Map2DView::VIEW_TOP, hTopGridSplitter);
     pTopXY->setScene(m_pGridScene);
     m_views.append(pTopXY);
     hTopGridSplitter->addWidget(pTopXY);
 
     // Top Right: Allocate our accelerated, sequence-stable 3D graphics workspace view
-    m_p3DViewport = new Hammer3DView(hTopGridSplitter);
+    m_p3DViewport = new Map3DView(hTopGridSplitter);
     hTopGridSplitter->addWidget(m_p3DViewport);
 
     // Bottom Row viewports layout splits
-    Hammer2DGridView *pFrontXZ = new Hammer2DGridView(Hammer2DGridView::VIEW_FRONT, hBottomGridSplitter);
+    Map2DView *pFrontXZ = new Map2DView(Map2DView::VIEW_FRONT, hBottomGridSplitter);
     pFrontXZ->setScene(m_pGridScene);
     m_views.append(pFrontXZ);
     hBottomGridSplitter->addWidget(pFrontXZ);
 
-    Hammer2DGridView *pSideYZ = new Hammer2DGridView(Hammer2DGridView::VIEW_SIDE, hBottomGridSplitter);
+    Map2DView *pSideYZ = new Map2DView(Map2DView::VIEW_SIDE, hBottomGridSplitter);
     pSideYZ->setScene(m_pGridScene);
     m_views.append(pSideYZ);
     hBottomGridSplitter->addWidget(pSideYZ);
@@ -89,11 +89,11 @@ MainWindow::MainWindow(QWidget *parent)
     // Connect all our cross-viewport modification signals straight down to our slots
     for (auto view : m_views)
     {
-        connect(view, &Hammer2DGridView::brushCreated, this, &MainWindow::onBrushCreated);
-        connect(view, &Hammer2DGridView::brushSelected, this, &MainWindow::onBrushSelected);
-        connect(view, &Hammer2DGridView::brushMoved, this, &MainWindow::onBrushMoved);
-        connect(view, &Hammer2DGridView::brushResized, this, &MainWindow::onBrushResized);
-        connect(view, &Hammer2DGridView::entityPlaced, this, &MainWindow::onEntityPlaced);
+        connect(view, &Map2DView::brushCreated, this, &MainWindow::onBrushCreated);
+        connect(view, &Map2DView::brushSelected, this, &MainWindow::onBrushSelected);
+        connect(view, &Map2DView::brushMoved, this, &MainWindow::onBrushMoved);
+        connect(view, &Map2DView::brushResized, this, &MainWindow::onBrushResized);
+        connect(view, &Map2DView::entityPlaced, this, &MainWindow::onEntityPlaced);
     }
 
     // Set stable default grid split sizing distributions inside our nested viewports panels

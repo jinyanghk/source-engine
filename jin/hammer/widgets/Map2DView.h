@@ -9,13 +9,13 @@
 #include <QPointF>
 #include "HammerUITypes.h"
 
-class Hammer2DGridView : public QGraphicsView
+class Map2DView : public QGraphicsView
 {
     Q_OBJECT
 public:
     enum ViewOrientation { VIEW_TOP, VIEW_FRONT, VIEW_SIDE };
 
-    explicit Hammer2DGridView(ViewOrientation orientation, QWidget *parent = nullptr);
+    explicit Map2DView(ViewOrientation orientation, QWidget *parent = nullptr);
     void setGridSize(int size);
     int gridSize() const { return m_gridSize; }
     

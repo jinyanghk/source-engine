@@ -15,13 +15,13 @@
 typedef unsigned short MDLHandle_t;
 class ITexture;
 
-class Hammer3DView : public QWidget
+class Map3DView : public QWidget
 {
     Q_OBJECT
 
 public:
-    explicit Hammer3DView(QWidget *parent = nullptr);
-    virtual ~Hammer3DView();
+    explicit Map3DView(QWidget *parent = nullptr);
+    virtual ~Map3DView();
 
     void LoadModelFile(const QString &szFilePath);
     void updateBrushes(const MapBrush* pBrushes, int count, int selectedId);

@@ -1,4 +1,4 @@
-#include "Hammer3DView.h"
+#include "Map3DView.h"
 #include <QPainter>
 #include <QMouseEvent>
 #include <QWheelEvent>
@@ -18,7 +18,7 @@ extern IMDLCache *g_pMDLCache;
 extern "C" void Hammer_SetLauncherWindowContext(void *pWindowRef, int width, int height);
 static matrix3x4_t s_InterceptedBoneTransforms[MAXSTUDIOBONES];
 
-Hammer3DView::Hammer3DView(QWidget *parent)
+Map3DView::Map3DView(QWidget *parent)
     : QWidget(parent), m_hCurrentModel(0xFFFF), m_szCurrentModelPath(""),
       m_flZoomScale(2.5f), m_pOffscreenRenderTarget(nullptr), m_bIsRenderBufferBlank(true),
       m_ptCameraPanOffset(QPointF(0, 0)), m_selectedBrushId(-1)
@@ -29,7 +29,7 @@ Hammer3DView::Hammer3DView(QWidget *parent)
                        { LoadModelFile("models/editor/playerstart.mdl"); });
 }
 
-Hammer3DView::~Hammer3DView()
+Map3DView::~Map3DView()
 {
     if (m_pOffscreenRenderTarget && g_pMaterialSystem)
     {
@@ -37,7 +37,7 @@ Hammer3DView::~Hammer3DView()
     }
 }
 
-void Hammer3DView::updateBrushes(const MapBrush *pBrushes, int count, int selectedId)
+void Map3DView::updateBrushes(const MapBrush *pBrushes, int count, int selectedId)
 {
     m_mapBrushes.clear();
     m_selectedBrushId = selectedId;
@@ -62,7 +62,7 @@ void Hammer3DView::updateBrushes(const MapBrush *pBrushes, int count, int select
     this->update(); // Enforce layout refresh pass
 }
 
-void Hammer3DView::LoadModelFile(const QString &szPath)
+void Map3DView::LoadModelFile(const QString &szPath)
 {
     if (!g_pMDLCache)
         return;
@@ -71,7 +71,7 @@ void Hammer3DView::LoadModelFile(const QString &szPath)
     this->update();
 }
 
-void Hammer3DView::RenderEngineFrame()
+void Map3DView::RenderEngineFrame()
 {
     if (!g_pMaterialSystem || !g_pStudioRender || !g_pMDLCache || !isVisible())
     {
@@ -215,7 +215,7 @@ void Hammer3DView::RenderEngineFrame()
     g_pMaterialSystem->EndFrame();
 }
 
-void Hammer3DView::paintEvent(QPaintEvent *event)
+void Map3DView::paintEvent(QPaintEvent *event)
 {
     Q_UNUSED(event);
     RenderEngineFrame();
@@ -376,9 +376,9 @@ void Hammer3DView::paintEvent(QPaintEvent *event)
     painter.drawText(15, 25, "ModelView: 3D MAP WORKSPACE WIREFRAME ACTIVE");
 }
 
-void Hammer3DView::mousePressEvent(QMouseEvent *event) { m_ptLastMousePosition = event->pos(); }
+void Map3DView::mousePressEvent(QMouseEvent *event) { m_ptLastMousePosition = event->pos(); }
 
-void Hammer3DView::mouseMoveEvent(QMouseEvent *event)
+void Map3DView::mouseMoveEvent(QMouseEvent *event)
 {
     QPointF delta = event->position() - m_ptLastMousePosition;
     m_ptLastMousePosition = event->pos();
@@ -396,15 +396,15 @@ void Hammer3DView::mouseMoveEvent(QMouseEvent *event)
     }
 }
 
-void Hammer3DView::wheelEvent(QWheelEvent *event)
+void Map3DView::wheelEvent(QWheelEvent *event)
 {
     m_flZoomScale += event->angleDelta().y() > 0 ? 0.1f : -0.1f;
     m_flZoomScale = qBound(0.1f, m_flZoomScale, 10.0f);
     this->update();
 }
-void Hammer3DView::resizeEvent(QResizeEvent *event) { QWidget::resizeEvent(event); }
+void Map3DView::resizeEvent(QResizeEvent *event) { QWidget::resizeEvent(event); }
 
-void Hammer3DView::updateEntities(const MapEntity *pEntities, int count)
+void Map3DView::updateEntities(const MapEntity *pEntities, int count)
 {
     m_mapEntities.clear();
     if (pEntities && count > 0)
