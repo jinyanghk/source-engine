@@ -620,8 +620,6 @@ void MainWindow::onEntityTreeDoubleClicked(const QModelIndex &index)
         pModelViewerWindow->raise();
         pModelViewerWindow->activateWindow();
 
-        // FIX: Wrap the LoadModelFile inside a singleShot timer to let the 
-        // internal connection constructor queue clear its default alyx.mdl overwrite step!
         QTimer::singleShot(200, pModelViewerWindow, [pModelViewerWindow, targetModelPath]() {
             pModelViewerWindow->LoadModelFile(QString::fromStdString(targetModelPath));
         });

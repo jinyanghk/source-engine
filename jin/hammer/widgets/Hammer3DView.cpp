@@ -19,26 +19,14 @@ extern "C" void Hammer_SetLauncherWindowContext(void *pWindowRef, int width, int
 static matrix3x4_t s_InterceptedBoneTransforms[MAXSTUDIOBONES];
 
 Hammer3DView::Hammer3DView(QWidget *parent)
-    : QWidget(parent), m_flAnimationCycle(0.0f), m_hCurrentModel(0xFFFF), m_szCurrentModelPath(""),
+    : QWidget(parent), m_hCurrentModel(0xFFFF), m_szCurrentModelPath(""),
       m_flZoomScale(2.5f), m_pOffscreenRenderTarget(nullptr), m_bIsRenderBufferBlank(true),
       m_ptCameraPanOffset(QPointF(0, 0)), m_selectedBrushId(-1)
 {
     m_ptRotationAngle = QPoint(-20, 45); // Classic Hammer oblique view angle rules orientation setup
-    m_nActiveSequenceIndex = 0;
-    m_bPlaybackPaused = false;
-
-    m_pAnimationFrameTimer = new QTimer(this);
-    connect(m_pAnimationFrameTimer, &QTimer::timeout, this, [=]()
-            {
-        // FORCE the animation cycle state parameter to stay permanently at zero!
-        m_flAnimationCycle = 0.0f; 
-
-        // Keep updating the viewport window at 30 FPS natively
-        this->update(); });
-    m_pAnimationFrameTimer->start(33); // 30 FPS Refresh Thread Tick Loop
 
     QTimer::singleShot(200, this, [=]()
-                       { LoadModelFile("models/alyx.mdl"); });
+                       { LoadModelFile("models/editor/playerstart.mdl"); });
 }
 
 Hammer3DView::~Hammer3DView()
@@ -60,7 +48,7 @@ void Hammer3DView::updateBrushes(const MapBrush *pBrushes, int count, int select
         m_mapBrushes.reserve(count);
         for (int i = 0; i < count; ++i)
         {
-            ModelViewBrush b;
+            MapBrush b;
             b.id = pBrushes[i].id;
 
             // Map raw Source Vector objects directly
@@ -79,7 +67,6 @@ void Hammer3DView::LoadModelFile(const QString &szPath)
     if (!g_pMDLCache)
         return;
     m_szCurrentModelPath = szPath;
-    m_flAnimationCycle = 0.0f;
     m_hCurrentModel = g_pMDLCache->FindMDL(m_szCurrentModelPath.toUtf8().constData());
     this->update();
 }
@@ -154,7 +141,6 @@ void Hammer3DView::RenderEngineFrame()
 
                     matrix3x4_t pBoneToWorld[MAXSTUDIOBONES];
                     mstudiobone_t *pBoneArray = (mstudiobone_t *)((byte *)pStudioHdr + pStudioHdr->boneindex);
-                    int nSequenceIndex = qBound(0, m_nActiveSequenceIndex, pStudioHdr->numlocalseq - 1);
 
                     if (pBoneArray != nullptr)
                     {
@@ -162,28 +148,6 @@ void Hammer3DView::RenderEngineFrame()
                         {
                             Vector bonePos = pBoneArray[i].pos;
                             Quaternion boneQuat = pBoneArray[i].quat;
-
-                            if (pBoneArray[i].parent != -1)
-                            {
-                                float timelineFactor = (m_flAnimationCycle * M_PI * 2.0f);
-                                if (nSequenceIndex > 0)
-                                {
-                                    float sequencePoseAngle = (float)nSequenceIndex * 0.35f;
-                                    boneQuat.x += qSin(timelineFactor + i * 0.1f) * 0.08f + qMin(0.2f, sequencePoseAngle * 0.05f);
-                                    boneQuat.y += qCos(timelineFactor + i * 0.1f) * 0.05f;
-                                    if (i > 10 && i % 2 == 0)
-                                    {
-                                        bonePos.z += qMax(-3.0f, -((float)nSequenceIndex * 0.6f));
-                                        bonePos.y += qMin(4.0f, ((float)nSequenceIndex * 0.4f));
-                                    }
-                                }
-                                else
-                                {
-                                    float waveFactor = qSin(timelineFactor + i * 0.2f) * 0.2f;
-                                    bonePos.x += waveFactor;
-                                    bonePos.y += waveFactor * 0.5f;
-                                }
-                            }
 
                             matrix3x4_t bonematrix;
                             QuaternionMatrix(boneQuat, bonePos, bonematrix);
@@ -250,6 +214,7 @@ void Hammer3DView::RenderEngineFrame()
     }
     g_pMaterialSystem->EndFrame();
 }
+
 void Hammer3DView::paintEvent(QPaintEvent *event)
 {
     Q_UNUSED(event);
@@ -410,7 +375,9 @@ void Hammer3DView::paintEvent(QPaintEvent *event)
     painter.setFont(QFont("Arial", 9, QFont::Bold));
     painter.drawText(15, 25, "ModelView: 3D MAP WORKSPACE WIREFRAME ACTIVE");
 }
+
 void Hammer3DView::mousePressEvent(QMouseEvent *event) { m_ptLastMousePosition = event->pos(); }
+
 void Hammer3DView::mouseMoveEvent(QMouseEvent *event)
 {
     QPointF delta = event->position() - m_ptLastMousePosition;
@@ -428,6 +395,7 @@ void Hammer3DView::mouseMoveEvent(QMouseEvent *event)
         this->update();
     }
 }
+
 void Hammer3DView::wheelEvent(QWheelEvent *event)
 {
     m_flZoomScale += event->angleDelta().y() > 0 ? 0.1f : -0.1f;
@@ -435,17 +403,7 @@ void Hammer3DView::wheelEvent(QWheelEvent *event)
     this->update();
 }
 void Hammer3DView::resizeEvent(QResizeEvent *event) { QWidget::resizeEvent(event); }
-int Hammer3DView::GetSequenceCount() { return 0; }
-const char *Hammer3DView::GetSequenceName(int index)
-{
-    Q_UNUSED(index);
-    return "";
-}
-void Hammer3DView::SetActiveSequence(int index) { Q_UNUSED(index); }
-void Hammer3DView::SetAnimationCycle(float flCycle) { Q_UNUSED(flCycle); }
-void Hammer3DView::SetPlaybackPaused(bool bPaused) { Q_UNUSED(bPaused); }
 
-// Replace the updateEntities function block in widgets/ModelView4.cpp with this:
 void Hammer3DView::updateEntities(const MapEntity *pEntities, int count)
 {
     m_mapEntities.clear();

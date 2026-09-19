@@ -23,7 +23,7 @@ QModelView::QModelView(QWidget *parent)
       m_flZoomScale(2.5f), m_pOffscreenRenderTarget(nullptr), m_bIsRenderBufferBlank(true),
       m_ptCameraPanOffset(QPointF(0, 0))
 {
-    m_ptRotationAngle = QPoint(-20, 45); // Classic Hammer oblique view angle rules orientation setup
+    m_ptRotationAngle = QPoint(0, 0); // 0 Pitch, 0 Yaw aligns her face right down your viewer screen!
     m_nActiveSequenceIndex = 0;
     m_bPlaybackPaused = false;
 
@@ -225,6 +225,7 @@ void QModelView::RenderEngineFrame()
     }
     g_pMaterialSystem->EndFrame();
 }
+
 void QModelView::paintEvent(QPaintEvent *event)
 {
     Q_UNUSED(event);
@@ -381,9 +382,11 @@ void QModelView::paintEvent(QPaintEvent *event)
     }
     painter.setPen(Qt::white);
     painter.setFont(QFont("Arial", 9, QFont::Bold));
-    painter.drawText(15, 25, "ModelView: 3D MAP WORKSPACE WIREFRAME ACTIVE");
+    painter.drawText(15, 25, "ModelView: WORKSTATION COMPONENT LINK ALIVE");
 }
+
 void QModelView::mousePressEvent(QMouseEvent *event) { m_ptLastMousePosition = event->pos(); }
+
 void QModelView::mouseMoveEvent(QMouseEvent *event)
 {
     QPointF delta = event->position() - m_ptLastMousePosition;
@@ -401,19 +404,26 @@ void QModelView::mouseMoveEvent(QMouseEvent *event)
         this->update();
     }
 }
+
 void QModelView::wheelEvent(QWheelEvent *event)
 {
     m_flZoomScale += event->angleDelta().y() > 0 ? 0.1f : -0.1f;
     m_flZoomScale = qBound(0.1f, m_flZoomScale, 10.0f);
     this->update();
 }
+
 void QModelView::resizeEvent(QResizeEvent *event) { QWidget::resizeEvent(event); }
+
 int QModelView::GetSequenceCount() { return 0; }
+
 const char *QModelView::GetSequenceName(int index)
 {
     Q_UNUSED(index);
     return "";
 }
+
 void QModelView::SetActiveSequence(int index) { Q_UNUSED(index); }
+
 void QModelView::SetAnimationCycle(float flCycle) { Q_UNUSED(flCycle); }
+
 void QModelView::SetPlaybackPaused(bool bPaused) { Q_UNUSED(bPaused); }
