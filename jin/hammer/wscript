@@ -16,92 +16,20 @@ def configure(conf):
 
 def build(bld):
 	source = [
-		# Dialogs
-		#'dialogs/Options.cpp',
-		#'dialogs/GoTo.cpp',
-		#'dialogs/RunMapNormal.cpp',
-		#'dialogs/MapInformation.cpp',
-		#'dialogs/EntityReport.cpp',
-		#'dialogs/CheckForProblems.cpp',
-		#'dialogs/PasteSpecial.cpp',
-		#'dialogs/FindEntities.cpp',
-		#'dialogs/Sprinkle.cpp',
-		#'dialogs/MakeHollow.cpp',
-		#'dialogs/Transform.cpp',
-		#'dialogs/SmoothingGroups.cpp',
-		#'dialogs/EntityHelp.cpp',
-		#'dialogs/EditVisgroups.cpp',
-		#'dialogs/FaceEditSheet.cpp',
-		#'dialogs/Replace.cpp',
-		#'dialogs/MapDiff.cpp',
-		#'dialogs/MoveToVisgroup.cpp',
-		#'dialogs/SoundBrowser.cpp',
-		#'dialogs/RightHandUtils.cpp',
-		#'dialogs/ActionsBar.cpp',
-		# Widgets 
-		#'widgets/FileSelector.cpp',
-		#'widgets/PrefSlider.cpp',
-		#'widgets/HammerViewportWidget.cpp',
-		#'widgets/EngineView.cpp',
-		#'widgets/MaterialPreview.cpp',
-		#'widgets/ModelView1.cpp',
-		#'widgets/ModelView2.cpp',
-		#'widgets/ModelView3.cpp',
-		#'widgets/ModelView4.cpp',
 		'widgets/ModelView.cpp',
-		#'widgets/MapView.cpp',
 		'widgets/Map2DView.cpp',
 		'widgets/Map3DView.cpp',
-		# Everything else
 		'main.cpp',
-		#'mainwindow1.cpp',
-		#'MainWindow2.cpp',
-		#'MainWindow3.cpp',
 		'MainWindow.cpp',
-		#'hammer.cpp',
 		'MapDocument.cpp',
 		'FgdManager.cpp',
 		'VmfIO.cpp',
     ]
 
 	headers = [
-		#'dialogs/Options.h',
-		#'dialogs/GoTo.h',
-		#'dialogs/RunMapNormal.h',
-		#'dialogs/MapInformation.h',
-		#'dialogs/EntityReport.h',
-		#'dialogs/CheckForProblems.h',
-		#'dialogs/PasteSpecial.h',
-		#'dialogs/FindEntities.h',
-		#'dialogs/Sprinkle.h',
-		#'dialogs/MakeHollow.h',
-		#'dialogs/Transform.h',
-		#'dialogs/SmoothingGroups.h',
-		#'dialogs/EntityHelp.h',
-		#'dialogs/EditVisgroups.h',
-		#'dialogs/FaceEditSheet.h',
-		#'dialogs/Replace.h',
-		#'dialogs/MapDiff.h',
-		#'dialogs/MoveToVisgroup.h',
-		#'dialogs/SoundBrowser.h',
-		#'dialogs/RightHandUtils.h',
-		#'dialogs/ActionsBar.h',
-		#'widgets/FileSelector.h',
-		#'widgets/PrefSlider.h',
-		#'widgets/HammerViewportWidget.h',
-		#'widgets/MaterialPreview.h',
-		#'widgets/EngineView.h',
-		#'widgets/ModelView.h',
-		#'widgets/ModelView2.h',
-		#'widgets/ModelView3.h',
-		#'widgets/ModelView4.h',
 		'widgets/ModelView.h',
-		#'widgets/MapView.h',
 		'widgets/Map2DView.h',
 		'widgets/Map3DView.h',
-		#'mainwindow1.h',
-		#'MainWindow2.h',
-		#'MainWindow3.h',
 		'MainWindow.h',
 	]
 
@@ -113,13 +41,11 @@ def build(bld):
 		'../../public/tier1',
 		'../../public/tier2',
 		'../../thirdparty/SDL',
-		'../../hammer',
 	]
 
 	defines = ['SW_HAMMER_TOOL']
 
 	libs = ['QT6CORE', 'QT6WIDGETS', 'QT6GUI', 'fgdlib', 'appframework', 'mathlib', 'bitmap', 'vstdlib', 'tier2', 'tier1', 'tier0', 'togl', 'SDL2']
-	#libs = ['QT6CORE', 'QT6WIDGETS', 'QT6GUI', 'QT6OPENGLWIDGETS', 'appframework', 'bitmap', 'vstdlib', 'tier2', 'tier1', 'tier0',]
 
 	install_path = bld.env.BINDIR
 
