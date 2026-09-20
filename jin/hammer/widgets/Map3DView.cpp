@@ -238,6 +238,7 @@ void Map3DView::paintEvent(QPaintEvent *event)
         return QPointF(sX, sY);
     };
 
+    // ---- Entities StudioMDL ----
     if (m_hCurrentModel != 0xFFFF && g_pMDLCache)
     {
         studiohdr_t *pStudioHdr = g_pMDLCache->GetStudioHdr(m_hCurrentModel);
@@ -302,7 +303,26 @@ void Map3DView::paintEvent(QPaintEvent *event)
                                     continue;
                                 int globalVertexBaseIdx = pSubModel->vertexindex / sizeof(mstudiovertex_t);
                                 auto SkinVertex = [&](int globalVertIdx) -> Vector
-                                {Vector &rawPos = pVertices[globalVertIdx].m_vecPosition;mstudioboneweight_t &weights = pVertices[globalVertIdx].m_BoneWeights;if (weights.numbones == 0) return rawPos; Vector skinnedPos(0, 0, 0);for (int b = 0; b < weights.numbones; ++b) {int boneIdx = (int)weights.bone[b]; float weight = weights.weight[b];if (boneIdx >= 0 && boneIdx < pStudioHdr->numbones && pBoneArray != nullptr) {Vector localPos, transformed;VectorTransform(rawPos, pBoneArray[boneIdx].poseToBone, localPos);VectorTransform(localPos, pBoneToWorld[boneIdx], transformed);skinnedPos += transformed * weight;}}return skinnedPos; };
+                                {
+                                    Vector &rawPos = pVertices[globalVertIdx].m_vecPosition;
+                                    mstudioboneweight_t &weights = pVertices[globalVertIdx].m_BoneWeights;
+                                    if (weights.numbones == 0)
+                                        return rawPos;
+                                    Vector skinnedPos(0, 0, 0);
+                                    for (int b = 0; b < weights.numbones; ++b)
+                                    {
+                                        int boneIdx = (int)weights.bone[b];
+                                        float weight = weights.weight[b];
+                                        if (boneIdx >= 0 && boneIdx < pStudioHdr->numbones && pBoneArray != nullptr)
+                                        {
+                                            Vector localPos, transformed;
+                                            VectorTransform(rawPos, pBoneArray[boneIdx].poseToBone, localPos);
+                                            VectorTransform(localPos, pBoneToWorld[boneIdx], transformed);
+                                            skinnedPos += transformed * weight;
+                                        }
+                                    }
+                                    return skinnedPos;
+                                };
                                 for (int idx = 0; idx < numIndices - 2; idx += 3)
                                 {
                                     int gv0 = pGroup->m_pGroupIndexToMeshIndex[pIndices[idx]];
@@ -344,7 +364,8 @@ void Map3DView::paintEvent(QPaintEvent *event)
             }
         }
     }
-    // ---- FIX 2: OVERLAY WIREFRAME MAP BRUSHES PARALLEL LAYER ----
+
+    // ---- OVERLAY WIREFRAME MAP BRUSHES PARALLEL LAYER ----
     for (const auto &brush : m_mapBrushes)
     {
         bool isSelected = (brush.id == m_selectedBrushId);
@@ -373,7 +394,7 @@ void Map3DView::paintEvent(QPaintEvent *event)
     }
     painter.setPen(Qt::white);
     painter.setFont(QFont("Arial", 9, QFont::Bold));
-    painter.drawText(15, 25, "ModelView: 3D MAP WORKSPACE WIREFRAME ACTIVE");
+    painter.drawText(15, 25, "3D (XYZ)");
 }
 
 void Map3DView::mousePressEvent(QMouseEvent *event) { m_ptLastMousePosition = event->pos(); }
@@ -402,6 +423,7 @@ void Map3DView::wheelEvent(QWheelEvent *event)
     m_flZoomScale = qBound(0.1f, m_flZoomScale, 10.0f);
     this->update();
 }
+
 void Map3DView::resizeEvent(QResizeEvent *event) { QWidget::resizeEvent(event); }
 
 void Map3DView::updateEntities(const MapEntity *pEntities, int count)

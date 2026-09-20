@@ -346,6 +346,7 @@ void Map2DView::drawBackground(QPainter *painter, const QRectF &rect)
         painter->drawLine(QPointF(left, y), QPointF(right, y));
     }
 }
+
 void Map2DView::drawForeground(QPainter *painter, const QRectF &rect)
 {
     QGraphicsView::drawForeground(painter, rect);
@@ -381,6 +382,7 @@ void Map2DView::drawForeground(QPainter *painter, const QRectF &rect)
         }
     }
 }
+
 void Map2DView::wheelEvent(QWheelEvent *event)
 {
     qreal scaleFactor = 1.15;
@@ -391,6 +393,7 @@ void Map2DView::wheelEvent(QWheelEvent *event)
     updateHandlePositions();
     viewport()->update();
 }
+
 void Map2DView::mousePressEvent(QMouseEvent *event)
 {
     if (event->button() == Qt::MiddleButton || (event->button() == Qt::LeftButton && (event->modifiers() & Qt::ShiftModifier)))
@@ -458,6 +461,7 @@ void Map2DView::mousePressEvent(QMouseEvent *event)
     }
     QGraphicsView::mousePressEvent(event);
 }
+
 void Map2DView::mouseMoveEvent(QMouseEvent *event)
 {
     QPointF scenePos = mapToScene(event->pos());
@@ -548,6 +552,7 @@ void Map2DView::mouseMoveEvent(QMouseEvent *event)
     }
     QGraphicsView::mouseMoveEvent(event);
 }
+
 void Map2DView::mouseReleaseEvent(QMouseEvent *event)
 {
     if (m_isPanning)

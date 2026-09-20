@@ -247,10 +247,12 @@ bool CHammerApp::Create()
 
 void CHammerApp::Destroy()
 {
-	g_pFileSystem = NULL;
 	g_pMaterialSystem = NULL;
+	g_pFileSystem = NULL;
 	g_pDataCache = NULL;
 	g_pInputSystem = NULL;
+	g_pStudioRender = NULL;
+	g_pMDLCache = NULL;
 }
 
 //-----------------------------------------------------------------------------
@@ -282,6 +284,7 @@ bool CHammerApp::PreInit( )
 
 	CFSSearchPathsInit initInfo;
 	initInfo.m_pFileSystem = g_pFileSystem;
+	//initInfo.m_pDirectoryName = CommandLine() -> ParmValue("-game", "hl2");
 	initInfo.m_pDirectoryName = "hl2";
 
 	if ( FileSystem_LoadSearchPaths( initInfo ) != FS_OK )
@@ -289,7 +292,6 @@ bool CHammerApp::PreInit( )
 		Error( "Unable to load search paths!\n" );
 	}
 
-    // ---- FIX: MOUNT VPK PACKAGES THROUGH VALIDATED FILESYSTEM INTERFACE ----
     // We add the archive search paths directly through g_pFileSystem.
     // This makes the engine map the inside of the VPK texture bundles right to the "GAME" path id pool.
     if (g_pFileSystem)

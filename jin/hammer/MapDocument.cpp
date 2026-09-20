@@ -10,17 +10,15 @@ MapDocument::~MapDocument() {
 
 int MapDocument::CreateNewSolid(const Vector& mins, const Vector& maxs) {
     VmfSolid newSolid;
-    // Fix: use m_nextSolidID instead of m_nextID
     newSolid.id = m_nextSolidID++;
     
-    // Solid face boundaries parsing can be bound here
     m_solids.push_back(newSolid);
     return newSolid.id;
 }
 
 void MapDocument::AddSolid(const VmfSolid& solid) {
     m_solids.push_back(solid);
-    // Fix: use m_nextSolidID instead of m_nextID
+
     if (solid.id >= m_nextSolidID) {
         m_nextSolidID = solid.id + 1;
     }

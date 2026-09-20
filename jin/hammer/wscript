@@ -59,7 +59,6 @@ def build(bld):
 		defines  = defines,
 		use      = libs,
 		install_path = install_path,
-		#linkflags    = ['-rdynamic'],
 		subsystem = bld.env.MSVC_SUBSYSTEM,
 		idx      = bld.get_taskgen_count()
 	)
