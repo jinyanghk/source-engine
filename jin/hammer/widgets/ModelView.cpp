@@ -6,6 +6,14 @@
 #include <QTimer>
 #include <algorithm>
 
+#include <QDialog>
+#include <QLabel>
+#include <QVBoxLayout>
+#include <QImage>
+#include <QPixmap>
+#include <QScreen>
+#include <QGuiApplication>
+
 #include "materialsystem/imaterialsystem.h"
 #include "istudiorender.h"
 #include "datacache/imdlcache.h"
@@ -59,6 +67,41 @@ void QModelView::LoadModelFile(const QString &szPath)
     this->update();
 }
 
+void showImageDialog(QWidget *parent, const QImage &image)
+{
+    if (image.isNull())
+        return;
+
+    QDialog dialog(parent);
+    dialog.setWindowTitle(QStringLiteral("图片预览"));
+    dialog.setModal(true);  // 模态
+
+    auto *layout = new QVBoxLayout(&dialog);
+
+    auto *label = new QLabel(&dialog);
+    label->setAlignment(Qt::AlignCenter);
+
+    // 如果图片过大，按屏幕尺寸缩放
+    QPixmap pixmap = QPixmap::fromImage(image);
+    QScreen *screen = QGuiApplication::primaryScreen();
+    QRect screenGeom = screen->availableGeometry();
+
+    int maxW = screenGeom.width()  * 0.8;
+    int maxH = screenGeom.height() * 0.8;
+
+    if (pixmap.width() > maxW || pixmap.height() > maxH) {
+        pixmap = pixmap.scaled(maxW, maxH,
+                               Qt::KeepAspectRatio,
+                               Qt::SmoothTransformation);
+    }
+
+    label->setPixmap(pixmap);
+    layout->addWidget(label);
+
+    dialog.resize(pixmap.size());
+    dialog.exec();  // 模态阻塞
+}
+
 void QModelView::RenderEngineFrame()
 {
     if (!g_pMaterialSystem || !g_pStudioRender || !g_pMDLCache || !isVisible())
@@ -68,7 +111,7 @@ void QModelView::RenderEngineFrame()
     }
     int w = qMax(64, rect().width());
     int h = qMax(64, rect().height());
-    Hammer_SetLauncherWindowContext(reinterpret_cast<void *>(this->winId()), w, h);
+    //Hammer_SetLauncherWindowContext(reinterpret_cast<void *>(this->winId()), w, h);
 
     if (!m_pOffscreenRenderTarget || m_pOffscreenRenderTarget->GetActualWidth() != w || m_pOffscreenRenderTarget->GetActualHeight() != h)
     {
@@ -214,12 +257,13 @@ void QModelView::RenderEngineFrame()
             if (engineBuffer.pixelColor(w / 2, h / 2).alpha() != 0)
             {
                 m_RenderOutputImage = engineBuffer.convertToFormat(QImage::Format_RGB32);
-                m_bIsRenderBufferBlank = false;
+                //m_bIsRenderBufferBlank = false;
+                showImageDialog(this, m_RenderOutputImage);
             }
-            else
-            {
-                m_bIsRenderBufferBlank = true;
-            }
+            //else
+            //{
+            //    m_bIsRenderBufferBlank = true;
+            //}
             pRenderContext->PopRenderTargetAndViewport();
         }
     }

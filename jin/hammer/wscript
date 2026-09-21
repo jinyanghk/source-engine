@@ -17,8 +17,8 @@ def configure(conf):
 def build(bld):
 	source = [
 		'widgets/ModelView.cpp',
-		'widgets/Map2DView.cpp',
-		'widgets/Map3DView.cpp',
+		#'widgets/Map2DView.cpp',
+		#'widgets/Map3DView.cpp',
 		'main.cpp',
 		'MainWindow.cpp',
 		'MapDocument.cpp',
@@ -28,8 +28,8 @@ def build(bld):
 
 	headers = [
 		'widgets/ModelView.h',
-		'widgets/Map2DView.h',
-		'widgets/Map3DView.h',
+		#'widgets/Map2DView.h',
+		#'widgets/Map3DView.h',
 		'MainWindow.h',
 	]
 
