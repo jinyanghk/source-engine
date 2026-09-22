@@ -1,103 +1,83 @@
+#include <SDL2/SDL.h>
+#include <SDL2/SDL_opengl.h>
+#include <stdio.h>
 
-#include <QApplication>
-#include <QString>
-#include <QDebug>
-#include <dlfcn.h>
-
-#include "mainwindow.h"
-
-// Core Source Engine Interfaces
-#include "materialsystem/imaterialsystem.h"
-#include "filesystem.h"
-#include "interface.h"
-
-// Define our global module handles and system pointers locally
-IMaterialSystem* g_pMaterialSystem = nullptr;
-IFileSystem*    g_pFileSystem = nullptr;
-
-// Opaque stub factory function to pass into the Connect() method
-static void* LauncherInterfaceFactory( const char *pName, int *pReturnCode )
+int main(int argc, char *argv[])
 {
-    if ( pReturnCode ) 
-        *pReturnCode = 0; // IFACE_OK
+    (void)argc; (void)argv;
 
-    if ( strcmp( pName, FILESYSTEM_INTERFACE_VERSION ) == 0 )
-    {
-        return static_cast<IFileSystem*>( g_pFileSystem );
+    if (SDL_Init(SDL_INIT_VIDEO) != 0) {
+        fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError());
+        return 1;
     }
 
-    return nullptr;
-}
+    // 请求 OpenGL 2.1 兼容上下文（固定管线，便于示例）
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+    SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
 
-bool InitializeSourceEngineSubsystems()
-{
-    int status = 0;
+    SDL_Window *window = SDL_CreateWindow(
+        "SDL2 + OpenGL",
+        SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+        800, 600,
+        SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
 
-    // 1. Resolve filesystem_stdio via native dlopen layout
-    void* hFileSystemModule = dlopen( "bin/libfilesystem_stdio.so", RTLD_NOW | RTLD_GLOBAL );
-    if ( !hFileSystemModule )
-    {
-        qCritical() << "Failed to dlopen libfilesystem_stdio.so:" << dlerror();
-        return false;
-    }
-    
-    CreateInterfaceFn fsFactory = (CreateInterfaceFn)dlsym( hFileSystemModule, "CreateInterface" );
-    if ( !fsFactory ) return false;
-
-    g_pFileSystem = (IFileSystem*)fsFactory( FILESYSTEM_INTERFACE_VERSION, &status );
-    if ( !g_pFileSystem || status != 0 ) return false;
-
-    if ( !g_pFileSystem->Connect( LauncherInterfaceFactory ) || g_pFileSystem->Init() != INIT_OK )
-    {
-        qCritical() << "Failed to initialize FileSystem system link!";
-        return false;
+    if (!window) {
+        fprintf(stderr, "SDL_CreateWindow failed: %s\n", SDL_GetError());
+        SDL_Quit();
+        return 1;
     }
 
-    // 2. Resolve materialsystem
-    void* hMaterialSystemModule = dlopen( "bin/libmaterialsystem.so", RTLD_NOW | RTLD_GLOBAL );
-    if ( !hMaterialSystemModule )
-    {
-        qCritical() << "Failed to dlopen libmaterialsystem.so:" << dlerror();
-        return false;
+    SDL_GLContext glctx = SDL_GL_CreateContext(window);
+    if (!glctx) {
+        fprintf(stderr, "SDL_GL_CreateContext failed: %s\n", SDL_GetError());
+        SDL_DestroyWindow(window);
+        SDL_Quit();
+        return 1;
     }
 
-    CreateInterfaceFn matFactory = (CreateInterfaceFn)dlsym( hMaterialSystemModule, "CreateInterface" );
-    if ( !matFactory ) return false;
+    // 垂直同步
+    SDL_GL_SetSwapInterval(1);
 
-    g_pMaterialSystem = (IMaterialSystem*)matFactory( MATERIAL_SYSTEM_INTERFACE_VERSION, &status );
-    if ( !g_pMaterialSystem || status != 0 ) 
-    {
-        qCritical() << "Material System interface instantiation failed! Status:" << status;
-        return false;
+    printf("OpenGL Vendor : %s\n", glGetString(GL_VENDOR));
+    printf("OpenGL Renderer: %s\n", glGetString(GL_RENDERER));
+    printf("OpenGL Version: %s\n", glGetString(GL_VERSION));
+
+    int running = 1;
+    SDL_Event event;
+
+    while (running) {
+        while (SDL_PollEvent(&event)) {
+            if (event.type == SDL_QUIT) {
+                running = 0;
+            } else if (event.type == SDL_KEYDOWN &&
+                       event.key.keysym.sym == SDLK_ESCAPE) {
+                running = 0;
+            }
+        }
+
+        // 获取实际绘制区域（处理高 DPI / 缩放）
+        int w, h;
+        SDL_GL_GetDrawableSize(window, &w, &h);
+        glViewport(0, 0, w, h);
+
+        // 背景色（深蓝灰）
+        glClearColor(0.1f, 0.15f, 0.25f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        // 绘制彩色三角形
+        glBegin(GL_TRIANGLES);
+            glColor3f(1.0f, 0.2f, 0.2f); glVertex2f( 0.0f,  0.7f); // 顶点 红
+            glColor3f(0.2f, 1.0f, 0.3f); glVertex2f(-0.7f, -0.6f); // 左下 绿
+            glColor3f(0.2f, 0.4f, 1.0f); glVertex2f( 0.7f, -0.6f); // 右下 蓝
+        glEnd();
+
+        SDL_GL_SwapWindow(window);
     }
 
-    // 3. Connect to the Material System
-    qInfo() << "Connecting to Material System instance...";
-    
-    // Fix: Corrected typo structure where 'if' statement was malformed
-    if ( !g_pMaterialSystem->Connect( LauncherInterfaceFactory ) )
-    {
-        qCritical() << "Failed to Connect to Material System!";
-        return false;
-    }
-
-    qInfo() << "Initializing Material System context...";
-    if ( g_pMaterialSystem->Init() != INIT_OK )
-    {
-        qCritical() << "Failed to Init Material System!";
-        return false;
-    }
-
-    g_pMaterialSystem->SetShaderAPI( "shaderapidx9" );
-    return true;
-}
-
-int main(int argc, char** argv)  {
-	QApplication app(argc, argv);
-
-	auto pWin = new MainWindow(nullptr);
-    pWin->setAttribute(Qt::WA_DeleteOnClose);
-    pWin->show();
-	
-	return QApplication::exec();
+    SDL_GL_DeleteContext(glctx);
+    SDL_DestroyWindow(window);
+    SDL_Quit();
+    return 0;
 }
