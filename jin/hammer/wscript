@@ -28,12 +28,15 @@ def build(bld):
 		'../../public',
 		'../../public/tier0',
 		'../../public/tier1',
+		'../../imgui',
+		'../../imgui/backends',
+		'../../libgizmo',
 	]
 
 	defines = []
 
 	#libs = ['fgdlib', 'mathlib', 'tier1', 'tier0', 'imgui', 'gizmo', 'X11', 'GL']
-	libs = ['fgdlib', 'appframework', 'mathlib', 'bitmap', 'vstdlib', 'tier2', 'tier1', 'tier0', 'togl', 'SDL2', 'GL']
+	libs = ['imgui', 'fgdlib', 'appframework', 'mathlib', 'bitmap', 'vstdlib', 'tier2', 'tier1', 'tier0', 'togl', 'SDL2', 'GL']
 
 	install_path = bld.env.BINDIR
 	bld(

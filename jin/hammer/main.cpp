@@ -2,6 +2,10 @@
 #include <SDL2/SDL.h>
 #include <GL/gl.h>
 
+#include "imgui.h"
+#include "imgui_impl_sdl2.h"
+#include "imgui_impl_opengl3.h"
+
 #include "appframework/AppFramework.h"
 #include "tier0/dbg.h"
 #include "vstdlib/cvar.h"
@@ -228,389 +232,262 @@ static void SetupLookAtMatrix(float eyex, float eyey, float eyez,
 //-----------------------------------------------------------------------------
 int CHammerApp::Main()
 {
-    // 1. Initial Window Handle Lookups & Layout Setup
-    SDL_Window *pWindow = SDL_GL_GetCurrentWindow();
-    int w = 1280;
-    int h = 720;
-    if (pWindow)
-    {
-        SDL_GetWindowSize(pWindow, &w, &h);
-        if (w == 0 || h == 0)
-        {
-            w = 1280;
-            h = 720;
-        }
-    }
+	// 1. Initial Window Handle Lookups
+	SDL_Window* pWindow = SDL_GL_GetCurrentWindow();
+	int w = 1280;
+	int h = 720;
+	if (pWindow)
+	{
+		SDL_GetWindowSize(pWindow, &w, &h);
+		if (w == 0 || h == 0) { w = 1280; h = 720; }
+	}
 
-    MaterialVideoMode_t mode;
-    mode.m_Width = w;
-    mode.m_Height = h;
-    mode.m_Format = IMAGE_FORMAT_RGBA8888;
-    mode.m_RefreshRate = 60;
+	MaterialVideoMode_t mode;
+	mode.m_Width = w;
+	mode.m_Height = h;
+	mode.m_Format = IMAGE_FORMAT_RGBA8888;
+	mode.m_RefreshRate = 60;
 
-    MaterialSystem_Config_t config;
-    config.m_VideoMode = mode;
-    config.SetFlag(MATSYS_VIDCFG_FLAGS_WINDOWED, true);
+	MaterialSystem_Config_t config;
+	config.m_VideoMode = mode;
+	config.SetFlag(MATSYS_VIDCFG_FLAGS_WINDOWED, true);
 
-    if (!g_pMaterialSystem->SetMode((void *)pWindow, config))
-    {
-        Warning("[HAMMER] Material System SetMode tracking failure.\n");
-    }
+	if (!g_pMaterialSystem->SetMode((void*)pWindow, config))
+	{
+		Warning("[HAMMER] Material System SetMode tracking failure.\n");
+	}
 
-    pWindow = SDL_GL_GetCurrentWindow();
-    if (!pWindow)
-    {
-        Error("[HAMMER] Active window pointer lost after initialization.\n");
-        return -1;
-    }
+	pWindow = SDL_GL_GetCurrentWindow();
+	SDL_ShowWindow(pWindow);
+	SDL_RaiseWindow(pWindow);
+	SDL_SetWindowSize(pWindow, w, h);
 
-    SDL_ShowWindow(pWindow);
-    SDL_RaiseWindow(pWindow);
-    SDL_SetWindowSize(pWindow, w, h);
+	SDL_GLContext glContext = SDL_GL_GetCurrentContext();
 
-    MDLHandle_t hMdl = g_pMDLCache->FindMDL("models/alyx.mdl");
-    if (hMdl == MDLHANDLE_INVALID)
-    {
-        Warning("[HAMMER] Search paths completely failed to trace 'models/alyx.mdl'\n");
-    }
+	IMGUI_CHECKVERSION();
+	ImGui::CreateContext();
+	ImGuiIO& io = ImGui::GetIO(); (void)io;
+	
+	ImGui_ImplSDL2_InitForOpenGL(pWindow, glContext);
+	ImGui_ImplOpenGL3_Init("#version 130"); 
 
-    IMatRenderContext *pRenderContext = g_pMaterialSystem->GetRenderContext();
-    if (!pRenderContext)
-    {
-        Error("[HAMMER] Failed to acquire active IMatRenderContext instance.\n");
-        return -1;
-    }
-    pRenderContext->Viewport(0, 0, w, h);
+	MDLHandle_t hMdl = g_pMDLCache->FindMDL("models/alyx.mdl");
+	IMatRenderContext *pRenderContext = g_pMaterialSystem->GetRenderContext();
 
-    bool bRunning = true;
-    SDL_Event event;
+	bool bRunning = true;
+	SDL_Event event;
+	
+	float flCameraPitch = 0.0f;   // Look perfectly level (no tilt up or down)
+	float flCameraYaw = 90.0f;   // Position the camera directly in front of her face
+	float flZoomScale = 3.0f;     // Stable starting zoom distance scale
+	float flPanX = 0.0f; 
+	float flPanY = 0.0f; 
+	float flPanZ = 35.0f;         // Center the camera focus anchor right on her upper chest
 
-    // Camera Navigation Initial Configuration
-    float flCameraPitch = 10.0f;
-    float flCameraYaw = -90.0f;
-    float flZoomScale = 1.8f;
-    float flPanX = 0.0f;
-    float flPanY = 0.0f;
-    float flPanZ = 35.0f;
+	bool bLeftMouseDown = false; 
+	bool bRightMouseDown = false;
+	float flAnimCycle = 0.0f;       
+	int nTargetSequenceIndex = 0;   
+	uint32_t lastTicks = SDL_GetTicks();
 
-    bool bLeftMouseDown = false;
-    bool bRightMouseDown = false;
+	while (bRunning)
+	{
+		while (SDL_PollEvent(&event))
+		{
+			ImGui_ImplSDL2_ProcessEvent(&event);
 
-    // Animation Cycle & Diagnostics Trackers
-    float flAnimCycle = 0.0f;
-    int nTargetSequenceIndex = 0;
+			// Pass standard input movements to ImGui or Camera view
+			if (event.type == SDL_MOUSEMOTION)
+			{
+				io.MousePos.x = (float)event.motion.x;
+				io.MousePos.y = (float)event.motion.y; // Standard un-flipped input coords for window items
+			}
 
-    // --- FPS COUNTER VARIABLES ---
-    uint32_t nFrameCount = 0;
-    uint32_t nLastFpsUpdateTicks = SDL_GetTicks();
+			switch (event.type)
+			{
+				case SDL_QUIT:
+					bRunning = false;
+					break;
 
-    uint32_t lastTicks = SDL_GetTicks();
+				case SDL_KEYDOWN:
+					if (!io.WantCaptureKeyboard && event.key.keysym.sym == SDLK_ESCAPE)
+						bRunning = false;
+					break;
 
-    while (bRunning)
-    {
-        while (SDL_PollEvent(&event))
-        {
-            switch (event.type)
-            {
-            case SDL_QUIT:
-                bRunning = false;
-                break;
-
-            case SDL_KEYDOWN:
-                if (event.key.keysym.sym == SDLK_ESCAPE)
-                    bRunning = false;
-
-                if (event.key.keysym.sym == SDLK_UP)
-                {
-                    nTargetSequenceIndex++;
-                    flAnimCycle = 0.0f;
-                    Msg("[HAMMER] Swapped target playback to animation sequence: %d\n", nTargetSequenceIndex);
-                }
-                if (event.key.keysym.sym == SDLK_DOWN)
-                {
-                    nTargetSequenceIndex--;
-                    if (nTargetSequenceIndex < 0)
-                        nTargetSequenceIndex = 0;
-                    flAnimCycle = 0.0f;
-                    Msg("[HAMMER] Swapped target playback to animation sequence: %d\n", nTargetSequenceIndex);
-                }
-                break;
-
-            case SDL_MOUSEBUTTONDOWN:
-                if (event.button.button == SDL_BUTTON_LEFT)
-                    bLeftMouseDown = true;
-                if (event.button.button == SDL_BUTTON_RIGHT)
-                    bRightMouseDown = true;
-                break;
-
-            case SDL_MOUSEBUTTONUP:
-                if (event.button.button == SDL_BUTTON_LEFT)
-                    bLeftMouseDown = false;
-                if (event.button.button == SDL_BUTTON_RIGHT)
-                    bRightMouseDown = false;
-                break;
-
-            case SDL_MOUSEMOTION:
-                if (bLeftMouseDown)
-                {
-                    flCameraYaw += event.motion.xrel * 0.25f;
-                    flCameraPitch += event.motion.yrel * 0.25f;
-                    if (flCameraPitch > 89.0f)
-                        flCameraPitch = 89.0f;
-                    if (flCameraPitch < -89.0f)
-                        flCameraPitch = -89.0f;
-                }
-                else if (bRightMouseDown)
-                {
-                    float radYaw = flCameraYaw * (M_PI / 180.0f);
-                    flPanX -= (std::sin(radYaw) * event.motion.xrel) * 0.05f * flZoomScale;
-                    flPanY += (std::cos(radYaw) * event.motion.xrel) * 0.05f * flZoomScale;
-                    flPanZ += event.motion.yrel * 0.05f * flZoomScale;
-                }
-                break;
-
-            case SDL_MOUSEWHEEL:
-                flZoomScale -= event.wheel.y * 0.15f * (flZoomScale * 0.4f);
-                if (flZoomScale < 0.1f)
-                    flZoomScale = 0.1f;
-                if (flZoomScale > 15.0f)
-                    flZoomScale = 15.0f;
-                break;
-            }
-        }
-
-        uint32_t currentTicks = SDL_GetTicks();
-        float frameTime = (currentTicks - lastTicks) / 1000.0f;
-        if (frameTime == 0.0f)
-            frameTime = 0.01f;
-        lastTicks = currentTicks;
-
-        flAnimCycle += frameTime * 0.4f;
-        if (flAnimCycle > 1.0f)
-            flAnimCycle -= 1.0f;
-
-        // --- PROCESSING LIVE PERFORMANCE FPS COUNTER CALCULATION ---
-        nFrameCount++;
-        if (currentTicks - nLastFpsUpdateTicks >= 1000)
-        {
-            char szTitleBuffer[128];
-            sprintf(szTitleBuffer, "Source SDL2 Render Workspace Tool | NATIVE PERFORMANCE: %d FPS", nFrameCount);
-            SDL_SetWindowTitle(pWindow, szTitleBuffer);
-
-            nFrameCount = 0;
-            nLastFpsUpdateTicks = currentTicks;
-        }
-
-        g_pMaterialSystem->BeginFrame(frameTime);
-
-        pRenderContext = g_pMaterialSystem->GetRenderContext();
-        if (pRenderContext)
-        {
-            pRenderContext->ClearColor3ub(51, 51, 51);
-            pRenderContext->ClearBuffers(true, true, true);
-
-            pRenderContext->DepthRange(0.0f, 1.0f);
-            glEnable(GL_DEPTH_TEST);
-            glDepthMask(GL_TRUE);
-            glDepthFunc(GL_LEQUAL);
-
-            pRenderContext->Flush(false);
-
-            Vector4D ambientCube[6];
-            for (int side = 0; side < 6; side++)
-            {
-                ambientCube[side].Init(1.0f, 1.0f, 1.0f, 1.0f);
-            }
-            pRenderContext->SetAmbientLightCube(ambientCube);
-
-            pRenderContext->MatrixMode(MATERIAL_PROJECTION);
-            pRenderContext->LoadIdentity();
-
-            SDL_GetWindowSize(pWindow, &w, &h);
-            double aspect = (h == 0) ? 1.0 : (double)w / (double)h;
-            pRenderContext->PerspectiveX(45.0, aspect, 1.0, 2000.0);
-
-            pRenderContext->MatrixMode(MATERIAL_VIEW);
-            pRenderContext->LoadIdentity();
-
-            float radPitch = flCameraPitch * (M_PI / 180.0f);
-            float radYaw = flCameraYaw * (M_PI / 180.0f);
-            float distance = 50.0f * flZoomScale;
-
-            Vector vecEye(
-                distance * std::cos(radPitch) * std::cos(radYaw),
-                distance * std::cos(radPitch) * std::sin(radYaw),
-                distance * std::sin(radPitch));
-
-            Vector vecAt(flPanX, flPanY, flPanZ);
-            vecEye += vecAt;
-            Vector vecUp(0, 0, 1);
-
-            Vector forward = vecAt - vecEye;
-            VectorNormalize(forward);
-            Vector left;
-            CrossProduct(vecUp, forward, left);
-            VectorNormalize(left);
-            Vector up;
-            CrossProduct(forward, left, up);
-
-            VMatrix matView;
-            matView.Init(
-                left.x, left.y, left.z, -DotProduct(left, vecEye),
-                up.x, up.y, up.z, -DotProduct(up, vecEye),
-                -forward.x, -forward.y, -forward.z, DotProduct(forward, vecEye),
-                0.0f, 0.0f, 0.0f, 1.0f);
-            pRenderContext->LoadMatrix(matView);
-
-            if (hMdl != MDLHANDLE_INVALID)
-            {
-                studiohdr_t *pStudioHdr = g_pMDLCache->GetStudioHdr(hMdl);
-                studiohwdata_t *pHardwareData = g_pMDLCache->GetHardwareData(hMdl);
-
-                if (pStudioHdr && pHardwareData)
-                {
-                    pRenderContext->SetAmbientLight(1.0f, 1.0f, 1.0f);
-
-                    pRenderContext->MatrixMode(MATERIAL_MODEL);
-                    pRenderContext->LoadIdentity();
-
-                    g_pStudioRender->BeginFrame();
-
-                    ::StudioRenderConfig_t studioCfg;
-                    memset(&studioCfg, 0, sizeof(::StudioRenderConfig_t));
-                    studioCfg.drawEntities = 1;
-                    studioCfg.bSoftwareSkin = false;
-                    studioCfg.bSoftwareLighting = false;
-                    studioCfg.bNoSoftware = true;
-
-                    g_pStudioRender->UpdateConfig(studioCfg);
-                    g_pStudioRender->ForcedMaterialOverride(nullptr);
-
-                    g_pStudioRender->SetAlphaModulation(1.0f);
-                    g_pStudioRender->SetColorModulation(Vector(1.0f, 1.0f, 1.0f).Base());
-
-                    DrawModelInfo_t drawInfo;
-                    drawInfo.m_pStudioHdr = pStudioHdr;
-                    drawInfo.m_pHardwareData = pHardwareData;
-                    drawInfo.m_Decals = STUDIORENDER_DECAL_INVALID;
-                    drawInfo.m_Skin = 0;
-                    drawInfo.m_Body = 0;
-                    drawInfo.m_HitboxSet = 0;
-                    drawInfo.m_pClientEntity = nullptr;
-                    drawInfo.m_Lod = 0;
-                    drawInfo.m_pColorMeshes = nullptr;
-
-                    matrix3x4_t poseBones[MAXSTUDIOBONES] = {};
-                    mstudiobone_t *pBoneArray = (mstudiobone_t *)((byte *)pStudioHdr + pStudioHdr->boneindex);
-
-                    if (pBoneArray != nullptr)
-                    {
-                        int numBonesToProcess = (pStudioHdr->numbones < MAXSTUDIOBONES) ? pStudioHdr->numbones : MAXSTUDIOBONES;
-                        int nSeqIndex = clamp(nTargetSequenceIndex, 0, pStudioHdr->numlocalseq - 1);
-
-                        for (int i = 0; i < numBonesToProcess; i++)
-                        {
-                            Vector bonePos = pBoneArray[i].pos;
-                            Quaternion boneQuat = pBoneArray[i].quat;
-
-                            const char *pszBoneName = pBoneArray[i].pszName();
-                            if (pszBoneName != nullptr && pBoneArray[i].parent != -1)
-                            {
-                                float timelineFactor = (flAnimCycle * M_PI * 2.0f);
-
-                                if (nSeqIndex > 0)
-                                {
-                                    if (strstr(pszBoneName, "Forearm") || strstr(pszBoneName, "Hand"))
-                                    {
-                                        float sequencePoseAngle = (float)nSeqIndex * 0.15f;
-                                        boneQuat.x += std::sin(timelineFactor) * 0.1f + (sequencePoseAngle * 0.05f);
-                                    }
-                                }
-                                else
-                                {
-                                    if (strstr(pszBoneName, "Spine2") || strstr(pszBoneName, "Spine4") || strstr(pszBoneName, "Neck"))
-                                    {
-                                        float breatheSway = std::sin(timelineFactor) * 0.015f;
-                                        boneQuat.x += breatheSway;
-                                        boneQuat.y += std::cos(timelineFactor * 0.5f) * 0.008f;
-                                    }
-                                }
-                            }
-
-                            QuaternionMatrix(boneQuat, bonePos, poseBones[i]);
-
-                            int parentIdx = pBoneArray[i].parent;
-                            if (parentIdx >= 0 && parentIdx < numBonesToProcess)
-                            {
-                                matrix3x4_t temporaryTransform;
-                                MatrixCopy(poseBones[i], temporaryTransform);
-                                ConcatTransforms(poseBones[parentIdx], temporaryTransform, poseBones[i]);
-                            }
-                        }
-
-                        g_pStudioRender->LockBoneMatrices(numBonesToProcess);
-                        g_pStudioRender->UnlockBoneMatrices();
-                    }
-
-					// --- FIXED: INJECTING DYNAMIC FACIAL EXPRESSION FLEXES ---
-					// Swapped out array bounds and methods to match your specific engine fork naming signatures
-					float pFlexWeights[MAXSTUDIOFLEXDESC] = { 0.0f };
-					float pFlexDelayedWeights[MAXSTUDIOFLEXDESC] = { 0.0f };
-
-					if (pStudioHdr->numflexdesc > 0)
+				case SDL_MOUSEBUTTONDOWN:
+					if (!io.WantCaptureMouse)
 					{
-						float timelineFactor = (flAnimCycle * M_PI * 2.0f);
-						
-						// Iterate through the model's baked shape morph controllers to find standard face tracks
-						for (int f = 0; f < pStudioHdr->numflexdesc; f++)
+						if (event.button.button == SDL_BUTTON_LEFT) bLeftMouseDown = true;
+						if (event.button.button == SDL_BUTTON_RIGHT) bRightMouseDown = true;
+					}
+					break;
+
+				case SDL_MOUSEBUTTONUP:
+					if (event.button.button == SDL_BUTTON_LEFT) bLeftMouseDown = false;
+					if (event.button.button == SDL_BUTTON_RIGHT) bRightMouseDown = false;
+					break;
+			}
+		}
+
+		uint32_t currentTicks = SDL_GetTicks();
+		float frameTime = (currentTicks - lastTicks) / 1000.0f;
+		if (frameTime == 0.0f) frameTime = 0.01f; 
+		lastTicks = currentTicks;
+
+		flAnimCycle += frameTime * 0.4f; 
+		if (flAnimCycle > 1.0f) flAnimCycle -= 1.0f; 
+
+		g_pMaterialSystem->BeginFrame(frameTime);
+		ImGui_ImplOpenGL3_NewFrame();
+		ImGui_ImplSDL2_NewFrame();
+		ImGui::NewFrame();
+
+		pRenderContext = g_pMaterialSystem->GetRenderContext();
+		if (pRenderContext)
+		{
+			pRenderContext->ClearColor3ub(51, 51, 51); 
+			pRenderContext->ClearBuffers(true, true, true); 
+
+			pRenderContext->DepthRange(0.0f, 1.0f);
+			glEnable(GL_DEPTH_TEST);
+			glDepthMask(GL_TRUE);
+			glDepthFunc(GL_LEQUAL);
+
+			pRenderContext->Flush(false);
+
+			// FIXED: Array Dimension Re-added
+			Vector4D ambientCube[6]; 
+			for (int side = 0; side < 6; side++)
+			{
+				ambientCube[side].Init(1.0f, 1.0f, 1.0f, 1.0f); 
+			}
+			pRenderContext->SetAmbientLightCube(ambientCube);
+
+			pRenderContext->MatrixMode(MATERIAL_PROJECTION);
+			pRenderContext->LoadIdentity();
+			SDL_GetWindowSize(pWindow, &w, &h);
+			double aspect = (h == 0) ? 1.0 : (double)w / (double)h;
+			pRenderContext->PerspectiveX(45.0, aspect, 1.0, 2000.0);
+
+			pRenderContext->MatrixMode(MATERIAL_VIEW);
+			pRenderContext->LoadIdentity();
+			
+			// RESTORED: Exact stable look-at matrix generation block
+			float radPitch = flCameraPitch * (M_PI / 180.0f);
+			float radYaw   = flCameraYaw * (M_PI / 180.0f);
+			float distance = 50.0f * flZoomScale;
+			Vector vecEye(distance * std::cos(radPitch) * std::cos(radYaw), distance * std::cos(radPitch) * std::sin(radYaw), distance * std::sin(radPitch));
+			Vector vecAt(flPanX, flPanY, flPanZ); vecEye += vecAt; Vector vecUp(0, 0, 1);
+			Vector forward = vecAt - vecEye; VectorNormalize(forward);
+			Vector left; CrossProduct(vecUp, forward, left); VectorNormalize(left);
+			Vector up; CrossProduct(forward, left, up);
+			VMatrix matView;
+			matView.Init(left.x, left.y, left.z, -DotProduct(left, vecEye), up.x, up.y, up.z, -DotProduct(up, vecEye), -forward.x, -forward.y, -forward.z, DotProduct(forward, vecEye), 0.0f, 0.0f, 0.0f, 1.0f);
+			pRenderContext->LoadMatrix(matView);
+
+			if (hMdl != MDLHANDLE_INVALID)
+			{
+				studiohdr_t *pStudioHdr = g_pMDLCache->GetStudioHdr(hMdl);
+				studiohwdata_t *pHardwareData = g_pMDLCache->GetHardwareData(hMdl);
+				if (pStudioHdr && pHardwareData)
+				{
+					pRenderContext->SetAmbientLight(1.0f, 1.0f, 1.0f);
+					pRenderContext->MatrixMode(MATERIAL_MODEL);
+					pRenderContext->LoadIdentity();
+
+					g_pStudioRender->BeginFrame();
+					::StudioRenderConfig_t studioCfg; memset(&studioCfg, 0, sizeof(::StudioRenderConfig_t));
+					studioCfg.drawEntities = 1; studioCfg.bNoSoftware = true;
+					g_pStudioRender->UpdateConfig(studioCfg);
+					g_pStudioRender->ForcedMaterialOverride(nullptr);
+					g_pStudioRender->SetAlphaModulation(1.0f);
+					g_pStudioRender->SetColorModulation(Vector(1.0f, 1.0f, 1.0f).Base());
+
+					DrawModelInfo_t drawInfo;
+					drawInfo.m_pStudioHdr = pStudioHdr; drawInfo.m_pHardwareData = pHardwareData;
+					drawInfo.m_Decals = STUDIORENDER_DECAL_INVALID; drawInfo.m_Skin = drawInfo.m_Body = drawInfo.m_HitboxSet = drawInfo.m_Lod = 0; drawInfo.m_pColorMeshes = nullptr;
+
+					matrix3x4_t poseBones[MAXSTUDIOBONES] = {};
+					mstudiobone_t *pBoneArray = (mstudiobone_t *)((byte *)pStudioHdr + pStudioHdr->boneindex);
+					if (pBoneArray != nullptr)
+					{
+						int numBonesToProcess = (pStudioHdr->numbones < MAXSTUDIOBONES) ? pStudioHdr->numbones : MAXSTUDIOBONES;
+						for (int i = 0; i < numBonesToProcess; i++)
 						{
-							mstudioflexdesc_t *pFlexDesc = pStudioHdr->pFlexdesc(f);
-							if (pFlexDesc && pFlexDesc->pszFACS())
+							Vector bonePos = pBoneArray[i].pos; Quaternion boneQuat = pBoneArray[i].quat;
+							if (pBoneArray[i].parent != -1 && (strstr(pBoneArray[i].pszName(), "Spine2") || strstr(pBoneArray[i].pszName(), "Spine4")))
 							{
-								const char* pszFlexName = pFlexDesc->pszFACS();
-								
-								// 1. Natural Blinking Loop: Maps an intermittent quick snap closure onto her eyelids
-								if (strstr(pszFlexName, "blink") || strstr(pszFlexName, "lid_closer"))
-								{
-									// Generates a rapid pulse wave to simulate intermittent blinking periods
-									float flBlinkPulse = std::sin(timelineFactor * 3.0f);
-									pFlexWeights[f] = (flBlinkPulse > 0.7f) ? 1.0f : 0.0f;
-								}
-								// 2. Subtle Jaw/Mouth expressions shifting with our breath timelines
-								else if (strstr(pszFlexName, "jaw_drop") || strstr(pszFlexName, "mouth_open"))
-								{
-									pFlexWeights[f] = std::abs(std::sin(timelineFactor * 0.5f)) * 0.25f;
-								}
-								else if (strstr(pszFlexName, "smile") || strstr(pszFlexName, "corner_puller"))
-								{
-									pFlexWeights[f] = 0.35f; // Constant subtle resting tools smirk expression
-								}
+								boneQuat.x += std::sin(flAnimCycle * M_PI * 2.0f) * 0.015f;
+							}
+							QuaternionMatrix(boneQuat, bonePos, poseBones[i]);
+							int parentIdx = pBoneArray[i].parent;
+							if (parentIdx >= 0 && parentIdx < numBonesToProcess)
+							{
+								matrix3x4_t temporaryTransform; MatrixCopy(poseBones[i], temporaryTransform);
+								ConcatTransforms(poseBones[parentIdx], temporaryTransform, poseBones[i]);
 							}
 						}
+						g_pStudioRender->LockBoneMatrices(numBonesToProcess); g_pStudioRender->UnlockBoneMatrices();
+					}
+					float pFlexWeights[MAXSTUDIOFLEXDESC] = { 0.0f }; float pFlexDelayedWeights[MAXSTUDIOFLEXDESC] = { 0.0f };
+					DrawModelResults_t modelResults; memset(&modelResults, 0, sizeof(DrawModelResults_t));
+					g_pStudioRender->DrawModel(&modelResults, drawInfo, poseBones, pFlexWeights, pFlexDelayedWeights, Vector(0,0,0), STUDIORENDER_DRAW_ENTIRE_MODEL);
+					g_pStudioRender->EndFrame();
+				}
+			}
+
+			// Render ImGui Interface control panel
+			ImGui::Begin("Hammer Tool Control Panel");
+			ImGui::Text("Hello! This is Dear ImGui running natively inside Source Engine.");
+			ImGui::Separator();
+			ImGui::Text("Viewport Diagnostics:");
+			ImGui::SliderFloat("Camera Zoom", &flZoomScale, 0.5f, 5.0f);
+			ImGui::End();
+
+			ImGui::Render();
+
+			// --- THE DEFINITIVE VERTEX-LEVEL COORDINATE FLIPPER ---
+			ImDrawData* draw_data = ImGui::GetDrawData();
+			if (draw_data)
+			{
+				// Loop through all generated command rendering list vertices right before drawing
+				for (int n = 0; n < draw_data->CmdListsCount; n++)
+				{
+					ImDrawList* cmd_list = draw_data->CmdLists[n];
+					
+					// Iterate through every single vertex buffer slot in memory
+					for (int v_idx = 0; v_idx < cmd_list->VtxBuffer.Size; v_idx++)
+					{
+						ImDrawVert& vertex = cmd_list->VtxBuffer.Data[v_idx];
+						
+						// Invert the physical vertex Y position relative to the viewport height bounds.
+						// This perfectly counters ToGL's vertical flip, rendering text right-side up!
+						vertex.pos.y = (float)h - vertex.pos.y;
 					}
 
-					DrawModelResults_t modelResults;
-					memset(&modelResults, 0, sizeof(DrawModelResults_t));
+					// Mirror the scissoring bounding box parameters so layout clipping aligns smoothly
+					for (int cmd_i = 0; cmd_i < cmd_list->CmdBuffer.Size; cmd_i++)
+					{
+						ImDrawCmd* pcmd = &cmd_list->CmdBuffer[cmd_i];
+						float clip_rect_h = pcmd->ClipRect.w - pcmd->ClipRect.y;
+						
+						pcmd->ClipRect.y = (float)h - pcmd->ClipRect.w;
+						pcmd->ClipRect.w = pcmd->ClipRect.y + clip_rect_h;
+					}
+				}
+			}
 
-					g_pStudioRender->DrawModel(
-						&modelResults, 
-						drawInfo, 
-						poseBones, 
-						pFlexWeights,        // Passing our dynamic expression array to the vertex shader
-						pFlexDelayedWeights, // Passing required trailing shape modifiers
-						Vector(0, 0, 0), 
-						STUDIORENDER_DRAW_ENTIRE_MODEL 
-					);
+			// Execute the modern shader draw pass using our freshly flipped vertices
+			ImGui_ImplOpenGL3_RenderDrawData(draw_data);
 
-                    g_pStudioRender->EndFrame();
-                }
-            }
-            pRenderContext->Flush(true);
-        }
-        g_pMaterialSystem->EndFrame();
-        g_pMaterialSystem->SwapBuffers();
-    }
-    Msg("[HAMMER] Exiting rendering presentation loop smoothly.\n");
-    _exit(0);
-    return 0;
+			pRenderContext->Flush(true);
+		}
+
+		g_pMaterialSystem->EndFrame();
+		g_pMaterialSystem->SwapBuffers(); 
+	}
+
+	ImGui_ImplOpenGL3_Shutdown(); ImGui_ImplSDL2_Shutdown(); ImGui::DestroyContext();
+	_exit(0); 
+	return 0;
 }

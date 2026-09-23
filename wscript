@@ -118,8 +118,8 @@ projects={
 		'utils/vrad_launcher',
 		'utils/vrad',
 		'utils/vtex_launcher',
-		#'jin/libimgui',
-		#'jin/libgizmo',
+		'jin/libimgui',
+		'jin/libgizmo',
 		'jin/hammer',
 	],
 	'tests': [
@@ -213,8 +213,8 @@ projects={
 		'utils/vvis',
 		'utils/vrad_launcher',
 		'utils/vrad',
-		#'jin/libimgui',
-		#'jin/libgizmo',
+		'jin/libimgui',
+		'jin/libgizmo',
 		'jin/hammer',
 	]
 }
