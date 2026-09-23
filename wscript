@@ -121,6 +121,7 @@ projects={
 		'jin/libimgui',
 		'jin/libgizmo',
 		'jin/hammer',
+		'jin/hlmv',
 	],
 	'tests': [
 		'appframework',

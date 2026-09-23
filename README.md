@@ -6,7 +6,8 @@ This project was forked from https://github.com/nillerusr/source-engine, I'm wor
 
 ### working in progress
 
-* hammer editor
+* hammer
+* hlmv
 
 ### completed
 
