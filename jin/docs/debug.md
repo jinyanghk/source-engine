@@ -1,3 +1,12 @@
+```sh
+ulimit -c
+
+ulimit -c unlimited
+sudo sysctl -w kernel.core_pattern=core
+
+ulimit -c 0
+```
+
 ### debug
 
 | breakpoint | file | description |
