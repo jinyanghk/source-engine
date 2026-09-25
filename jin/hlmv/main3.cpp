@@ -48,9 +48,6 @@ std::vector<std::string> g_ModelList;
 std::string g_CurrentModelPath = "";
 std::string g_GameFolder = "hl2";
 
-// Active animation state tracking variables
-int g_CurrentSequenceIndex = 0;
-
 //-----------------------------------------------------------------------------
 // PURE VIRTUAL VPK ARCHIVE RECURSIVE SCANNER
 //-----------------------------------------------------------------------------
@@ -125,42 +122,42 @@ bool CHammerApp::Create()
     IAppSystem *pSystem;
     AppModule_t cvarModule = LoadModule(VStdLib_GetICVarFactory());
     pSystem = AddSystem(cvarModule, CVAR_INTERFACE_VERSION);
-    if (!pSystem)
-    {
-        printf("[DEBUG ERROR] Failed to bind CVAR module interface.\n");
-        return false;
-    }
+    if (!pSystem) { printf("[DEBUG ERROR] Failed to bind CVAR module interface.\n"); return false; }
 
     char pFileSystemDLL[MAX_PATH];
     bool bSteam;
-    if (FileSystem_GetFileSystemDLLName(pFileSystemDLL, MAX_PATH, bSteam) != FS_OK)
-    {
+    if (FileSystem_GetFileSystemDLLName(pFileSystemDLL, MAX_PATH, bSteam) != FS_OK) {
         printf("[DEBUG ERROR] Failed to query FileSystem DLL filename pointer mappings.\n");
         return false;
     }
 
     AppModule_t fileSystemModule = LoadModule(pFileSystemDLL);
     g_pFileSystem = (IFileSystem *)AddSystem(fileSystemModule, FILESYSTEM_INTERFACE_VERSION);
-    if (!g_pFileSystem)
-    {
-        printf("[DEBUG ERROR] Failed to load structural FileSystem module factory.\n");
-        return false;
-    }
+    if (!g_pFileSystem) { printf("[DEBUG ERROR] Failed to load structural FileSystem module factory.\n"); return false; }
 
     printf("[DEBUG] Setting FileSystem baseline directory path trackers...\n");
     FileSystem_SetBasePaths(g_pFileSystem);
 
+    // Tell the binary loader to look inside the master engine bin folder
     g_pFileSystem->AddSearchPath("hl2/bin", "BIN");
 
-    const tchar *pGameDirParam = CommandLine()->ParmValue("-game", "hl2");
+    // --- THE DYNAMIC MOD SHADER COUPLER ---
+    // Extract the active game name string parameter typed by the user ("portal")
+    const char *pGameDirParam = CommandLine()->ParmValue("-game", "hl2");
     std::string activeModName = pGameDirParam;
 
     if (activeModName != "hl2")
     {
+        // Dynamically compute the mod's internal binary path directory location
+        // (e.g. "portal/bin" or "../portal/bin" depending on your configuration prefix)
         std::string modBinPath = activeModName + "/bin";
+        
+        // Push the mod's binary folder into the system's core module loading tracks.
+        // This tells libmaterialsystem to discover and load portal's native stdshader_dx9.so module!
         printf("[DEBUG] Injecting active mod binary search path destination: %s\n", modBinPath.c_str());
         g_pFileSystem->AddSearchPath(modBinPath.c_str(), "BIN");
-
+        
+        // Sibling folder layout configuration fallback safety check
         std::string siblingBinPath = "../" + activeModName + "/bin";
         g_pFileSystem->AddSearchPath(siblingBinPath.c_str(), "BIN");
     }
@@ -177,15 +174,13 @@ bool CHammerApp::Create()
             {"", ""}};
 
     printf("[DEBUG] Injecting standard CreateSDLMgr system interface hook...\n");
-    void *pSdlMgr = CreateSDLMgr();
-    if (!pSdlMgr)
-    {
+    void* pSdlMgr = CreateSDLMgr();
+    if (!pSdlMgr) {
         printf("[DEBUG WARNING] CreateSDLMgr() returned an empty nullptr handle.\n");
     }
     AddSystem((IAppSystem *)pSdlMgr, SDLMGR_INTERFACE_VERSION);
 
-    if (!AddSystems(appSystems))
-    {
+    if (!AddSystems(appSystems)) {
         return false;
     }
 
@@ -224,6 +219,9 @@ SpewRetval_t HammerSpewFunc(SpewType_t type, tchar const *pMsg)
     }
 }
 
+//-----------------------------------------------------------------------------
+// DYNAMIC PREINIT: Secure automatic VPK chunk mounter profile passes
+//-----------------------------------------------------------------------------
 bool CHammerApp::PreInit()
 {
     printf("[DEBUG] Inside CHammerApp::PreInit() setup block pass.\n");
@@ -239,7 +237,7 @@ bool CHammerApp::PreInit()
     std::string directGameInfo = g_GameFolder + "/gameinfo.txt";
     std::string siblingGameInfo = "../" + g_GameFolder + "/gameinfo.txt";
 
-    FILE *pFile = fopen(directGameInfo.c_str(), "r");
+    FILE* pFile = fopen(directGameInfo.c_str(), "r");
     if (pFile)
     {
         fclose(pFile);
@@ -247,7 +245,7 @@ bool CHammerApp::PreInit()
     }
     else
     {
-        FILE *pSibFile = fopen(siblingGameInfo.c_str(), "r");
+        FILE* pSibFile = fopen(siblingGameInfo.c_str(), "r");
         if (pSibFile)
         {
             fclose(pSibFile);
@@ -256,16 +254,22 @@ bool CHammerApp::PreInit()
         }
     }
 
+    // 1. Mount the core loose directory folder tracking boundaries immediately
     g_pFileSystem->AddSearchPath(initInfo.m_pDirectoryName, "GAME");
 
+    // 2. THE ULTIMATE AUTOMATION FIX: DYNAMIC MOD SPLIT VPK PACK TRACKER
+    // Explicitly scan the physical disk directory paths to find any packed assets.
+    // This allows Portal's master models, textures, and material shaders to mount natively!
     printf("[DEBUG] Scanning and mounting virtual VPK split chunks inside: %s\n", initInfo.m_pDirectoryName);
     for (int archiveIdx = 0; archiveIdx < 20; archiveIdx++)
     {
         char szVpkPathBuffer[MAX_PATH];
-        snprintf(szVpkPathBuffer, sizeof(szVpkPathBuffer), "%s/%s_pak_%03d.vpk",
+        // Standard Source Engine naming scheme loop tracker (e.g. portal/portal_pak_000.vpk)
+        snprintf(szVpkPathBuffer, sizeof(szVpkPathBuffer), "%s/%s_pak_%03d.vpk", 
                  initInfo.m_pDirectoryName, CommandLine()->ParmValue("-game", "hl2"), archiveIdx);
-
-        FILE *pTestVpk = fopen(szVpkPathBuffer, "rb");
+        
+        // Use a raw OS fopen validation sweep to guarantee zero path key anomalies
+        FILE* pTestVpk = fopen(szVpkPathBuffer, "rb");
         if (pTestVpk)
         {
             fclose(pTestVpk);
@@ -274,22 +278,14 @@ bool CHammerApp::PreInit()
         }
     }
 
+    // Fallback baseline search hook additions to catch common packed asset layers if present
     std::string texVpk = std::string(initInfo.m_pDirectoryName) + "/" + CommandLine()->ParmValue("-game", "hl2") + "_textures.vpk";
     std::string misVpk = std::string(initInfo.m_pDirectoryName) + "/" + CommandLine()->ParmValue("-game", "hl2") + "_misc.vpk";
+    
+    FILE* pTexF = fopen(texVpk.c_str(), "rb"); if (pTexF) { fclose(pTexF); g_pFileSystem->AddSearchPath(texVpk.c_str(), "GAME"); }
+    FILE* pMisF = fopen(misVpk.c_str(), "rb"); if (pMisF) { fclose(pMisF); g_pFileSystem->AddSearchPath(misVpk.c_str(), "GAME"); }
 
-    FILE *pTexF = fopen(texVpk.c_str(), "rb");
-    if (pTexF)
-    {
-        fclose(pTexF);
-        g_pFileSystem->AddSearchPath(texVpk.c_str(), "GAME");
-    }
-    FILE *pMisF = fopen(misVpk.c_str(), "rb");
-    if (pMisF)
-    {
-        fclose(pMisF);
-        g_pFileSystem->AddSearchPath(misVpk.c_str(), "GAME");
-    }
-
+    // Mount core hl2/ tracks natively behind Portal to unlock fallback texture sheets
     if (g_GameFolder != "hl2" && g_GameFolder != "../hl2")
     {
         g_pFileSystem->AddSearchPath("hl2", "GAME");
@@ -307,38 +303,7 @@ void CHammerApp::PostShutdown() {}
 
 int CHammerApp::Main()
 {
-    printf("[DEBUG SUCCESS] Successfully breached CHammerApp::Main() entry loop block boundary!\n");
-
-    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) < 0)
-    {
-        printf("[DEBUG ERROR] Standalone SDL window framework failed to spin up.\n");
-        return -1;
-    }
-
-    SDL_Window *pWindow = SDL_CreateWindow(
-        "Source Engine Model Viewer | Standalone HLMV Loop",
-        SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-        1280, 720,
-        SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN);
-
-    if (!pWindow)
-    {
-        printf("[DEBUG ERROR] Standalone SDL window instantiation handler failed.\n");
-        return -1;
-    }
-
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_COMPATIBILITY);
-
-    SDL_GLContext glContext = SDL_GL_CreateContext(pWindow);
-    if (!glContext)
-    {
-        printf("[DEBUG ERROR] Hardware accelerated context mapping compilation pass failed.\n");
-        return -1;
-    }
-    SDL_GL_MakeCurrent(pWindow, glContext);
-
+    SDL_Window *pWindow = SDL_GL_GetCurrentWindow();
     int w = 1280;
     int h = 720;
     if (pWindow)
@@ -370,7 +335,7 @@ int CHammerApp::Main()
     SDL_ShowWindow(pWindow);
     SDL_RaiseWindow(pWindow);
     SDL_SetWindowSize(pWindow, w, h);
-    SDL_GLContext contextGL = SDL_GL_GetCurrentContext();
+    SDL_GLContext glContext = SDL_GL_GetCurrentContext();
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
@@ -379,31 +344,17 @@ int CHammerApp::Main()
     io.IniFilename = nullptr;
     io.DisplaySize = ImVec2((float)w, (float)h);
 
-    ImGui_ImplSDL2_InitForOpenGL(pWindow, contextGL);
+    ImGui_ImplSDL2_InitForOpenGL(pWindow, glContext);
     ImGui_ImplOpenGL3_Init("#version 130");
 
     printf("[DEBUG] Beginning file asset traversal scan across VPK layers for model lists...\n");
     ScanModelsDirectoryRecursive("models");
     printf("[DEBUG SUCCESS] Traversal scan concluded. Total distinct model path assets tracked: %zu\n", g_ModelList.size());
 
-    if (!g_ModelList.empty() && g_GameFolder != "hl2")
-    {
-        g_CurrentModelPath = g_ModelList[0];
-        for (const auto &modelStr : g_ModelList)
-        {
-            if (modelStr.find("player.mdl") != std::string::npos || modelStr.find("chell.mdl") != std::string::npos)
-            {
-                g_CurrentModelPath = modelStr;
-                break;
-            }
-        }
-    }
-    else
-    {
-        g_CurrentModelPath = "";
-    }
-
-    MDLHandle_t hMdl = (!g_CurrentModelPath.empty()) ? g_pMDLCache->FindMDL(g_CurrentModelPath.c_str()) : MDLHANDLE_INVALID;
+    // FIXED AUTOMATION SETTING: Start as blank slate.
+    // Clicking any Portal asset inside the list will seamlessly load it live!
+    g_CurrentModelPath = "";
+    MDLHandle_t hMdl = MDLHANDLE_INVALID;
 
     bool bRunning = true;
     SDL_Event event;
@@ -414,16 +365,13 @@ int CHammerApp::Main()
     float flPanX = 0.0f;
     float flPanY = 0.0f;
     float flPanZ = 35.0f;
-
     float flAnimCycle = 0.0f;
     uint32_t lastTicks = SDL_GetTicks();
-
     while (bRunning)
     {
         while (SDL_PollEvent(&event))
         {
             ImGui_ImplSDL2_ProcessEvent(&event);
-
             if (event.type == SDL_MOUSEMOTION)
             {
                 io.MousePos.x = (float)event.motion.x;
@@ -433,7 +381,6 @@ int CHammerApp::Main()
             {
                 io.MouseWheel += (float)event.wheel.y;
             }
-
             switch (event.type)
             {
             case SDL_QUIT:
@@ -445,17 +392,14 @@ int CHammerApp::Main()
                 break;
             }
         }
-
         uint32_t currentTicks = SDL_GetTicks();
         float frameTime = (currentTicks - lastTicks) / 1000.0f;
         if (frameTime == 0.0f)
             frameTime = 0.01f;
         lastTicks = currentTicks;
-
         flAnimCycle += frameTime * 0.4f;
         if (flAnimCycle > 1.0f)
             flAnimCycle -= 1.0f;
-
         if (!io.WantCaptureMouse)
         {
             if (ImGui::IsMouseDragging(ImGuiMouseButton_Left))
@@ -483,41 +427,33 @@ int CHammerApp::Main()
                     flZoomScale = 15.0f;
             }
         }
-
         g_pMaterialSystem->BeginFrame(frameTime);
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplSDL2_NewFrame();
         ImGui::NewFrame();
-
         IMatRenderContext *pRenderContext = g_pMaterialSystem->GetRenderContext();
         if (pRenderContext)
         {
             pRenderContext->ClearColor3ub(45, 45, 48);
             pRenderContext->ClearBuffers(true, true, true);
-
             pRenderContext->Viewport(0, 0, w, h);
             pRenderContext->DepthRange(0.0f, 1.0f);
             glEnable(GL_DEPTH_TEST);
             glDepthMask(GL_TRUE);
             glDepthFunc(GL_LEQUAL);
             pRenderContext->Flush(false);
-
-            // FIXED: Corrected array dimension assignment allocation strictly
             Vector4D ambientCube[6];
             for (int side = 0; side < 6; side++)
             {
                 ambientCube[side].Init(1.0f, 1.0f, 1.0f, 1.0f);
             }
             pRenderContext->SetAmbientLightCube(ambientCube);
-
             pRenderContext->MatrixMode(MATERIAL_PROJECTION);
             pRenderContext->LoadIdentity();
             double aspect = (h == 0) ? 1.0 : (double)w / (double)h;
             pRenderContext->PerspectiveX(45.0, aspect, 1.0, 2000.0);
-
             pRenderContext->MatrixMode(MATERIAL_VIEW);
             pRenderContext->LoadIdentity();
-
             float radPitch = flCameraPitch * (M_PI / 180.0f);
             float radYaw = flCameraYaw * (M_PI / 180.0f);
             float distance = 50.0f * flZoomScale;
@@ -535,18 +471,15 @@ int CHammerApp::Main()
             VMatrix matView;
             matView.Init(left.x, left.y, left.z, -DotProduct(left, vecEye), up.x, up.y, up.z, -DotProduct(up, vecEye), -forward.x, -forward.y, -forward.z, DotProduct(forward, vecEye), 0.0f, 0.0f, 0.0f, 1.0f);
             pRenderContext->LoadMatrix(matView);
-
-            studiohdr_t *pStudioHdr = nullptr;
             if (hMdl != MDLHANDLE_INVALID && !g_CurrentModelPath.empty())
             {
-                pStudioHdr = g_pMDLCache->GetStudioHdr(hMdl);
+                studiohdr_t *pStudioHdr = g_pMDLCache->GetStudioHdr(hMdl);
                 studiohwdata_t *pHardwareData = g_pMDLCache->GetHardwareData(hMdl);
                 if (pStudioHdr && pHardwareData)
                 {
                     pRenderContext->SetAmbientLight(1.0f, 1.0f, 1.0f);
                     pRenderContext->MatrixMode(MATERIAL_MODEL);
                     pRenderContext->LoadIdentity();
-
                     g_pStudioRender->BeginFrame();
                     ::StudioRenderConfig_t studioCfg;
                     memset(&studioCfg, 0, sizeof(::StudioRenderConfig_t));
@@ -556,14 +489,12 @@ int CHammerApp::Main()
                     g_pStudioRender->ForcedMaterialOverride(nullptr);
                     g_pStudioRender->SetAlphaModulation(1.0f);
                     g_pStudioRender->SetColorModulation(Vector(1.0f, 1.0f, 1.0f).Base());
-
                     DrawModelInfo_t drawInfo;
                     drawInfo.m_pStudioHdr = pStudioHdr;
                     drawInfo.m_pHardwareData = pHardwareData;
                     drawInfo.m_Decals = STUDIORENDER_DECAL_INVALID;
                     drawInfo.m_Skin = drawInfo.m_Body = drawInfo.m_HitboxSet = drawInfo.m_Lod = 0;
                     drawInfo.m_pColorMeshes = nullptr;
-
                     matrix3x4_t poseBones[MAXSTUDIOBONES] = {};
                     mstudiobone_t *pBoneArray = (mstudiobone_t *)((byte *)pStudioHdr + pStudioHdr->boneindex);
                     if (pBoneArray != nullptr)
@@ -573,23 +504,10 @@ int CHammerApp::Main()
                         {
                             Vector bonePos = pBoneArray[i].pos;
                             Quaternion boneQuat = pBoneArray[i].quat;
-
-                            if (pBoneArray[i].parent != -1)
+                            if (pBoneArray[i].parent != -1 && (strstr(pBoneArray[i].pszName(), "Spine2") || strstr(pBoneArray[i].pszName(), "Spine4")))
                             {
-                                float flTimeFactor = flAnimCycle * M_PI * 2.0f;
-                                float flPoseWeight = (float)(g_CurrentSequenceIndex % 4 + 1) * 0.05f;
-
-                                if (strstr(pBoneArray[i].pszName(), "Spine") || strstr(pBoneArray[i].pszName(), "Arm") || strstr(pBoneArray[i].pszName(), "Hand"))
-                                {
-                                    boneQuat.x += std::sin(flTimeFactor) * flPoseWeight;
-                                    boneQuat.y += std::cos(flTimeFactor) * (flPoseWeight * 0.3f);
-                                }
-                                else if (strstr(pBoneArray[i].pszName(), "Head") || strstr(pBoneArray[i].pszName(), "Neck"))
-                                {
-                                    boneQuat.z += std::sin(flTimeFactor) * (flPoseWeight * 0.5f);
-                                }
+                                boneQuat.x += std::sin(flAnimCycle * M_PI * 2.0f) * 0.015f;
                             }
-
                             QuaternionMatrix(boneQuat, bonePos, poseBones[i]);
                             int parentIdx = pBoneArray[i].parent;
                             if (parentIdx >= 0 && parentIdx < numBonesToProcess)
@@ -610,10 +528,9 @@ int CHammerApp::Main()
                     g_pStudioRender->EndFrame();
                 }
             }
-
             // --- IMGUI SELECTOR SIDEBAR PANEL ---
             ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_Appearing);
-            ImGui::SetNextWindowSize(ImVec2(340, (float)h - 20.0f));
+            ImGui::SetNextWindowSize(ImVec2(340, h - 20), ImGuiCond_Appearing);
             ImGui::Begin("HLMV Model Browser");
             ImGui::Text("Active Game Folder: %s", g_GameFolder.c_str());
             ImGui::Text("Total Assets Cached: %zu", g_ModelList.size());
@@ -631,44 +548,6 @@ int CHammerApp::Main()
             static char szSearchFilter[256] = "";
             ImGui::InputText("Filter Search", szSearchFilter, IM_ARRAYSIZE(szSearchFilter));
             ImGui::Separator();
-			// --- HEADER-SAFE ANIMATION SEQUENCE COMBO BOX ---
-			if (pStudioHdr != nullptr && pStudioHdr->numlocalseq > 0)
-			{
-				ImGui::TextColored(ImVec4(0.4f, 0.7f, 1.0f, 1.0f), "Model Animation Sequences:");
-				
-				std::string comboLabel = "Clip Entry [" + std::to_string(g_CurrentSequenceIndex) + "]";
-				if (ImGui::BeginCombo("##AnimSeqCombo", comboLabel.c_str()))
-				{
-					int nNumSequences = pStudioHdr->numlocalseq;
-					for (int seqIdx = 0; seqIdx < nNumSequences; seqIdx++)
-					{
-						// FIXED: Added the pointer star modifier to match the return value from pLocalSeqdesc
-						mstudioseqdesc_t *pSeqDesc = pStudioHdr->pLocalSeqdesc(seqIdx);
-						const char* pszSeqName = pSeqDesc ? pSeqDesc->pszLabel() : nullptr;
-						
-						std::string cleanName = "seq_" + std::to_string(seqIdx);
-						if (pszSeqName && strlen(pszSeqName) > 0)
-						{
-							cleanName = pszSeqName;
-						}
-						
-						bool bIsSelected = (g_CurrentSequenceIndex == seqIdx);
-						if (ImGui::Selectable(cleanName.c_str(), bIsSelected))
-						{
-							g_CurrentSequenceIndex = seqIdx;
-							g_pStudioRender->LockBoneMatrices(pStudioHdr->numbones);
-							g_pStudioRender->UnlockBoneMatrices();
-							Msg("[HLMV] Active model animation sequence flipped onto clip: %s\n", cleanName.c_str());
-						}
-						if (bIsSelected)
-						{
-							ImGui::SetItemDefaultFocus();
-						}
-					}
-					ImGui::EndCombo();
-				}
-				ImGui::Separator();
-			}
             if (ImGui::BeginChild("ScrollingModelList"))
             {
                 for (size_t i = 0; i < g_ModelList.size(); i++)
@@ -680,7 +559,6 @@ int CHammerApp::Main()
                     {
                         g_CurrentModelPath = g_ModelList[i];
                         hMdl = g_pMDLCache->FindMDL(g_CurrentModelPath.c_str());
-                        g_CurrentSequenceIndex = 0;
                         Msg("[HLMV] Swapped active model target to: %s\n", g_CurrentModelPath.c_str());
                     }
                     if (bIsSelected)
@@ -714,7 +592,7 @@ int CHammerApp::Main()
             ImGui_ImplOpenGL3_RenderDrawData(draw_data);
             pRenderContext->Flush(true);
         }
-        g_pMaterialSystem->BeginFrame(frameTime);
+        g_pMaterialSystem->EndFrame();
         g_pMaterialSystem->SwapBuffers();
     }
     ImGui_ImplOpenGL3_Shutdown();
