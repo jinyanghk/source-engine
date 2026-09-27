@@ -28,7 +28,6 @@
 #include "appframework/ilaunchermgr.h"
 #include "mathlib/vmatrix.h"
 #include "tier1/KeyValues.h"
-#include "studio.h"
 
 // Explicit include for input system interface mapping
 #include "inputsystem/iinputsystem.h"
@@ -54,10 +53,6 @@ std::string g_GameFolder = "hl2";
 static int  g_nWindowWidth  = 1280;
 static int  g_nWindowHeight = 720;
 static bool g_bFullscreen   = false;
-
-// 动画状态
-int   g_CurrentSequenceIndex = 0;
-float g_flAnimTime = 0.0f;
 
 //-----------------------------------------------------------------------------
 // PURE VIRTUAL VPK ARCHIVE RECURSIVE SCANNER
@@ -131,7 +126,9 @@ bool CHammerApp::Create()
     CommandLine()->AppendParm("-hlmv", NULL);
 
     // ★ 解析命令行参数
+    // -f: 存在即全屏，忽略 -w / -h
     g_bFullscreen = CommandLine()->FindParm("-f") != 0;
+
     g_nWindowWidth  = CommandLine()->ParmValue("-w", 1280);
     g_nWindowHeight = CommandLine()->ParmValue("-h", 720);
 
@@ -187,15 +184,13 @@ bool CHammerApp::Create()
             {"", ""}};
 
     printf("[DEBUG] Injecting standard CreateSDLMgr system interface hook...\n");
-    void *pSdlMgr = CreateSDLMgr();
-    if (!pSdlMgr)
-    {
+    void* pSdlMgr = CreateSDLMgr();
+    if (!pSdlMgr) {
         printf("[DEBUG WARNING] CreateSDLMgr() returned an empty nullptr handle.\n");
     }
     AddSystem((IAppSystem *)pSdlMgr, SDLMGR_INTERFACE_VERSION);
 
-    if (!AddSystems(appSystems))
-    {
+    if (!AddSystems(appSystems)) {
         return false;
     }
 
@@ -234,6 +229,9 @@ SpewRetval_t HammerSpewFunc(SpewType_t type, tchar const *pMsg)
     }
 }
 
+//-----------------------------------------------------------------------------
+// DYNAMIC PREINIT
+//-----------------------------------------------------------------------------
 bool CHammerApp::PreInit()
 {
     printf("[DEBUG] Inside CHammerApp::PreInit() setup block pass.\n");
@@ -249,7 +247,7 @@ bool CHammerApp::PreInit()
     std::string directGameInfo = g_GameFolder + "/gameinfo.txt";
     std::string siblingGameInfo = "../" + g_GameFolder + "/gameinfo.txt";
 
-    FILE *pFile = fopen(directGameInfo.c_str(), "r");
+    FILE* pFile = fopen(directGameInfo.c_str(), "r");
     if (pFile)
     {
         fclose(pFile);
@@ -257,7 +255,7 @@ bool CHammerApp::PreInit()
     }
     else
     {
-        FILE *pSibFile = fopen(siblingGameInfo.c_str(), "r");
+        FILE* pSibFile = fopen(siblingGameInfo.c_str(), "r");
         if (pSibFile)
         {
             fclose(pSibFile);
@@ -275,7 +273,7 @@ bool CHammerApp::PreInit()
         snprintf(szVpkPathBuffer, sizeof(szVpkPathBuffer), "%s/%s_pak_%03d.vpk",
                  initInfo.m_pDirectoryName, CommandLine()->ParmValue("-game", "hl2"), archiveIdx);
 
-        FILE *pTestVpk = fopen(szVpkPathBuffer, "rb");
+        FILE* pTestVpk = fopen(szVpkPathBuffer, "rb");
         if (pTestVpk)
         {
             fclose(pTestVpk);
@@ -287,10 +285,8 @@ bool CHammerApp::PreInit()
     std::string texVpk = std::string(initInfo.m_pDirectoryName) + "/" + CommandLine()->ParmValue("-game", "hl2") + "_textures.vpk";
     std::string misVpk = std::string(initInfo.m_pDirectoryName) + "/" + CommandLine()->ParmValue("-game", "hl2") + "_misc.vpk";
 
-    FILE *pTexF = fopen(texVpk.c_str(), "rb");
-    if (pTexF) { fclose(pTexF); g_pFileSystem->AddSearchPath(texVpk.c_str(), "GAME"); }
-    FILE *pMisF = fopen(misVpk.c_str(), "rb");
-    if (pMisF) { fclose(pMisF); g_pFileSystem->AddSearchPath(misVpk.c_str(), "GAME"); }
+    FILE* pTexF = fopen(texVpk.c_str(), "rb"); if (pTexF) { fclose(pTexF); g_pFileSystem->AddSearchPath(texVpk.c_str(), "GAME"); }
+    FILE* pMisF = fopen(misVpk.c_str(), "rb"); if (pMisF) { fclose(pMisF); g_pFileSystem->AddSearchPath(misVpk.c_str(), "GAME"); }
 
     if (g_GameFolder != "hl2" && g_GameFolder != "../hl2")
     {
@@ -309,20 +305,15 @@ void CHammerApp::PostShutdown() {}
 
 int CHammerApp::Main()
 {
-    printf("[DEBUG] Inside CHammerApp::Main()...\n");
-
     SDL_Window *pWindow = SDL_GL_GetCurrentWindow();
-    if (!pWindow)
-    {
-        printf("[DEBUG ERROR] SDL_GL_GetCurrentWindow returned NULL!\n");
-        return -1;
-    }
 
+    // ============ 根据参数设置窗口 ============
     int w = g_nWindowWidth;
     int h = g_nWindowHeight;
 
     if (g_bFullscreen)
     {
+        // 全屏：用 SDL_WINDOW_FULLSCREEN_DESKTOP，分辨率跟桌面一致
         SDL_DisplayMode dm;
         if (SDL_GetDesktopDisplayMode(0, &dm) == 0)
         {
@@ -334,13 +325,17 @@ int CHammerApp::Main()
     }
     else
     {
+        // 窗口模式：用 -w / -h
         SDL_SetWindowFullscreen(pWindow, 0);
         SDL_SetWindowSize(pWindow, w, h);
         printf("[DEBUG] Windowed mode: %dx%d\n", w, h);
     }
 
+    // 不允许用户拖动窗口大小（避免 resize 问题）
     SDL_SetWindowResizable(pWindow, SDL_FALSE);
+    // ==========================================
 
+    // 首次 SetMode
     MaterialVideoMode_t mode;
     mode.m_Width = w;
     mode.m_Height = h;
@@ -350,6 +345,7 @@ int CHammerApp::Main()
     MaterialSystem_Config_t config;
     config.m_VideoMode = mode;
     config.SetFlag(MATSYS_VIDCFG_FLAGS_WINDOWED, !g_bFullscreen);
+    config.SetFlag(MATSYS_VIDCFG_FLAGS_RESIZING, false);
 
     if (!g_pMaterialSystem->SetMode((void *)pWindow, config))
     {
@@ -377,8 +373,6 @@ int CHammerApp::Main()
 
     g_CurrentModelPath = "";
     MDLHandle_t hMdl = MDLHANDLE_INVALID;
-    g_CurrentSequenceIndex = 0;
-    g_flAnimTime = 0.0f;
 
     bool bRunning = true;
     SDL_Event event;
@@ -389,6 +383,7 @@ int CHammerApp::Main()
     float flPanX = 0.0f;
     float flPanY = 0.0f;
     float flPanZ = 35.0f;
+    float flAnimCycle = 0.0f;
     uint32_t lastTicks = SDL_GetTicks();
 
     while (bRunning)
@@ -416,14 +411,14 @@ int CHammerApp::Main()
                 break;
             }
         }
-
         uint32_t currentTicks = SDL_GetTicks();
         float frameTime = (currentTicks - lastTicks) / 1000.0f;
-        if (frameTime == 0.0f) frameTime = 0.01f;
+        if (frameTime == 0.0f)
+            frameTime = 0.01f;
         lastTicks = currentTicks;
-
-        g_flAnimTime += frameTime;
-        if (g_flAnimTime > 1000.0f) g_flAnimTime = 0.0f;
+        flAnimCycle += frameTime * 0.4f;
+        if (flAnimCycle > 1.0f)
+            flAnimCycle -= 1.0f;
 
         if (!io.WantCaptureMouse)
         {
@@ -457,10 +452,14 @@ int CHammerApp::Main()
         IMatRenderContext *pRenderContext = g_pMaterialSystem->GetRenderContext();
         if (pRenderContext)
         {
+            int drawableW = 0, drawableH = 0;
+            SDL_GL_GetDrawableSize(pWindow, &drawableW, &drawableH);
+            if (drawableW <= 0) drawableW = w;
+            if (drawableH <= 0) drawableH = h;
+
             pRenderContext->ClearColor3ub(45, 45, 48);
             pRenderContext->ClearBuffers(true, true, true);
-
-            pRenderContext->Viewport(0, 0, w, h);
+            pRenderContext->Viewport(0, 0, drawableW, drawableH);
             pRenderContext->DepthRange(0.0f, 1.0f);
             glEnable(GL_DEPTH_TEST);
             glDepthMask(GL_TRUE);
@@ -474,7 +473,7 @@ int CHammerApp::Main()
 
             pRenderContext->MatrixMode(MATERIAL_PROJECTION);
             pRenderContext->LoadIdentity();
-            double aspect = (h == 0) ? 1.0 : (double)w / (double)h;
+            double aspect = (drawableH == 0) ? 1.0 : (double)drawableW / (double)drawableH;
             pRenderContext->PerspectiveX(45.0, aspect, 1.0, 2000.0);
 
             pRenderContext->MatrixMode(MATERIAL_VIEW);
@@ -504,10 +503,9 @@ int CHammerApp::Main()
                          0.0f, 0.0f, 0.0f, 1.0f);
             pRenderContext->LoadMatrix(matView);
 
-            studiohdr_t *pStudioHdr = nullptr;
             if (hMdl != MDLHANDLE_INVALID && !g_CurrentModelPath.empty())
             {
-                pStudioHdr = g_pMDLCache->GetStudioHdr(hMdl);
+                studiohdr_t *pStudioHdr = g_pMDLCache->GetStudioHdr(hMdl);
                 studiohwdata_t *pHardwareData = g_pMDLCache->GetHardwareData(hMdl);
                 if (pStudioHdr && pHardwareData)
                 {
@@ -537,41 +535,24 @@ int CHammerApp::Main()
                     if (pBoneArray != nullptr)
                     {
                         int numBonesToProcess = (pStudioHdr->numbones < MAXSTUDIOBONES) ? pStudioHdr->numbones : MAXSTUDIOBONES;
-
-                        float flTimeFactor = g_flAnimTime * M_PI * 2.0f * 0.4f;
-                        float flPoseWeight = (float)(g_CurrentSequenceIndex % 4 + 1) * 0.05f;
-
                         for (int i = 0; i < numBonesToProcess; i++)
                         {
                             Vector bonePos = pBoneArray[i].pos;
                             Quaternion boneQuat = pBoneArray[i].quat;
-
-                            if (pBoneArray[i].parent != -1)
+                            if (pBoneArray[i].parent != -1 &&
+                                (strstr(pBoneArray[i].pszName(), "Spine2") || strstr(pBoneArray[i].pszName(), "Spine4")))
                             {
-                                if (strstr(pBoneArray[i].pszName(), "Spine") ||
-                                    strstr(pBoneArray[i].pszName(), "Arm") ||
-                                    strstr(pBoneArray[i].pszName(), "Hand"))
-                                {
-                                    boneQuat.x += std::sin(flTimeFactor) * flPoseWeight;
-                                    boneQuat.y += std::cos(flTimeFactor) * (flPoseWeight * 0.3f);
-                                }
-                                else if (strstr(pBoneArray[i].pszName(), "Head") ||
-                                         strstr(pBoneArray[i].pszName(), "Neck"))
-                                {
-                                    boneQuat.z += std::sin(flTimeFactor) * (flPoseWeight * 0.5f);
-                                }
+                                boneQuat.x += std::sin(flAnimCycle * M_PI * 2.0f) * 0.015f;
                             }
-
                             QuaternionMatrix(boneQuat, bonePos, poseBones[i]);
                             int parentIdx = pBoneArray[i].parent;
-                            if (parentIdx >= 0 && parentIdx < i)
+                            if (parentIdx >= 0 && parentIdx < numBonesToProcess)
                             {
                                 matrix3x4_t temporaryTransform;
                                 MatrixCopy(poseBones[i], temporaryTransform);
                                 ConcatTransforms(poseBones[parentIdx], temporaryTransform, poseBones[i]);
                             }
                         }
-
                         g_pStudioRender->LockBoneMatrices(numBonesToProcess);
                         g_pStudioRender->UnlockBoneMatrices();
                     }
@@ -590,7 +571,7 @@ int CHammerApp::Main()
 
             // --- IMGUI SELECTOR SIDEBAR PANEL ---
             ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_Appearing);
-            ImGui::SetNextWindowSize(ImVec2(340, (float)h - 20.0f));
+            ImGui::SetNextWindowSize(ImVec2(340, h - 20), ImGuiCond_Appearing);
             ImGui::Begin("HLMV Model Browser");
             ImGui::Text("Active Game Folder: %s", g_GameFolder.c_str());
             ImGui::Text("Total Assets Cached: %zu", g_ModelList.size());
@@ -600,57 +581,7 @@ int CHammerApp::Main()
                 ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "[None Selected - Select Below]");
             else
                 ImGui::TextColored(ImVec4(0.3f, 0.8f, 0.3f, 1.0f), "%s", g_CurrentModelPath.c_str());
-
-            // ★ Reset Camera 按钮
-            if (ImGui::Button("Reset Camera", ImVec2(-1, 0)))
-            {
-                flCameraPitch = 0.0f;
-                flCameraYaw   = 90.0f;
-                flZoomScale   = 1.8f;
-                flPanX = 0.0f;
-                flPanY = 0.0f;
-                flPanZ = 35.0f;
-                Msg("[HLMV] Camera reset to default\n");
-            }
             ImGui::Separator();
-
-            if (pStudioHdr != nullptr && pStudioHdr->numlocalseq > 0)
-            {
-                ImGui::TextColored(ImVec4(0.4f, 0.7f, 1.0f, 1.0f),
-                                   "Animation Sequences (%d):", pStudioHdr->numlocalseq);
-
-                std::string comboLabel = "seq_" + std::to_string(g_CurrentSequenceIndex);
-                if (g_CurrentSequenceIndex >= 0 && g_CurrentSequenceIndex < pStudioHdr->numlocalseq)
-                {
-                    mstudioseqdesc_t *pCurrentSeqDesc = pStudioHdr->pLocalSeqdesc(g_CurrentSequenceIndex);
-                    if (pCurrentSeqDesc && pCurrentSeqDesc->pszLabel() && strlen(pCurrentSeqDesc->pszLabel()) > 0)
-                        comboLabel = pCurrentSeqDesc->pszLabel();
-                }
-
-                if (ImGui::BeginCombo("##AnimSeqCombo", comboLabel.c_str()))
-                {
-                    for (int seqIdx = 0; seqIdx < pStudioHdr->numlocalseq; seqIdx++)
-                    {
-                        mstudioseqdesc_t *pSeqDesc = pStudioHdr->pLocalSeqdesc(seqIdx);
-                        std::string cleanName = "seq_" + std::to_string(seqIdx);
-                        if (pSeqDesc && pSeqDesc->pszLabel() && strlen(pSeqDesc->pszLabel()) > 0)
-                            cleanName = pSeqDesc->pszLabel();
-
-                        bool bIsSelected = (g_CurrentSequenceIndex == seqIdx);
-                        if (ImGui::Selectable(cleanName.c_str(), bIsSelected))
-                        {
-                            g_CurrentSequenceIndex = seqIdx;
-                            g_flAnimTime = 0.0f;
-                            Msg("[HLMV] Switched to sequence: %s\n", cleanName.c_str());
-                        }
-                        if (bIsSelected)
-                            ImGui::SetItemDefaultFocus();
-                    }
-                    ImGui::EndCombo();
-                }
-                ImGui::Separator();
-            }
-
             static char szSearchFilter[256] = "";
             ImGui::InputText("Filter Search", szSearchFilter, IM_ARRAYSIZE(szSearchFilter));
             ImGui::Separator();
@@ -665,8 +596,6 @@ int CHammerApp::Main()
                     {
                         g_CurrentModelPath = g_ModelList[i];
                         hMdl = g_pMDLCache->FindMDL(g_CurrentModelPath.c_str());
-                        g_CurrentSequenceIndex = 0;
-                        g_flAnimTime = 0.0f;
                         Msg("[HLMV] Swapped active model target to: %s\n", g_CurrentModelPath.c_str());
                     }
                     if (bIsSelected)
@@ -677,6 +606,7 @@ int CHammerApp::Main()
             ImGui::End();
             ImGui::Render();
 
+            // --- COMPATIBILITY VERTEX FLIPPER LOOP ---
             ImDrawData *draw_data = ImGui::GetDrawData();
             if (draw_data)
             {

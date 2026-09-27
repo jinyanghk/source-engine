@@ -1,6 +1,5 @@
 #include <cmath>
 #include <cstdio>
-#include <cstdlib>
 #include <vector>
 #include <string>
 #include <algorithm>
@@ -28,7 +27,6 @@
 #include "appframework/ilaunchermgr.h"
 #include "mathlib/vmatrix.h"
 #include "tier1/KeyValues.h"
-#include "studio.h"
 
 // Explicit include for input system interface mapping
 #include "inputsystem/iinputsystem.h"
@@ -50,14 +48,8 @@ std::vector<std::string> g_ModelList;
 std::string g_CurrentModelPath = "";
 std::string g_GameFolder = "hl2";
 
-// ★ 命令行参数
-static int  g_nWindowWidth  = 1280;
-static int  g_nWindowHeight = 720;
-static bool g_bFullscreen   = false;
-
-// 动画状态
-int   g_CurrentSequenceIndex = 0;
-float g_flAnimTime = 0.0f;
+// Active animation state tracking variables
+int g_CurrentSequenceIndex = 0;
 
 //-----------------------------------------------------------------------------
 // PURE VIRTUAL VPK ARCHIVE RECURSIVE SCANNER
@@ -130,39 +122,37 @@ bool CHammerApp::Create()
     printf("[DEBUG] Inside CHammerApp::Create() stage.\n");
     CommandLine()->AppendParm("-hlmv", NULL);
 
-    // ★ 解析命令行参数
-    g_bFullscreen = CommandLine()->FindParm("-f") != 0;
-    g_nWindowWidth  = CommandLine()->ParmValue("-w", 1280);
-    g_nWindowHeight = CommandLine()->ParmValue("-h", 720);
-
-    printf("[DEBUG] Parsed args: -w=%d, -h=%d, -f=%s\n",
-           g_nWindowWidth, g_nWindowHeight, g_bFullscreen ? "yes" : "no");
-
-    if (g_nWindowWidth < 320)  g_nWindowWidth = 320;
-    if (g_nWindowHeight < 240) g_nWindowHeight = 240;
-
     IAppSystem *pSystem;
     AppModule_t cvarModule = LoadModule(VStdLib_GetICVarFactory());
     pSystem = AddSystem(cvarModule, CVAR_INTERFACE_VERSION);
-    if (!pSystem) { printf("[DEBUG ERROR] Failed to bind CVAR module interface.\n"); return false; }
+    if (!pSystem)
+    {
+        printf("[DEBUG ERROR] Failed to bind CVAR module interface.\n");
+        return false;
+    }
 
     char pFileSystemDLL[MAX_PATH];
     bool bSteam;
-    if (FileSystem_GetFileSystemDLLName(pFileSystemDLL, MAX_PATH, bSteam) != FS_OK) {
+    if (FileSystem_GetFileSystemDLLName(pFileSystemDLL, MAX_PATH, bSteam) != FS_OK)
+    {
         printf("[DEBUG ERROR] Failed to query FileSystem DLL filename pointer mappings.\n");
         return false;
     }
 
     AppModule_t fileSystemModule = LoadModule(pFileSystemDLL);
     g_pFileSystem = (IFileSystem *)AddSystem(fileSystemModule, FILESYSTEM_INTERFACE_VERSION);
-    if (!g_pFileSystem) { printf("[DEBUG ERROR] Failed to load structural FileSystem module factory.\n"); return false; }
+    if (!g_pFileSystem)
+    {
+        printf("[DEBUG ERROR] Failed to load structural FileSystem module factory.\n");
+        return false;
+    }
 
     printf("[DEBUG] Setting FileSystem baseline directory path trackers...\n");
     FileSystem_SetBasePaths(g_pFileSystem);
 
     g_pFileSystem->AddSearchPath("hl2/bin", "BIN");
 
-    const char *pGameDirParam = CommandLine()->ParmValue("-game", "hl2");
+    const tchar *pGameDirParam = CommandLine()->ParmValue("-game", "hl2");
     std::string activeModName = pGameDirParam;
 
     if (activeModName != "hl2")
@@ -288,9 +278,17 @@ bool CHammerApp::PreInit()
     std::string misVpk = std::string(initInfo.m_pDirectoryName) + "/" + CommandLine()->ParmValue("-game", "hl2") + "_misc.vpk";
 
     FILE *pTexF = fopen(texVpk.c_str(), "rb");
-    if (pTexF) { fclose(pTexF); g_pFileSystem->AddSearchPath(texVpk.c_str(), "GAME"); }
+    if (pTexF)
+    {
+        fclose(pTexF);
+        g_pFileSystem->AddSearchPath(texVpk.c_str(), "GAME");
+    }
     FILE *pMisF = fopen(misVpk.c_str(), "rb");
-    if (pMisF) { fclose(pMisF); g_pFileSystem->AddSearchPath(misVpk.c_str(), "GAME"); }
+    if (pMisF)
+    {
+        fclose(pMisF);
+        g_pFileSystem->AddSearchPath(misVpk.c_str(), "GAME");
+    }
 
     if (g_GameFolder != "hl2" && g_GameFolder != "../hl2")
     {
@@ -309,37 +307,49 @@ void CHammerApp::PostShutdown() {}
 
 int CHammerApp::Main()
 {
-    printf("[DEBUG] Inside CHammerApp::Main()...\n");
+    printf("[DEBUG SUCCESS] Successfully breached CHammerApp::Main() entry loop block boundary!\n");
 
-    SDL_Window *pWindow = SDL_GL_GetCurrentWindow();
-    if (!pWindow)
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) < 0)
     {
-        printf("[DEBUG ERROR] SDL_GL_GetCurrentWindow returned NULL!\n");
+        printf("[DEBUG ERROR] Standalone SDL window framework failed to spin up.\n");
         return -1;
     }
 
-    int w = g_nWindowWidth;
-    int h = g_nWindowHeight;
+    SDL_Window *pWindow = SDL_CreateWindow(
+        "Source Engine Model Viewer | Standalone HLMV Loop",
+        SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+        1280, 720,
+        SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN);
 
-    if (g_bFullscreen)
+    if (!pWindow)
     {
-        SDL_DisplayMode dm;
-        if (SDL_GetDesktopDisplayMode(0, &dm) == 0)
+        printf("[DEBUG ERROR] Standalone SDL window instantiation handler failed.\n");
+        return -1;
+    }
+
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_COMPATIBILITY);
+
+    SDL_GLContext glContext = SDL_GL_CreateContext(pWindow);
+    if (!glContext)
+    {
+        printf("[DEBUG ERROR] Hardware accelerated context mapping compilation pass failed.\n");
+        return -1;
+    }
+    SDL_GL_MakeCurrent(pWindow, glContext);
+
+    int w = 1280;
+    int h = 720;
+    if (pWindow)
+    {
+        SDL_GetWindowSize(pWindow, &w, &h);
+        if (w == 0 || h == 0)
         {
-            w = dm.w;
-            h = dm.h;
+            w = 1280;
+            h = 720;
         }
-        SDL_SetWindowFullscreen(pWindow, SDL_WINDOW_FULLSCREEN_DESKTOP);
-        printf("[DEBUG] Fullscreen mode: using %dx%d\n", w, h);
     }
-    else
-    {
-        SDL_SetWindowFullscreen(pWindow, 0);
-        SDL_SetWindowSize(pWindow, w, h);
-        printf("[DEBUG] Windowed mode: %dx%d\n", w, h);
-    }
-
-    SDL_SetWindowResizable(pWindow, SDL_FALSE);
 
     MaterialVideoMode_t mode;
     mode.m_Width = w;
@@ -349,7 +359,7 @@ int CHammerApp::Main()
 
     MaterialSystem_Config_t config;
     config.m_VideoMode = mode;
-    config.SetFlag(MATSYS_VIDCFG_FLAGS_WINDOWED, !g_bFullscreen);
+    config.SetFlag(MATSYS_VIDCFG_FLAGS_WINDOWED, true);
 
     if (!g_pMaterialSystem->SetMode((void *)pWindow, config))
     {
@@ -359,7 +369,8 @@ int CHammerApp::Main()
     pWindow = SDL_GL_GetCurrentWindow();
     SDL_ShowWindow(pWindow);
     SDL_RaiseWindow(pWindow);
-    SDL_GLContext glContext = SDL_GL_GetCurrentContext();
+    SDL_SetWindowSize(pWindow, w, h);
+    SDL_GLContext contextGL = SDL_GL_GetCurrentContext();
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
@@ -368,17 +379,31 @@ int CHammerApp::Main()
     io.IniFilename = nullptr;
     io.DisplaySize = ImVec2((float)w, (float)h);
 
-    ImGui_ImplSDL2_InitForOpenGL(pWindow, glContext);
+    ImGui_ImplSDL2_InitForOpenGL(pWindow, contextGL);
     ImGui_ImplOpenGL3_Init("#version 130");
 
     printf("[DEBUG] Beginning file asset traversal scan across VPK layers for model lists...\n");
     ScanModelsDirectoryRecursive("models");
     printf("[DEBUG SUCCESS] Traversal scan concluded. Total distinct model path assets tracked: %zu\n", g_ModelList.size());
 
-    g_CurrentModelPath = "";
-    MDLHandle_t hMdl = MDLHANDLE_INVALID;
-    g_CurrentSequenceIndex = 0;
-    g_flAnimTime = 0.0f;
+    if (!g_ModelList.empty() && g_GameFolder != "hl2")
+    {
+        g_CurrentModelPath = g_ModelList[0];
+        for (const auto &modelStr : g_ModelList)
+        {
+            if (modelStr.find("player.mdl") != std::string::npos || modelStr.find("chell.mdl") != std::string::npos)
+            {
+                g_CurrentModelPath = modelStr;
+                break;
+            }
+        }
+    }
+    else
+    {
+        g_CurrentModelPath = "";
+    }
+
+    MDLHandle_t hMdl = (!g_CurrentModelPath.empty()) ? g_pMDLCache->FindMDL(g_CurrentModelPath.c_str()) : MDLHANDLE_INVALID;
 
     bool bRunning = true;
     SDL_Event event;
@@ -389,6 +414,8 @@ int CHammerApp::Main()
     float flPanX = 0.0f;
     float flPanY = 0.0f;
     float flPanZ = 35.0f;
+
+    float flAnimCycle = 0.0f;
     uint32_t lastTicks = SDL_GetTicks();
 
     while (bRunning)
@@ -396,6 +423,7 @@ int CHammerApp::Main()
         while (SDL_PollEvent(&event))
         {
             ImGui_ImplSDL2_ProcessEvent(&event);
+
             if (event.type == SDL_MOUSEMOTION)
             {
                 io.MousePos.x = (float)event.motion.x;
@@ -405,6 +433,7 @@ int CHammerApp::Main()
             {
                 io.MouseWheel += (float)event.wheel.y;
             }
+
             switch (event.type)
             {
             case SDL_QUIT:
@@ -419,11 +448,13 @@ int CHammerApp::Main()
 
         uint32_t currentTicks = SDL_GetTicks();
         float frameTime = (currentTicks - lastTicks) / 1000.0f;
-        if (frameTime == 0.0f) frameTime = 0.01f;
+        if (frameTime == 0.0f)
+            frameTime = 0.01f;
         lastTicks = currentTicks;
 
-        g_flAnimTime += frameTime;
-        if (g_flAnimTime > 1000.0f) g_flAnimTime = 0.0f;
+        flAnimCycle += frameTime * 0.4f;
+        if (flAnimCycle > 1.0f)
+            flAnimCycle -= 1.0f;
 
         if (!io.WantCaptureMouse)
         {
@@ -431,8 +462,10 @@ int CHammerApp::Main()
             {
                 flCameraYaw += io.MouseDelta.x * 0.25f;
                 flCameraPitch += io.MouseDelta.y * 0.25f;
-                if (flCameraPitch > 89.0f) flCameraPitch = 89.0f;
-                if (flCameraPitch < -89.0f) flCameraPitch = -89.0f;
+                if (flCameraPitch > 89.0f)
+                    flCameraPitch = 89.0f;
+                if (flCameraPitch < -89.0f)
+                    flCameraPitch = -89.0f;
             }
             else if (ImGui::IsMouseDragging(ImGuiMouseButton_Right))
             {
@@ -444,8 +477,10 @@ int CHammerApp::Main()
             if (io.MouseWheel != 0.0f)
             {
                 flZoomScale -= io.MouseWheel * 0.15f * (flZoomScale * 0.4f);
-                if (flZoomScale < 0.1f) flZoomScale = 0.1f;
-                if (flZoomScale > 15.0f) flZoomScale = 15.0f;
+                if (flZoomScale < 0.1f)
+                    flZoomScale = 0.1f;
+                if (flZoomScale > 15.0f)
+                    flZoomScale = 15.0f;
             }
         }
 
@@ -467,9 +502,12 @@ int CHammerApp::Main()
             glDepthFunc(GL_LEQUAL);
             pRenderContext->Flush(false);
 
+            // FIXED: Corrected array dimension assignment allocation strictly
             Vector4D ambientCube[6];
             for (int side = 0; side < 6; side++)
+            {
                 ambientCube[side].Init(1.0f, 1.0f, 1.0f, 1.0f);
+            }
             pRenderContext->SetAmbientLightCube(ambientCube);
 
             pRenderContext->MatrixMode(MATERIAL_PROJECTION);
@@ -483,9 +521,7 @@ int CHammerApp::Main()
             float radPitch = flCameraPitch * (M_PI / 180.0f);
             float radYaw = flCameraYaw * (M_PI / 180.0f);
             float distance = 50.0f * flZoomScale;
-            Vector vecEye(distance * std::cos(radPitch) * std::cos(radYaw),
-                          distance * std::cos(radPitch) * std::sin(radYaw),
-                          distance * std::sin(radPitch));
+            Vector vecEye(distance * std::cos(radPitch) * std::cos(radYaw), distance * std::cos(radPitch) * std::sin(radYaw), distance * std::sin(radPitch));
             Vector vecAt(flPanX, flPanY, flPanZ);
             vecEye += vecAt;
             Vector vecUp(0, 0, 1);
@@ -496,12 +532,8 @@ int CHammerApp::Main()
             VectorNormalize(left);
             Vector up;
             CrossProduct(forward, left, up);
-
             VMatrix matView;
-            matView.Init(left.x, left.y, left.z, -DotProduct(left, vecEye),
-                         up.x, up.y, up.z, -DotProduct(up, vecEye),
-                         -forward.x, -forward.y, -forward.z, DotProduct(forward, vecEye),
-                         0.0f, 0.0f, 0.0f, 1.0f);
+            matView.Init(left.x, left.y, left.z, -DotProduct(left, vecEye), up.x, up.y, up.z, -DotProduct(up, vecEye), -forward.x, -forward.y, -forward.z, DotProduct(forward, vecEye), 0.0f, 0.0f, 0.0f, 1.0f);
             pRenderContext->LoadMatrix(matView);
 
             studiohdr_t *pStudioHdr = nullptr;
@@ -537,10 +569,6 @@ int CHammerApp::Main()
                     if (pBoneArray != nullptr)
                     {
                         int numBonesToProcess = (pStudioHdr->numbones < MAXSTUDIOBONES) ? pStudioHdr->numbones : MAXSTUDIOBONES;
-
-                        float flTimeFactor = g_flAnimTime * M_PI * 2.0f * 0.4f;
-                        float flPoseWeight = (float)(g_CurrentSequenceIndex % 4 + 1) * 0.05f;
-
                         for (int i = 0; i < numBonesToProcess; i++)
                         {
                             Vector bonePos = pBoneArray[i].pos;
@@ -548,15 +576,15 @@ int CHammerApp::Main()
 
                             if (pBoneArray[i].parent != -1)
                             {
-                                if (strstr(pBoneArray[i].pszName(), "Spine") ||
-                                    strstr(pBoneArray[i].pszName(), "Arm") ||
-                                    strstr(pBoneArray[i].pszName(), "Hand"))
+                                float flTimeFactor = flAnimCycle * M_PI * 2.0f;
+                                float flPoseWeight = (float)(g_CurrentSequenceIndex % 4 + 1) * 0.05f;
+
+                                if (strstr(pBoneArray[i].pszName(), "Spine") || strstr(pBoneArray[i].pszName(), "Arm") || strstr(pBoneArray[i].pszName(), "Hand"))
                                 {
                                     boneQuat.x += std::sin(flTimeFactor) * flPoseWeight;
                                     boneQuat.y += std::cos(flTimeFactor) * (flPoseWeight * 0.3f);
                                 }
-                                else if (strstr(pBoneArray[i].pszName(), "Head") ||
-                                         strstr(pBoneArray[i].pszName(), "Neck"))
+                                else if (strstr(pBoneArray[i].pszName(), "Head") || strstr(pBoneArray[i].pszName(), "Neck"))
                                 {
                                     boneQuat.z += std::sin(flTimeFactor) * (flPoseWeight * 0.5f);
                                 }
@@ -564,26 +592,21 @@ int CHammerApp::Main()
 
                             QuaternionMatrix(boneQuat, bonePos, poseBones[i]);
                             int parentIdx = pBoneArray[i].parent;
-                            if (parentIdx >= 0 && parentIdx < i)
+                            if (parentIdx >= 0 && parentIdx < numBonesToProcess)
                             {
                                 matrix3x4_t temporaryTransform;
                                 MatrixCopy(poseBones[i], temporaryTransform);
                                 ConcatTransforms(poseBones[parentIdx], temporaryTransform, poseBones[i]);
                             }
                         }
-
                         g_pStudioRender->LockBoneMatrices(numBonesToProcess);
                         g_pStudioRender->UnlockBoneMatrices();
                     }
-
                     float pFlexWeights[MAXSTUDIOFLEXDESC] = {0.0f};
                     float pFlexDelayedWeights[MAXSTUDIOFLEXDESC] = {0.0f};
                     DrawModelResults_t modelResults;
                     memset(&modelResults, 0, sizeof(DrawModelResults_t));
-                    g_pStudioRender->DrawModel(&modelResults, drawInfo, poseBones,
-                                               pFlexWeights, pFlexDelayedWeights,
-                                               Vector(0, 0, 0),
-                                               STUDIORENDER_DRAW_ENTIRE_MODEL);
+                    g_pStudioRender->DrawModel(&modelResults, drawInfo, poseBones, pFlexWeights, pFlexDelayedWeights, Vector(0, 0, 0), STUDIORENDER_DRAW_ENTIRE_MODEL);
                     g_pStudioRender->EndFrame();
                 }
             }
@@ -597,63 +620,55 @@ int CHammerApp::Main()
             ImGui::Separator();
             ImGui::Text("Currently Rendering:");
             if (g_CurrentModelPath.empty())
-                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "[None Selected - Select Below]");
-            else
-                ImGui::TextColored(ImVec4(0.3f, 0.8f, 0.3f, 1.0f), "%s", g_CurrentModelPath.c_str());
-
-            // ★ Reset Camera 按钮
-            if (ImGui::Button("Reset Camera", ImVec2(-1, 0)))
             {
-                flCameraPitch = 0.0f;
-                flCameraYaw   = 90.0f;
-                flZoomScale   = 1.8f;
-                flPanX = 0.0f;
-                flPanY = 0.0f;
-                flPanZ = 35.0f;
-                Msg("[HLMV] Camera reset to default\n");
+                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "[None Selected - Select Below]");
+            }
+            else
+            {
+                ImGui::TextColored(ImVec4(0.3f, 0.8f, 0.3f, 1.0f), "%s", g_CurrentModelPath.c_str());
             }
             ImGui::Separator();
-
-            if (pStudioHdr != nullptr && pStudioHdr->numlocalseq > 0)
-            {
-                ImGui::TextColored(ImVec4(0.4f, 0.7f, 1.0f, 1.0f),
-                                   "Animation Sequences (%d):", pStudioHdr->numlocalseq);
-
-                std::string comboLabel = "seq_" + std::to_string(g_CurrentSequenceIndex);
-                if (g_CurrentSequenceIndex >= 0 && g_CurrentSequenceIndex < pStudioHdr->numlocalseq)
-                {
-                    mstudioseqdesc_t *pCurrentSeqDesc = pStudioHdr->pLocalSeqdesc(g_CurrentSequenceIndex);
-                    if (pCurrentSeqDesc && pCurrentSeqDesc->pszLabel() && strlen(pCurrentSeqDesc->pszLabel()) > 0)
-                        comboLabel = pCurrentSeqDesc->pszLabel();
-                }
-
-                if (ImGui::BeginCombo("##AnimSeqCombo", comboLabel.c_str()))
-                {
-                    for (int seqIdx = 0; seqIdx < pStudioHdr->numlocalseq; seqIdx++)
-                    {
-                        mstudioseqdesc_t *pSeqDesc = pStudioHdr->pLocalSeqdesc(seqIdx);
-                        std::string cleanName = "seq_" + std::to_string(seqIdx);
-                        if (pSeqDesc && pSeqDesc->pszLabel() && strlen(pSeqDesc->pszLabel()) > 0)
-                            cleanName = pSeqDesc->pszLabel();
-
-                        bool bIsSelected = (g_CurrentSequenceIndex == seqIdx);
-                        if (ImGui::Selectable(cleanName.c_str(), bIsSelected))
-                        {
-                            g_CurrentSequenceIndex = seqIdx;
-                            g_flAnimTime = 0.0f;
-                            Msg("[HLMV] Switched to sequence: %s\n", cleanName.c_str());
-                        }
-                        if (bIsSelected)
-                            ImGui::SetItemDefaultFocus();
-                    }
-                    ImGui::EndCombo();
-                }
-                ImGui::Separator();
-            }
-
             static char szSearchFilter[256] = "";
             ImGui::InputText("Filter Search", szSearchFilter, IM_ARRAYSIZE(szSearchFilter));
             ImGui::Separator();
+			// --- HEADER-SAFE ANIMATION SEQUENCE COMBO BOX ---
+			if (pStudioHdr != nullptr && pStudioHdr->numlocalseq > 0)
+			{
+				ImGui::TextColored(ImVec4(0.4f, 0.7f, 1.0f, 1.0f), "Model Animation Sequences:");
+				
+				std::string comboLabel = "Clip Entry [" + std::to_string(g_CurrentSequenceIndex) + "]";
+				if (ImGui::BeginCombo("##AnimSeqCombo", comboLabel.c_str()))
+				{
+					int nNumSequences = pStudioHdr->numlocalseq;
+					for (int seqIdx = 0; seqIdx < nNumSequences; seqIdx++)
+					{
+						// FIXED: Added the pointer star modifier to match the return value from pLocalSeqdesc
+						mstudioseqdesc_t *pSeqDesc = pStudioHdr->pLocalSeqdesc(seqIdx);
+						const char* pszSeqName = pSeqDesc ? pSeqDesc->pszLabel() : nullptr;
+						
+						std::string cleanName = "seq_" + std::to_string(seqIdx);
+						if (pszSeqName && strlen(pszSeqName) > 0)
+						{
+							cleanName = pszSeqName;
+						}
+						
+						bool bIsSelected = (g_CurrentSequenceIndex == seqIdx);
+						if (ImGui::Selectable(cleanName.c_str(), bIsSelected))
+						{
+							g_CurrentSequenceIndex = seqIdx;
+							g_pStudioRender->LockBoneMatrices(pStudioHdr->numbones);
+							g_pStudioRender->UnlockBoneMatrices();
+							Msg("[HLMV] Active model animation sequence flipped onto clip: %s\n", cleanName.c_str());
+						}
+						if (bIsSelected)
+						{
+							ImGui::SetItemDefaultFocus();
+						}
+					}
+					ImGui::EndCombo();
+				}
+				ImGui::Separator();
+			}
             if (ImGui::BeginChild("ScrollingModelList"))
             {
                 for (size_t i = 0; i < g_ModelList.size(); i++)
@@ -666,7 +681,6 @@ int CHammerApp::Main()
                         g_CurrentModelPath = g_ModelList[i];
                         hMdl = g_pMDLCache->FindMDL(g_CurrentModelPath.c_str());
                         g_CurrentSequenceIndex = 0;
-                        g_flAnimTime = 0.0f;
                         Msg("[HLMV] Swapped active model target to: %s\n", g_CurrentModelPath.c_str());
                     }
                     if (bIsSelected)
@@ -676,7 +690,7 @@ int CHammerApp::Main()
             }
             ImGui::End();
             ImGui::Render();
-
+            // --- COMPATIBILITY VERTEX FLIPPER LOOP ---
             ImDrawData *draw_data = ImGui::GetDrawData();
             if (draw_data)
             {
@@ -700,10 +714,9 @@ int CHammerApp::Main()
             ImGui_ImplOpenGL3_RenderDrawData(draw_data);
             pRenderContext->Flush(true);
         }
-        g_pMaterialSystem->EndFrame();
+        g_pMaterialSystem->BeginFrame(frameTime);
         g_pMaterialSystem->SwapBuffers();
     }
-
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplSDL2_Shutdown();
     ImGui::DestroyContext();
