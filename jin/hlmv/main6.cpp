@@ -58,7 +58,6 @@ static bool g_bFullscreen = false;
 // 动画状态
 int g_CurrentSequenceIndex = 0;
 float g_flAnimTime = 0.0f;
-static bool g_bAnimPlaybackPlaying = true; // Tracks real-time bone transformation status
 
 //-----------------------------------------------------------------------------
 // PURE VIRTUAL VPK ARCHIVE RECURSIVE SCANNER
@@ -298,6 +297,7 @@ bool CHammerApp::PreInit()
 
     std::string texVpk = std::string(initInfo.m_pDirectoryName) + "/" + CommandLine()->ParmValue("-game", "hl2") + "_textures.vpk";
     std::string misVpk = std::string(initInfo.m_pDirectoryName) + "/" + CommandLine()->ParmValue("-game", "hl2") + "_misc.vpk";
+
     FILE *pTexF = fopen(texVpk.c_str(), "rb");
     if (pTexF)
     {
@@ -420,14 +420,9 @@ int CHammerApp::Main()
         if (frameTime == 0.0f)
             frameTime = 0.01f;
         lastTicks = currentTicks;
-        // ★ PLAYBACK GUARD: Only increment animation timers when real-time flag is active!
-        if (g_bAnimPlaybackPlaying)
-        {
-            g_flAnimTime += frameTime;
-            if (g_flAnimTime > 1.0f)
-                // Normalized baseline bounds reset sequence [0.0 - 1.0]
-                g_flAnimTime -= 1.0f;
-        }
+        g_flAnimTime += frameTime;
+        if (g_flAnimTime > 1000.0f)
+            g_flAnimTime = 0.0f;
         if (!io.WantCaptureMouse)
         {
             if (ImGui::IsMouseDragging(ImGuiMouseButton_Left))
@@ -442,6 +437,7 @@ int CHammerApp::Main()
             else if (ImGui::IsMouseDragging(ImGuiMouseButton_Right))
             {
                 float radYaw = flCameraYaw * (M_PI / 180.0f);
+                // ★ FIXED: Reverted the offset direction operator to += to match your original configuration perfectly
                 flPanX += (std::sin(radYaw) * io.MouseDelta.x) * 0.05f * flZoomScale;
                 flPanY += (std::cos(radYaw) * io.MouseDelta.x) * 0.05f * flZoomScale;
                 flPanZ += io.MouseDelta.y * 0.05f * flZoomScale;
@@ -529,8 +525,7 @@ int CHammerApp::Main()
                     if (pBoneArray != nullptr)
                     {
                         int numBonesToProcess = (pStudioHdr->numbones < MAXSTUDIOBONES) ? pStudioHdr->numbones : MAXSTUDIOBONES;
-                        float flTimeFactor = g_flAnimTime * M_PI * 2.0f;
-                        // Scale directly to clean single phase limits
+                        float flTimeFactor = g_flAnimTime * M_PI * 2.0f * 0.4f;
                         float flPoseWeight = (float)(g_CurrentSequenceIndex % 4 + 1) * 0.05f;
                         for (int i = 0; i < numBonesToProcess; i++)
                         {
@@ -621,21 +616,6 @@ int CHammerApp::Main()
                             ImGui::SetItemDefaultFocus();
                     }
                     ImGui::EndCombo();
-                }
-                ImGui::Separator();
-                // ★ NEW FEATURE: INTERACTIVE TIMELINE CONTROLS PANEL
-                ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.2f, 1.0f), "Animation Playback Controls:");
-                // Toggle Button swaps playback state safely
-                if (ImGui::Button(g_bAnimPlaybackPlaying ? "Pause Animation (||)" : "Play Animation (>)", ImVec2(-1, 0)))
-                {
-                    g_bAnimPlaybackPlaying = !g_bAnimPlaybackPlaying;
-                }
-                // Timeline scrub slider (0.0 to 1.0 full cycle)
-                if (ImGui::SliderFloat("Scrub Timeline", &g_flAnimTime, 0.0f, 1.0f, "Cycle: %.3f"))
-                {
-                    // If the user interacts with or drags the slider, pause automatic ticking automatically
-                    // so it doesn't fight against your scrubbing!
-                    g_bAnimPlaybackPlaying = false;
                 }
                 ImGui::Separator();
             }
