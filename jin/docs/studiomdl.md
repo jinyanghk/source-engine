@@ -1,5 +1,42 @@
 convert smd + qc file to mdl file
 
+```sh
+$ LD_LIBRARY_PATH=bin:$LD_LIBRARY_PATH ./studiomdl
+LoadLibrary: path: /home/jin/source-engine/hl2/bin/libfilesystem_stdio.so
+ERROR: Bad or missing options
+usage: studiomdl [options] <file.qc>
+options:
+[-a <normal_blend_angle>]
+[-checklengths]
+[-d] - dump glview files
+[-definebones]
+[-f] - flip all triangles
+[-fullcollide] - don't truncate really big collisionmodels
+[-game <gamedir>]
+[-h] - dump hboxes
+[-i] - ignore warnings
+[-minlod <lod>] - truncate to highest detail <lod>
+[-n] - tag bad normals
+[-perf] report perf info upon compiling model
+[-printbones]
+[-printgraph]
+[-quiet] - operate silently
+[-r] - tag reversed
+[-t <texture>]
+[-x360] - generate xbox360 output
+[-nox360] - disable xbox360 output(default)
+[-nowarnings] - disable warnings
+[-dumpmaterials] - dump out material names
+[-mdlreport] model.mdl - report perf info
+[-mdlreportspreadsheet] - report perf info as a comma-delimited spreadsheet
+[-striplods] - use only lod0
+[-overridedefinebones] - equivalent to specifying $unlockdefinebones in .qc file
+[-stripmodel] - process binary model files and strip extra lod data
+[-stripvhv] - strip hardware verts to match the stripped model
+[-vsi] - generate stripping information .vsi file - can be used on .mdl files too
+```
+
+
 studiomdl doesn't need SDLMgrInterface001
 
 ```sh
