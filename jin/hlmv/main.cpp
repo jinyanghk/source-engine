@@ -198,13 +198,7 @@ bool CHammerApp::Create()
             {"datacache.dll", STUDIO_DATA_CACHE_INTERFACE_VERSION},
             {"", ""}};
 
-    printf("[DEBUG] Injecting standard CreateSDLMgr system interface hook...\n");
-    void *pSdlMgr = CreateSDLMgr();
-    if (!pSdlMgr)
-    {
-        printf("[DEBUG WARNING] CreateSDLMgr() returned an empty nullptr handle.\n");
-    }
-    AddSystem((IAppSystem *)pSdlMgr, SDLMGR_INTERFACE_VERSION);
+    AddSystem((IAppSystem *)CreateSDLMgr(), SDLMGR_INTERFACE_VERSION);
 
     if (!AddSystems(appSystems))
     {
@@ -330,6 +324,8 @@ int CHammerApp::Main()
         printf("[DEBUG ERROR] SDL_GL_GetCurrentWindow returned NULL!\n");
         return -1;
     }
+    SDL_SetWindowTitle(pWindow, "HLMV");
+    SDL_SetWindowPosition(pWindow, 0, 0);
     int w = g_nWindowWidth;
     int h = g_nWindowHeight;
     if (g_bFullscreen)
@@ -529,9 +525,9 @@ int CHammerApp::Main()
                     if (pBoneArray != nullptr)
                     {
                         int numBonesToProcess = (pStudioHdr->numbones < MAXSTUDIOBONES) ? pStudioHdr->numbones : MAXSTUDIOBONES;
-                        float flTimeFactor = g_flAnimTime * M_PI * 2.0f;
+                        float flTimeFactor = g_flAnimTime * M_PI * 0.1f;
                         // Scale directly to clean single phase limits
-                        float flPoseWeight = (float)(g_CurrentSequenceIndex % 4 + 1) * 0.05f;
+                        float flPoseWeight = (float)(g_CurrentSequenceIndex % 4 + 1) * 0.02f;
                         for (int i = 0; i < numBonesToProcess; i++)
                         {
                             Vector bonePos = pBoneArray[i].pos;
@@ -568,7 +564,7 @@ int CHammerApp::Main()
                     g_pStudioRender->EndFrame();
                 }
             }
-            // --- IMGUI SELECTOR SIDEBAR PANEL ---
+            // --- IMGUI Control Panel ---
             ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_Appearing);
             ImGui::SetNextWindowSize(ImVec2(340, (float)h - 20.0f));
             ImGui::Begin("HLMV Model Browser");
@@ -660,10 +656,13 @@ int CHammerApp::Main()
                     if (bIsSelected)
                         ImGui::SetItemDefaultFocus();
                 }
-                ImGui::EndChild();
             }
-            ImGui::End();
+            ImGui::EndChild(); //ImGui::BeginChild("ScrollingModelList")
+
+            ImGui::End(); //ImGui::Begin("HLMV Model Browser");
+
             ImGui::Render();
+
             ImDrawData *draw_data = ImGui::GetDrawData();
             if (draw_data)
             {
