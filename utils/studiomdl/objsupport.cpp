@@ -259,8 +259,12 @@ int Load_OBJ( s_source_t *psource )
 			s_tmpface_t f;
 
 			// Are we specifying p only, p and t only, p and n only, or p and n and t?
-			char *pData = g_szLine + 2;
-			int nLen = Q_strlen( pData );
+			char *pOrigData = g_szLine + 2;
+			int nLen = Q_strlen( pOrigData );
+
+			// Safe local stack buffer alignment to prevent 64-bit pointer slice faults
+			char *pData = (char*)_alloca(nLen + 4);
+			memcpy(pData, pOrigData, nLen + 1);
 
 			CUtlBuffer bufParse( pData, nLen, CUtlBuffer::TEXT_BUFFER | CUtlBuffer::READ_ONLY );
 

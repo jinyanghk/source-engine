@@ -525,7 +525,7 @@ void *kalloc( int num, int size )
 	void *ptr = malloc( nMemSize );
 	memset( ptr, 0, nMemSize );
 	
-	// FIX: Use uintptr_t to safely preserve full 64-bit memory addresses
+	// FIX: Use uintptr_t to safely preserve full 64-bit memory addresses without truncation
 	ptr = (byte *)((uintptr_t)((byte *)ptr + 511) & ~(uintptr_t)511); 
 	
 	return ptr;
@@ -8390,7 +8390,6 @@ bool GetGlobalFilePath( const char *pSrc, char *pFullPath, int nMaxLen )
 	char	pFileName[1024];
 	Q_strncpy( pFileName, ExpandPath( (char*)pSrc ), sizeof(pFileName) );
 
-	// This is kinda gross. . . doing the same work in cmdlib on SafeOpenRead.
 	int nPathLength;
 	if( CmdLib_HasBasePath( pFileName, nPathLength ) )
 	{
@@ -8414,9 +8413,8 @@ bool GetGlobalFilePath( const char *pSrc, char *pFullPath, int nMaxLen )
 #else
 			struct stat buf;
 			int rt = stat( tmp, &buf );
-			if(rt)
-				return false;
-			if(S_ISDIR(buf.st_mode))
+			// FIX: continue searching other paths if this path does not exist
+			if ( rt == 0 && S_ISREG( buf.st_mode ) ) 
 			{
 				Q_strncpy( pFullPath, tmp, nMaxLen );
 				return true;
@@ -8437,9 +8435,7 @@ bool GetGlobalFilePath( const char *pSrc, char *pFullPath, int nMaxLen )
 #else
 	struct stat buf;
 	int rt = stat( pFileName, &buf );
-	if(rt)
-		return false;
-	if(S_ISDIR(buf.st_mode))
+	if ( rt == 0 && S_ISREG( buf.st_mode ) )
 	{
 		Q_strncpy( pFullPath, pFileName, nMaxLen );
 		return true;

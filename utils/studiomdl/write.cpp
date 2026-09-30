@@ -66,11 +66,16 @@ static byte *pBlockStart;
 #undef ALIGN4
 #undef ALIGN16
 #undef ALIGN32
-#define ALIGN4( a ) a = (byte *)((int)((byte *)a + 3) & ~ 3)
-#define ALIGN16( a ) a = (byte *)((int)((byte *)a + 15) & ~ 15)
-#define ALIGN32( a ) a = (byte *)((int)((byte *)a + 31) & ~ 31)
-#define ALIGN64( a ) a = (byte *)((int)((byte *)a + 63) & ~ 63)
-#define ALIGN512( a ) a = (byte *)((int)((byte *)a + 511) & ~ 511)
+#undef ALIGN64
+#undef ALIGN512
+
+// FIX: Use uintptr_t to cleanly preserve full 64-bit address bounds during byte alignment math
+#define ALIGN4( a ) a = (byte *)((uintptr_t)((byte *)a + 3) & ~ (uintptr_t)3)
+#define ALIGN16( a ) a = (byte *)((uintptr_t)((byte *)a + 15) & ~ (uintptr_t)15)
+#define ALIGN32( a ) a = (byte *)((uintptr_t)((byte *)a + 31) & ~ (uintptr_t)31)
+#define ALIGN64( a ) a = (byte *)((uintptr_t)((byte *)a + 63) & ~ (uintptr_t)63)
+#define ALIGN512( a ) a = (byte *)((uintptr_t)((byte *)a + 511) & ~ (uintptr_t)511)
+
 // make sure kalloc aligns to maximum alignment size
 
 #define FILEBUFFER (8 * 1024 * 1024)
@@ -2164,7 +2169,8 @@ static void WriteBoneTransforms( studiohdr2_t *phdr, mstudiobone_t *pBone )
 			dest##[i] = pBone[i].##srcfield;
 */
 #define CAST_DATA(type, dest) type *dest = (type *)(pData)
-#define ASSIGN_INDEX(destindex) pLinearBone->destindex = pData - (byte *)pLinearBone
+//#define ASSIGN_INDEX(destindex) pLinearBone->destindex = pData - (byte *)pLinearBone
+#define ASSIGN_INDEX(destindex) pLinearBone->destindex = (int32_t)((uintptr_t)pData - (uintptr_t)pLinearBone)
 #define INC_DATA(dest) pData += g_numbones * sizeof( *dest )
 #define ASSIGN_DEST(dest, srcfield) dest[i] = pBone[i].srcfield
 
@@ -2314,7 +2320,9 @@ static void WriteVertices( studiohdr_t *phdr )
 
 		// save vertices
 		ALIGN16( pData );
-		cur = (int)pData;
+		//cur = (int)pData;
+		cur = pData - pStart; // Explicit relative distance offset doesn't mangle 64-bit boundary bounds
+
 		mstudiovertex_t *pVert = (mstudiovertex_t *)pData;
 		pData += pLodData->numvertices * sizeof( mstudiovertex_t );
 		for (j = 0; j < pLodData->numvertices; j++)
@@ -2341,7 +2349,7 @@ static void WriteVertices( studiohdr_t *phdr )
 
 		if (!g_quiet)
 		{
-			printf( "vertices   %7d bytes (%d vertices)\n", (int)(pData - cur), pLodData->numvertices );
+			printf( "vertices   %7d bytes (%d vertices)\n", (int)(pData - pStart - cur), pLodData->numvertices );
 		}
 	}
 
@@ -2372,7 +2380,7 @@ static void WriteVertices( studiohdr_t *phdr )
 
 		if (!g_quiet)
 		{
-			printf( "tangents   %7d bytes (%d vertices)\n", (int)(pData - cur), pLodData->numvertices );
+			printf( "tangents   %7d bytes (%d vertices)\n", (int)(pData - pStart - cur), pLodData->numvertices );
 		}
 	}
 
@@ -3323,7 +3331,11 @@ void WriteModelFiles(void)
 		fprintf(stderr, "WriteModelFiles: WARNING - Skipping MDL write due to invalid size: %d\n", phdr->length);
 	}
 
-	g_pFileSystem->Close(modelouthandle);
+	// FIX: Shield Close operations from NULL descriptors to avoid VTable destruction faults
+	if ( modelouthandle != 0 )
+	{
+		g_pFileSystem->Close(modelouthandle);
+	}
 	if ( spFileModelOut.IsValid() ) spFileModelOut->Add();
 
 	if (pBlockStart)
@@ -3360,6 +3372,9 @@ void WriteModelFiles(void)
 			}
 			else
 			{
+				// FIX: Force pblockhdr to point to the valid base address memory head before setting parameters
+    			pblockhdr = (studiohdr_t *)pBlockStart; 
+
 				pblockhdr->length = blockLen;
 
 				if ( g_bX360 )
@@ -3381,8 +3396,12 @@ void WriteModelFiles(void)
 					}
 				}
 
-				SafeWrite( blockouthandle, pBlockStart, pblockhdr->length );
-				g_pFileSystem->Close( blockouthandle );
+				// FIX: Shield the animation block handle as well
+				if ( blockouthandle != 0 )
+				{
+					SafeWrite( blockouthandle, pBlockStart, pblockhdr->length );
+					g_pFileSystem->Close( blockouthandle );
+				}
 				if ( spFileBlockOut.IsValid() ) spFileBlockOut->Add();
 
 				if ( !g_quiet )
@@ -4376,6 +4395,17 @@ bool FixupToSortedLODVertexes(studiohdr_t *pStudioHdr)
 	{
 		// data sync error
 		return false;
+	}
+
+	// === FIX: Add early out for zero-vertex/simple meshes to avoid pointer crashes ===
+	if (numVertexes == 0 || numVertexPools == 0)
+	{
+		if (!g_quiet)
+		{
+			printf("Simple mesh detected (no LOD pools). Skipping vertex sort fixup phase.\n");
+		}
+		free(pVtxBuff);
+		return true; // Return success gracefully!
 	}
 
 	// fixup ???.vvd

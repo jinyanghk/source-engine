@@ -216,9 +216,9 @@ projects={
 		'utils/vrad_launcher',
 		'utils/vrad',
 		'utils/obj2mdl',
-		'jin/libimgui',
-		'jin/libgizmo',
-		'jin/hammer',
+		#'jin/libimgui',
+		#'jin/libgizmo',
+		#'jin/hammer',
 	]
 }
 
