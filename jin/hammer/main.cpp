@@ -252,6 +252,7 @@ bool CHammerApp::PreInit()
 
 void CHammerApp::PostShutdown() {}
 
+//-----------------------------------------------------------------------------
 static void BuildGLProjectionMatrix(float* m, float fovY, float aspect, float zNear, float zFar)
 {
     float f = 1.0f / tanf(fovY * 0.5f * (float)M_PI / 180.0f);
@@ -280,6 +281,7 @@ static void BuildGLViewMatrix(float* m, const Vector& eye, const Vector& target,
 
 enum GizmoMode { GIZMO_NONE = 0, GIZMO_TRANSLATE, GIZMO_ROTATE };
 
+//-----------------------------------------------------------------------------
 static void DrawBrush(const CBrush& b)
 {
     Vector mins = b.GetBBoxMins();
@@ -292,8 +294,7 @@ static void DrawBrush(const CBrush& b)
     glBindTexture(GL_TEXTURE_2D, GetBrushTexture(b.m_iTexId));
     glColor3ub(255, 255, 255);
     glBegin(GL_QUADS);
-
-    // +Z 顶
+    // +Z 顶面
     {
         float su = (x1 - x0) * TEX_SCALE, sv = (y1 - y0) * TEX_SCALE;
         glTexCoord2f(0,0); glVertex3f(x0, y0, z1);
@@ -301,7 +302,7 @@ static void DrawBrush(const CBrush& b)
         glTexCoord2f(su,sv); glVertex3f(x1, y1, z1);
         glTexCoord2f(0,sv); glVertex3f(x0, y1, z1);
     }
-    // -Z 底
+    // -Z 底面
     {
         float su = (x1 - x0) * TEX_SCALE, sv = (y1 - y0) * TEX_SCALE;
         glTexCoord2f(0,0); glVertex3f(x0, y0, z0);
@@ -828,19 +829,23 @@ int CHammerApp::Main()
     }
     g_iSelectedEntity = 0;
 
+    // 【终极组合】Brush 用反向 Z（引擎视图矩阵 Z 轴朝下）
     {
+        // 地板：世界 z=+8（屏幕上在 Alyx 脚下）
         CBrush floor;
         floor.m_vecPos = Vector(0, 0, -8);
         floor.m_vecSize = Vector(256, 256, 8);
         floor.m_iTexId = 2;
         g_brushes.push_back(floor);
 
+        // 北墙：世界 z=-128（屏幕上向上延伸）
         CBrush wallN;
         wallN.m_vecPos = Vector(0, 256, 128);
         wallN.m_vecSize = Vector(256, 8, 128);
         wallN.m_iTexId = 1;
         g_brushes.push_back(wallN);
 
+        // 西墙：同上
         CBrush wallW;
         wallW.m_vecPos = Vector(-256, 0, 128);
         wallW.m_vecSize = Vector(8, 256, 128);
@@ -852,10 +857,10 @@ int CHammerApp::Main()
     bool bRunning = true;
     SDL_Event event;
 
-    Vector m_camTarget(0, 0, 40);        // 看向原点上方一点点
-    float m_camYaw = 180.0f;              // 从南边看（场景的 -Y 方向）
-    float m_camPitch = 15.0f;             // 略微俯视
-    float m_camDistance = 450.0f;         // 拉远，能看到两面墙
+    Vector m_camTarget(0, 0, 40);
+    float m_camYaw = 90.0f;
+    float m_camPitch = -15.0f;
+    float m_camDistance = 450.0f;
 
     Vector g_vecEye(0,0,0), g_vecAt(0,0,0);
     Vector g_camForward(0,0,0), g_camLeft(0,0,0), g_camUp(0,0,0);
@@ -917,14 +922,14 @@ int CHammerApp::Main()
                     else if (event.key.keysym.sym == SDLK_1) g_iGizmoMode = GIZMO_TRANSLATE;
                     else if (event.key.keysym.sym == SDLK_2) g_iGizmoMode = GIZMO_ROTATE;
                     else if (event.key.keysym.sym == SDLK_3) g_iGizmoMode = GIZMO_NONE;
-                else if (event.key.keysym.sym == SDLK_r)
-                {
-                    m_camTarget = Vector(0, 0, 40);
-                    m_camYaw = 180.0f;
-                    m_camPitch = 15.0f;
-                    m_camDistance = 450.0f;
-                    Msg("[HAMMER] Camera reset\n");
-                }
+                    else if (event.key.keysym.sym == SDLK_r)
+                    {
+                        m_camTarget = Vector(0, 0, 40);
+                        m_camYaw = 90.0f;
+                        m_camPitch = -15.0f;
+                        m_camDistance = 450.0f;
+                        Msg("[HAMMER] Camera reset\n");
+                    }
                     else if (event.key.keysym.sym == SDLK_z && !(event.key.keysym.mod & KMOD_SHIFT))
                     { m_camDistance *= 0.85f; if (m_camDistance < 20.0f) m_camDistance = 20.0f; }
                     else if (event.key.keysym.sym == SDLK_z && (event.key.keysym.mod & KMOD_SHIFT))
@@ -952,14 +957,17 @@ int CHammerApp::Main()
             Vector eye = m_camTarget + offset;
             Vector forward = m_camTarget - eye;
             VectorNormalize(forward);
+            Vector forwardH = forward; forwardH.z = 0.0f;
+            if (forwardH.LengthSqr() > 1e-6f) VectorNormalize(forwardH);
+            else forwardH = Vector(1, 0, 0);
             Vector worldUp(0, 0, 1);
-            Vector leftDir;
-            CrossProduct(forward, worldUp, leftDir);
-            VectorNormalize(leftDir);
-            if (keystate[SDL_SCANCODE_W]) m_camTarget += forward * flySpeed;
-            if (keystate[SDL_SCANCODE_S]) m_camTarget -= forward * flySpeed;
-            if (keystate[SDL_SCANCODE_A]) m_camTarget += leftDir * flySpeed;
-            if (keystate[SDL_SCANCODE_D]) m_camTarget -= leftDir * flySpeed;
+            Vector leftH;
+            CrossProduct(forwardH, worldUp, leftH);
+            VectorNormalize(leftH);
+            if (keystate[SDL_SCANCODE_W]) m_camTarget += forwardH * flySpeed;
+            if (keystate[SDL_SCANCODE_S]) m_camTarget -= forwardH * flySpeed;
+            if (keystate[SDL_SCANCODE_A]) m_camTarget += leftH * flySpeed;
+            if (keystate[SDL_SCANCODE_D]) m_camTarget -= leftH * flySpeed;
             if (keystate[SDL_SCANCODE_E]) m_camTarget.z += flySpeed;
             if (keystate[SDL_SCANCODE_Q]) m_camTarget.z -= flySpeed;
         }
@@ -1070,12 +1078,36 @@ int CHammerApp::Main()
             glDepthMask(GL_TRUE);
 
             glViewport(0, 0, w, h);
+
+            // 从引擎拿矩阵
+            VMatrix engineProj, engineView;
+            pRenderContext->MatrixMode(MATERIAL_PROJECTION);
+            pRenderContext->GetMatrix(MATERIAL_PROJECTION, &engineProj);
+            pRenderContext->MatrixMode(MATERIAL_VIEW);
+            pRenderContext->GetMatrix(MATERIAL_VIEW, &engineView);
+
             float glProj[16];
-            BuildGLProjectionMatrix(glProj, 45.0f, (float)aspect, 1.0f, 2000.0f);
+            float glView[16];
+            for (int i = 0; i < 4; i++)
+            {
+                for (int j = 0; j < 4; j++)
+                {
+                    glProj[i * 4 + j] = engineProj.m[j][i];
+                    glView[i * 4 + j] = engineView.m[j][i];
+                }
+            }
+
+            // 【关键修复】引擎 D3D 后端使用 Y 轴朝下的坐标系，
+            // 而 OpenGL 期望 Y 轴朝上。翻转 glView 的 Y 行（OpenGL 列主序的第 1 列）
+            // 来纠正这个差异，让手写的 OpenGL 绘制（Brush/Gizmo/包围盒）和
+            // 引擎渲染的模型（Alyx/player_start）视觉对齐。
+            glView[1]  = -glView[1];
+            glView[5]  = -glView[5];
+            glView[9]  = -glView[9];
+            glView[13] = -glView[13];
+
             glMatrixMode(GL_PROJECTION);
             glLoadMatrixf(glProj);
-            float glView[16];
-            BuildGLViewMatrix(glView, g_vecEye, g_vecAt, Vector(0, 0, 1));
             glMatrixMode(GL_MODELVIEW);
             glLoadMatrixf(glView);
 
@@ -1115,7 +1147,6 @@ int CHammerApp::Main()
             VectorNormalize(rayDir);
             Vector rayOrigin = g_vecEye;
 
-            // 【修复】悬停检测：加"鼠标到 Gizmo 中心的屏幕距离"过滤
             if (!g_bDraggingGizmo && g_bShowGizmo && g_iGizmoMode != GIZMO_NONE)
             {
                 g_iHoverAxis = -1;
@@ -1132,7 +1163,6 @@ int CHammerApp::Main()
                     {
                         if (g_iGizmoMode == GIZMO_TRANSLATE)
                         {
-                            // 【修复】收紧阈值到 6%
                             float threshold = axisLength * 0.06f;
                             if (threshold < 2.0f) threshold = 2.0f;
                             float bestDistSq = threshold * threshold;
@@ -1145,7 +1175,6 @@ int CHammerApp::Main()
                         }
                         else if (g_iGizmoMode == GIZMO_ROTATE)
                         {
-                            // 【修复】收紧到 8%
                             float tolerance = axisLength * 0.08f;
                             if (tolerance < 4.0f) tolerance = 4.0f;
                             float bestDelta = tolerance;
