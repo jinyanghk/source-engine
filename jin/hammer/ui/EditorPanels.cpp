@@ -1,3 +1,5 @@
+#include <cstdio>
+
 #include "ui/EditorPanels.h"
 
 #include "imgui.h"
@@ -31,44 +33,127 @@ void DrawMenuBar()
 }
 
 //-----------------------------------------------------------------------------
-void DrawEntityPanel(CEntity* entities, int entityCount, int* pSelectedIndex)
+void DrawSelectionPanel(CEntity* entities, int entityCount, int* pSelectedEntity,
+                        const CBrush* brushes, int brushCount, int* pSelectedBrush,
+                        BrushPanelResult& outResult)
 {
-    if (!ImGui::Begin("Entities"))
+    outResult = BrushPanelResult();
+
+    if (!ImGui::Begin("Selection"))
     {
         ImGui::End();
         return;
     }
 
-    ImGui::Text("Entities:");
-    for (int i = 0; i < entityCount; i++)
+    if (ImGui::BeginTabBar("SelectionTabs"))
     {
-        bool bSel = (i == *pSelectedIndex);
-        if (ImGui::Selectable(entities[i].m_szName, bSel))
-            *pSelectedIndex = i;
-    }
-
-    ImGui::Separator();
-
-    if (*pSelectedIndex >= 0 && *pSelectedIndex < entityCount)
-    {
-        CEntity& sel = entities[*pSelectedIndex];
-        ImGui::Text("Selected: %s", sel.m_szName);
-        ImGui::Separator();
-        ImGui::SliderFloat("Pos X", &sel.m_vecPos.x, -256.0f, 256.0f, "%.2f");
-        ImGui::SliderFloat("Pos Y", &sel.m_vecPos.y, -256.0f, 256.0f, "%.2f");
-        ImGui::SliderFloat("Pos Z", &sel.m_vecPos.z, -50.0f, 200.0f, "%.2f");
-        ImGui::Separator();
-
-        if (sel.m_iType == ENTITY_PLAYER_START)
+        if (ImGui::BeginTabItem("Entities"))
         {
-            ImGui::SliderFloat("Yaw", &sel.m_angRot.y, -180.0f, 180.0f, "%.1f");
+            ImGui::Text("Entities:");
+            for (int i = 0; i < entityCount; i++)
+            {
+                bool bSel = (i == *pSelectedEntity);
+                if (ImGui::Selectable(entities[i].m_szName, bSel))
+                    *pSelectedEntity = i;
+            }
+            ImGui::Separator();
+            if (*pSelectedEntity >= 0 && *pSelectedEntity < entityCount)
+            {
+                CEntity& sel = entities[*pSelectedEntity];
+                ImGui::Text("Selected: %s", sel.m_szName);
+                ImGui::Separator();
+                ImGui::SliderFloat("Pos X", &sel.m_vecPos.x, -512.0f, 512.0f, "%.2f");
+                ImGui::SliderFloat("Pos Y", &sel.m_vecPos.y, -512.0f, 512.0f, "%.2f");
+                ImGui::SliderFloat("Pos Z", &sel.m_vecPos.z, -128.0f, 256.0f, "%.2f");
+                ImGui::Separator();
+                if (sel.m_iType == ENTITY_PLAYER_START)
+                {
+                    ImGui::SliderFloat("Yaw", &sel.m_angRot.y, -180.0f, 180.0f, "%.1f");
+                }
+                else
+                {
+                    ImGui::SliderFloat("Pitch", &sel.m_angRot.x, -180.0f, 180.0f, "%.1f");
+                    ImGui::SliderFloat("Yaw",   &sel.m_angRot.y, -180.0f, 180.0f, "%.1f");
+                    ImGui::SliderFloat("Roll",  &sel.m_angRot.z, -180.0f, 180.0f, "%.1f");
+                }
+            }
+            ImGui::EndTabItem();
         }
-        else
+
+        if (ImGui::BeginTabItem("Brushes"))
         {
-            ImGui::SliderFloat("Pitch", &sel.m_angRot.x, -180.0f, 180.0f, "%.1f");
-            ImGui::SliderFloat("Yaw",   &sel.m_angRot.y, -180.0f, 180.0f, "%.1f");
-            ImGui::SliderFloat("Roll",  &sel.m_angRot.z, -180.0f, 180.0f, "%.1f");
+            ImGui::Text("Brushes (%d):", brushCount);
+
+            // 工具栏：新建 / 复制 / 删除
+            if (ImGui::Button("+ New"))
+            {
+                outResult.bRequestNew = true;
+            }
+            ImGui::SameLine();
+            bool bHasSelection = (*pSelectedBrush >= 0 && *pSelectedBrush < brushCount);
+            if (!bHasSelection) ImGui::BeginDisabled();
+            if (ImGui::Button("Duplicate"))
+            {
+                outResult.bRequestDuplicate = true;
+                outResult.iTargetIndex = *pSelectedBrush;
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Delete"))
+            {
+                outResult.bRequestDelete = true;
+                outResult.iTargetIndex = *pSelectedBrush;
+            }
+            if (!bHasSelection) ImGui::EndDisabled();
+
+            ImGui::Separator();
+
+            // 列表
+            for (int i = 0; i < brushCount; i++)
+            {
+                char label[64];
+                snprintf(label, sizeof(label), "brush #%d", i);
+                bool bSel = (i == *pSelectedBrush);
+                if (ImGui::Selectable(label, bSel))
+                    *pSelectedBrush = i;
+            }
+
+            ImGui::Separator();
+
+            if (*pSelectedBrush >= 0 && *pSelectedBrush < brushCount)
+            {
+                // 注意：brushes 是 const，不能直接改。属性编辑通过 const_cast 或
+                // 让 main.cpp 也拿指针。这里为了简单，直接用 const_cast —— 因为
+                // 面板本身的职责就是"编辑"，传 const 只是为了让接口明确"面板不增删"。
+                CBrush& b = const_cast<CBrush&>(brushes[*pSelectedBrush]);
+
+                ImGui::Text("Brush #%d", *pSelectedBrush);
+                ImGui::Separator();
+
+                ImGui::Text("Center");
+                ImGui::SliderFloat("CX", &b.m_vecPos.x, -512.0f, 512.0f, "%.1f");
+                ImGui::SliderFloat("CY", &b.m_vecPos.y, -512.0f, 512.0f, "%.1f");
+                ImGui::SliderFloat("CZ", &b.m_vecPos.z, -128.0f, 256.0f, "%.1f");
+
+                ImGui::Text("Half-size");
+                ImGui::SliderFloat("SX", &b.m_vecSize.x, 1.0f, 512.0f, "%.1f");
+                ImGui::SliderFloat("SY", &b.m_vecSize.y, 1.0f, 512.0f, "%.1f");
+                ImGui::SliderFloat("SZ", &b.m_vecSize.z, 1.0f, 512.0f, "%.1f");
+
+                ImGui::Text("Texture");
+                int texId = b.m_iTexId;
+                const char* texNames[] = {"Checker", "Brick", "Floor"};
+                if (ImGui::Combo("TexId", &texId, texNames, 3))
+                    b.m_iTexId = texId;
+
+                ImGui::Separator();
+                if (ImGui::Button("Deselect"))
+                    *pSelectedBrush = -1;
+            }
+
+            ImGui::EndTabItem();
         }
+
+        ImGui::EndTabBar();
     }
 
     ImGui::End();

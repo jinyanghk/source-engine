@@ -45,6 +45,8 @@
 #include "app/ImGuiLayer.h"
 #include "app/EditorLayout.h"
 #include "ui/EditorPanels.h"
+#include "render/BoxRender.h"
+#include "scene/Brush.h"
 
 IMaterialSystem *g_pMaterialSystem;
 IFileSystem *g_pFileSystem;
@@ -520,6 +522,8 @@ int CHammerApp::Main()
             glDepthMask(GL_FALSE);
             for (size_t i = 0; i < g_entities.size(); i++)
                 DrawEntityBBox(g_entities[i], (int)i == g_iSelectedEntity);
+            for (size_t i = 0; i < g_brushes.size(); i++)
+                DrawBrushBBox(g_brushes[i], (int)i == g_iSelectedBrush);                
             glDepthMask(GL_TRUE);
 
             if (g_bXRayGizmo)
@@ -738,7 +742,36 @@ int CHammerApp::Main()
 
             EditorLayout::Begin();
 
-            DrawEntityPanel(g_entities.data(), (int)g_entities.size(), &g_iSelectedEntity);
+            BrushPanelResult brushResult;
+            DrawSelectionPanel(g_entities.data(), (int)g_entities.size(), &g_iSelectedEntity,
+                            g_brushes.data(), (int)g_brushes.size(), &g_iSelectedBrush,
+                            brushResult);
+
+            if (brushResult.bRequestNew)
+            {
+                CBrush b;
+                b.m_vecPos = Vector(0, 0, 32);
+                b.m_vecSize = Vector(32, 32, 32);
+                b.m_iTexId = 0;
+                g_brushes.push_back(b);
+                g_iSelectedBrush = (int)g_brushes.size() - 1;
+            }
+            if (brushResult.bRequestDelete &&
+                brushResult.iTargetIndex >= 0 &&
+                brushResult.iTargetIndex < (int)g_brushes.size())
+            {
+                g_brushes.erase(g_brushes.begin() + brushResult.iTargetIndex);
+                g_iSelectedBrush = -1;
+            }
+            if (brushResult.bRequestDuplicate &&
+                brushResult.iTargetIndex >= 0 &&
+                brushResult.iTargetIndex < (int)g_brushes.size())
+            {
+                CBrush b = g_brushes[brushResult.iTargetIndex];
+                b.m_vecPos.x += 32.0f;
+                g_brushes.push_back(b);
+                g_iSelectedBrush = (int)g_brushes.size() - 1;
+            }
             DrawConsolePanel(m_camTarget, m_camDistance, g_bShowGizmo, g_bXRayGizmo);
 
             EditorLayout::End();

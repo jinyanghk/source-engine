@@ -16,7 +16,11 @@ bool Init(SDL_Window* window, void* glContext)
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
-    io.IniFilename = nullptr;   // 不保存布局到 .ini（现在我们手动管理）
+    io.IniFilename = nullptr;
+
+    // ★ 开启 docking 支持。没有这一句，DockSpace 直接 return 0，
+    //   后续所有 DockBuilder* 调用都会因为找不到节点而崩溃。
+    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
     if (!ImGui_ImplSDL2_InitForOpenGL(window, glContext))
         return false;

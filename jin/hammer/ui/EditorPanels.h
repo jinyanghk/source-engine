@@ -1,8 +1,23 @@
 #ifndef EDITOR_PANELS_H
 #define EDITOR_PANELS_H
 
+#include <cstdio>
+
 #include "scene/Entity.h"
+#include "scene/Brush.h"
+
 #include "mathlib/vector.h"
+
+//-----------------------------------------------------------------------------
+// DrawSelectionPanel 的输出：告诉调用者用户想做什么操作。
+//-----------------------------------------------------------------------------
+struct BrushPanelResult
+{
+    bool bRequestNew = false;
+    bool bRequestDelete = false;
+    bool bRequestDuplicate = false;
+    int  iTargetIndex = -1;
+};
 
 //-----------------------------------------------------------------------------
 // 顶部菜单栏。
@@ -10,9 +25,11 @@
 void DrawMenuBar();
 
 //-----------------------------------------------------------------------------
-// 右侧实体列表面板（列表 + 选中实体的属性编辑）。
+// 右侧主面板：把 Entities 和 Brushes 做成两个 Tab。
 //-----------------------------------------------------------------------------
-void DrawEntityPanel(CEntity* entities, int entityCount, int* pSelectedIndex);
+void DrawSelectionPanel(CEntity* entities, int entityCount, int* pSelectedEntity,
+                        const CBrush* brushes, int brushCount, int* pSelectedBrush,
+                        BrushPanelResult& outResult);
 
 //-----------------------------------------------------------------------------
 // 底部控制台面板（操作提示 + 相机信息）。
