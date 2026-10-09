@@ -34,6 +34,10 @@ static void EncodeColor(int axis, HandleType type, unsigned char outRGB[3])
 //-----------------------------------------------------------------------------
 bool Init(int width, int height)
 {
+GLfloat lineWidthRange[2] = {0, 0};
+glGetFloatv(GL_ALIASED_LINE_WIDTH_RANGE, lineWidthRange);
+printf("[PICK] line width range: %.1f - %.1f\n", lineWidthRange[0], lineWidthRange[1]);
+fflush(stdout);
     if (width <= 0 || height <= 0) return false;
     Resize(width, height);
     return s_fbo != 0;
@@ -88,39 +92,34 @@ void Resize(int width, int height)
 }
 
 //-----------------------------------------------------------------------------
+static GLint s_prevFbo = 0;
+static GLint s_prevViewport[4] = {0,0,0,0};
+
 void BeginRender(const float projMatrix[16], const float viewMatrix[16])
 {
     if (!s_fbo) return;
 
-    // Save GL state we are about to change. We assume nothing about what
-    // the engine left us with.
-    GLint prevFbo = 0;
-    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prevFbo);
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &s_prevFbo);
+    glGetIntegerv(GL_VIEWPORT, s_prevViewport);
 
     glBindFramebuffer(GL_FRAMEBUFFER, s_fbo);
     glViewport(0, 0, s_width, s_height);
 
-    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);  // 0,0,0 -> no hit
+    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    glEnable(GL_DEPTH_TEST);
-    glDepthFunc(GL_LEQUAL);
-    glDepthMask(GL_TRUE);
+    glDisable(GL_DEPTH_TEST);
     glDisable(GL_BLEND);
     glDisable(GL_TEXTURE_2D);
     glDisable(GL_LIGHTING);
     glDisable(GL_CULL_FACE);
 
-    // Set up projection / view exactly as the visible gizmo uses.
     glMatrixMode(GL_PROJECTION);
     glLoadMatrixf(projMatrix);
     glMatrixMode(GL_MODELVIEW);
     glLoadMatrixf(viewMatrix);
 
     s_bInRender = true;
-
-    // Note: we do NOT restore prevFbo here; EndRender will do that.
-    (void)prevFbo;
 }
 
 //-----------------------------------------------------------------------------
@@ -129,8 +128,9 @@ void EndRender()
     if (!s_bInRender) return;
     s_bInRender = false;
 
-    // Restore default framebuffer (0).
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)s_prevFbo);
+    glViewport(s_prevViewport[0], s_prevViewport[1],
+               s_prevViewport[2], s_prevViewport[3]);
 }
 
 //-----------------------------------------------------------------------------
@@ -201,24 +201,47 @@ void DrawPickableTranslateArrow(int axis, const Vector& center, float length)
     unsigned char rgb[3];
     EncodeColor(axis, HANDLE_TRANSLATE, rgb);
 
-    // Draw the whole axis as a thick colored line, and the arrowhead as a
-    // solid triangle. Either region will register as a pick.
-    //
-    // We deliberately make the line reasonably thick (4 px) so the user can
-    // also grab the middle of the axis, not just the arrowhead.
-    Vector tip = center + ((axis == 0) ? Vector(1,0,0)
-                       : (axis == 1) ? Vector(0,1,0)
-                                     : Vector(0,0,1)) * length;
+    Vector axisDir = (axis == 0) ? Vector(1,0,0)
+                   : (axis == 1) ? Vector(0,1,0)
+                                 : Vector(0,0,1);
 
-    glLineWidth(6.0f);
-    glBegin(GL_LINES);
-    DrawIdLine(center, tip, rgb);
+    // 直接画一个"扁平的四棱锥"（两个三角面）覆盖整个箭头区域，
+    // 从 40% 处到 tip，宽度随位置渐变（底部宽，尖端窄）。
+    // 这样不依赖 glLineWidth，覆盖整条轴的后 60%。
+    Vector base40 = center + axisDir * (length * 0.75f);
+    Vector tip    = center + axisDir * length;
+
+    Vector u, v;
+    switch (axis)
+    {
+    case 0: u = Vector(0,1,0); v = Vector(0,0,1); break;
+    case 1: u = Vector(1,0,0); v = Vector(0,0,1); break;
+    default: u = Vector(1,0,0); v = Vector(0,1,0); break;
+    }
+
+    // 底部的半宽（覆盖轴的中后段），大约 15% of length
+    float halfW = length * 0.10f;
+
+    // 底部四个角（u、v 两个方向的 ±）
+    Vector b1 = base40 + u * halfW;
+    Vector b2 = base40 - u * halfW;
+    Vector b3 = base40 + v * halfW;
+    Vector b4 = base40 - v * halfW;
+
+    glColor3ub(rgb[0], rgb[1], rgb[2]);
+    glBegin(GL_TRIANGLES);
+    // 四个三角面，形成"从底部到 tip 的锥体"
+    glVertex3f(tip.x, tip.y, tip.z); glVertex3f(b1.x, b1.y, b1.z); glVertex3f(b3.x, b3.y, b3.z);
+    glVertex3f(tip.x, tip.y, tip.z); glVertex3f(b3.x, b3.y, b3.z); glVertex3f(b2.x, b2.y, b2.z);
+    glVertex3f(tip.x, tip.y, tip.z); glVertex3f(b2.x, b2.y, b2.z); glVertex3f(b4.x, b4.y, b4.z);
+    glVertex3f(tip.x, tip.y, tip.z); glVertex3f(b4.x, b4.y, b4.z); glVertex3f(b1.x, b1.y, b1.z);
     glEnd();
-    glLineWidth(1.0f);
-
-    DrawArrowHead(axis, center, length, rgb);
 }
 
+//-----------------------------------------------------------------------------
+// 用一圈四边形（每个 segment 一个）绘制"带宽"足够的旋转环，
+// 不依赖 glLineWidth（Mesa Intel 上限只有 ~7 像素）。
+// ringWidth 是世界空间半径方向的厚度。
 //-----------------------------------------------------------------------------
 void DrawPickableRotateRing(int axis, const Vector& center, float radius, int segments)
 {
@@ -227,23 +250,40 @@ void DrawPickableRotateRing(int axis, const Vector& center, float radius, int se
     unsigned char rgb[3];
     EncodeColor(axis, HANDLE_ROTATE, rgb);
 
+    // 世界空间厚度：环内外各 8% of radius
+    float ringWidth = radius * 0.16f;
+    float rInner = radius - ringWidth * 0.5f;
+    float rOuter = radius + ringWidth * 0.5f;
+
     glColor3ub(rgb[0], rgb[1], rgb[2]);
-    glLineWidth(8.0f);
-    glBegin(GL_LINE_LOOP);
-    for (int i = 0; i < segments; i++)
+    glBegin(GL_QUAD_STRIP);
+    for (int i = 0; i <= segments; i++)
     {
         float angle = (float)i / segments * 2.0f * (float)M_PI;
-        float c = cosf(angle) * radius;
-        float s = sinf(angle) * radius;
+        float c = cosf(angle);
+        float s = sinf(angle);
+
+        Vector innerP, outerP;
         switch (axis)
         {
-        case 0: glVertex3f(center.x, center.y + c, center.z + s); break;
-        case 1: glVertex3f(center.x + c, center.y, center.z + s); break;
-        case 2: glVertex3f(center.x + c, center.y + s, center.z); break;
+        case 0: // X 轴：环在 YZ 平面
+            innerP = Vector(center.x, center.y + c * rInner, center.z + s * rInner);
+            outerP = Vector(center.x, center.y + c * rOuter, center.z + s * rOuter);
+            break;
+        case 1: // Y 轴：环在 XZ 平面
+            innerP = Vector(center.x + c * rInner, center.y, center.z + s * rInner);
+            outerP = Vector(center.x + c * rOuter, center.y, center.z + s * rOuter);
+            break;
+        default: // Z 轴：环在 XY 平面
+            innerP = Vector(center.x + c * rInner, center.y + s * rInner, center.z);
+            outerP = Vector(center.x + c * rOuter, center.y + s * rOuter, center.z);
+            break;
         }
+        // 用四边形带：先内圈顶点，再外圈顶点
+        glVertex3f(innerP.x, innerP.y, innerP.z);
+        glVertex3f(outerP.x, outerP.y, outerP.z);
     }
     glEnd();
-    glLineWidth(1.0f);
 }
 
 //-----------------------------------------------------------------------------
@@ -264,6 +304,15 @@ int Pick(int mouseX, int mouseY, HandleType& outType)
     glBindFramebuffer(GL_FRAMEBUFFER, s_fbo);
     unsigned char px[4] = {0,0,0,0};
     glReadPixels(mouseX, glY, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, px);
+// 诊断：只在读到非零时打印一次（避免刷屏）
+static unsigned char s_lastRGB[4] = {0,0,0,0};
+if (px[0] != s_lastRGB[0] || px[1] != s_lastRGB[1] || px[2] != s_lastRGB[2])
+{
+    printf("[PICK] mouse=(%d,%d) glY=%d rgb=(%d,%d,%d)\n",
+           mouseX, mouseY, glY, px[0], px[1], px[2]);
+    fflush(stdout);
+    s_lastRGB[0] = px[0]; s_lastRGB[1] = px[1]; s_lastRGB[2] = px[2];
+}    
     glBindFramebuffer(GL_FRAMEBUFFER, prevFbo);
 
     if (px[0] == 0) return -1;

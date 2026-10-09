@@ -42,6 +42,9 @@
 #include "scene/EntityRender.h"
 #include "scene/EntityPick.h"
 #include "render/BoxRender.h"
+#include "app/ImGuiLayer.h"
+#include "app/EditorLayout.h"
+#include "ui/EditorPanels.h"
 
 IMaterialSystem *g_pMaterialSystem;
 IFileSystem *g_pFileSystem;
@@ -140,7 +143,6 @@ enum GizmoMode { GIZMO_NONE = 0, GIZMO_TRANSLATE, GIZMO_ROTATE };
 
 //-----------------------------------------------------------------------------
 
-
 int CHammerApp::Main()
 {
     bool bFullscreen = (CommandLine()->CheckParm("-f") != nullptr);
@@ -179,15 +181,14 @@ int CHammerApp::Main()
         Warning("[HAMMER] Material System SetMode tracking failure.\n");
     pWindow = SDL_GL_GetCurrentWindow();
     if (pWindow) { SDL_ShowWindow(pWindow); SDL_RaiseWindow(pWindow); }
+    
     SDL_GLContext glContext = SDL_GL_GetCurrentContext();
-    IMGUI_CHECKVERSION();
-    ImGui::CreateContext();
+    if (!ImGuiLayer::Init(pWindow, glContext))
+        Warning("[HAMMER] ImGuiLayer::Init failed.\n");
     ImGuiIO &io = ImGui::GetIO();
-    (void)io; io.IniFilename = nullptr;
-    ImGui_ImplSDL2_InitForOpenGL(pWindow, glContext);
-    ImGui_ImplOpenGL3_Init("#version 130");
 
     CreatePlaceholderTextures();
+    GizmoPick::Init(w, h);
 
     {
         CEntity alyx;
@@ -261,6 +262,13 @@ int CHammerApp::Main()
     int g_iMouseX = 0, g_iMouseY = 0;
     int g_iLastMouseX = 0, g_iLastMouseY = 0;
 
+    // 保存当前帧的投影 / 视图矩阵，供 pick target 使用。
+    // 在每帧渲染循环里更新。
+    float g_savedProj[16];
+    float g_savedView[16];
+    memset(g_savedProj, 0, sizeof(g_savedProj));
+    memset(g_savedView, 0, sizeof(g_savedView));
+
     const Uint8* keystate = SDL_GetKeyboardState(NULL);
     uint32_t lastTicks = SDL_GetTicks();
 
@@ -268,13 +276,17 @@ int CHammerApp::Main()
     {
         while (SDL_PollEvent(&event))
         {
-            ImGui_ImplSDL2_ProcessEvent(&event);
+            ImGuiLayer::ProcessEvent(event);
             switch (event.type)
             {
             case SDL_QUIT: bRunning = false; break;
             case SDL_WINDOWEVENT:
                 if (event.window.event == SDL_WINDOWEVENT_RESIZED)
-                { w = event.window.data1; h = event.window.data2; }
+                {
+                    w = event.window.data1;
+                    h = event.window.data2;
+                    GizmoPick::Resize(w, h);
+                }
                 break;
             case SDL_MOUSEMOTION:
                 g_iMouseX = event.motion.x; g_iMouseY = event.motion.y;
@@ -391,9 +403,7 @@ int CHammerApp::Main()
             UpdateEntityBBox(g_entities[i]);
 
         g_pMaterialSystem->BeginFrame(frameTime);
-        ImGui_ImplOpenGL3_NewFrame();
-        ImGui_ImplSDL2_NewFrame();
-        ImGui::NewFrame();
+        ImGuiLayer::BeginFrame();
 
         pRenderContext = g_pMaterialSystem->GetRenderContext();
         if (pRenderContext)
@@ -484,6 +494,10 @@ int CHammerApp::Main()
             glView[9]  = -glView[9];
             glView[13] = -glView[13];
 
+            // 保存矩阵供 pick target 使用
+            memcpy(g_savedProj, glProj, sizeof(glProj));
+            memcpy(g_savedView, glView, sizeof(glView));
+
             glMatrixMode(GL_PROJECTION);
             glLoadMatrixf(glProj);
             glMatrixMode(GL_MODELVIEW);
@@ -506,6 +520,7 @@ int CHammerApp::Main()
             glDepthMask(GL_FALSE);
             for (size_t i = 0; i < g_entities.size(); i++)
                 DrawEntityBBox(g_entities[i], (int)i == g_iSelectedEntity);
+            glDepthMask(GL_TRUE);
 
             if (g_bXRayGizmo)
                 glDisable(GL_DEPTH_TEST);
@@ -525,6 +540,32 @@ int CHammerApp::Main()
             VectorNormalize(rayDir);
             Vector rayOrigin = g_vecEye;
 
+            // ===== 渲染 pick target（离屏 ID 缓冲）=====
+            // 必须在可见 gizmo 绘制之后，且必须用和可见 gizmo 相同的矩阵。
+            // 无论 hover 与否，每帧都渲染一次，保证 Pick() 读到的总是最新数据。
+            if (g_bShowGizmo && g_iGizmoMode != GIZMO_NONE)
+            {
+                GizmoPick::BeginRender(g_savedProj, g_savedView);
+                if (g_iGizmoMode == GIZMO_TRANSLATE)
+                {
+                    for (int a = 0; a < 3; a++)
+                        GizmoPick::DrawPickableTranslateArrow(a, gizmoCenter, axisLength);
+                }
+                else if (g_iGizmoMode == GIZMO_ROTATE)
+                {
+                    for (int a = 0; a < 3; a++)
+                        GizmoPick::DrawPickableRotateRing(a, gizmoCenter, axisLength, 64);
+                }
+                GizmoPick::EndRender();
+
+                // 恢复矩阵（BeginRender 改了 GL 矩阵状态）
+                glMatrixMode(GL_PROJECTION);
+                glLoadMatrixf(g_savedProj);
+                glMatrixMode(GL_MODELVIEW);
+                glLoadMatrixf(g_savedView);
+            }
+
+            // ===== Hover 检测 =====
             if (!g_bDraggingGizmo && g_bShowGizmo && g_iGizmoMode != GIZMO_NONE)
             {
                 g_iHoverAxis = -1;
@@ -536,20 +577,17 @@ int CHammerApp::Main()
                     float mdx = g_iMouseX - gizmoScreenX;
                     float mdy = g_iMouseY - gizmoScreenY;
                     float mouseToGizmoSq = mdx * mdx + mdy * mdy;
-                    const float MAX_SCREEN_DIST = 300.0f;
+                    const float MAX_SCREEN_DIST = 3000.0f;
                     if (mouseToGizmoSq < MAX_SCREEN_DIST * MAX_SCREEN_DIST)
                     {
                         if (g_iGizmoMode == GIZMO_TRANSLATE)
                         {
-                            const float PIXEL_THRESHOLD  = 12.0f;
-                            const float ORIGIN_SKIP      = 0.40f;
-                            const float EXCLUSIVE_MARGIN = 4.0f;
-                            g_iHoverAxis = PickTranslateAxis(
-                                gizmoCenter, axisDirs, axisLength,
-                                g_vecEye, g_camLeft, g_camUp, g_camForward,
-                                g_camTanHalfFov, g_camAspect, w, h,
-                                g_iMouseX, g_iMouseY,
-                                PIXEL_THRESHOLD, ORIGIN_SKIP, EXCLUSIVE_MARGIN);                             
+                            GizmoPick::HandleType htype;
+                            int hitAxis = GizmoPick::Pick(g_iMouseX, g_iMouseY, htype);
+                            if (hitAxis >= 0 && htype == GizmoPick::HANDLE_TRANSLATE)
+                                g_iHoverAxis = hitAxis;
+                            else
+                                g_iHoverAxis = -1;
                         }
                         else if (g_iGizmoMode == GIZMO_ROTATE)
                         {
@@ -587,6 +625,7 @@ int CHammerApp::Main()
                 g_iHoverAxis = -1;
             }
 
+            // ===== 点击起始拖动 =====
             if (g_bLeftMouseDown && !g_bDraggingGizmo && g_iActiveAxis < 0 && !io.WantCaptureMouse)
             {
                 if (g_iHoverAxis >= 0 && g_bShowGizmo && g_iGizmoMode != GIZMO_NONE)
@@ -622,6 +661,7 @@ int CHammerApp::Main()
                 }
                 else
                 {
+                    // 点空白 -> 拾取 entity
                     for (int i = (int)g_entities.size() - 1; i >= 0; i--)
                     {
                         if (IsMouseOverEntityBBox(g_entities[i], g_vecEye, g_camLeft, g_camUp, g_camForward, g_camTanHalfFov, g_camAspect, w, h, g_iMouseX, g_iMouseY))
@@ -633,6 +673,7 @@ int CHammerApp::Main()
                 }
             }
 
+            // ===== 拖动中 =====
             if (g_bDraggingGizmo && g_bLeftMouseDown && g_iActiveAxis >= 0)
             {
                 if (g_iGizmoMode == GIZMO_TRANSLATE)
@@ -672,6 +713,7 @@ int CHammerApp::Main()
                 }
             }
 
+            // ===== 绘制可见 gizmo =====
             if (g_bShowGizmo && g_iGizmoMode != GIZMO_NONE)
             {
                 int highlightAxis = (g_iActiveAxis >= 0) ? g_iActiveAxis : g_iHoverAxis;
@@ -691,78 +733,23 @@ int CHammerApp::Main()
                 }
             }
 
-            ImGui::Begin("Hammer Operator Console");
-            ImGui::Text("Camera: LMB empty = orbit | RMB/MMB = pan | Wheel = zoom");
-            ImGui::Text("        W/A/S/D = fly | Q/E = down/up | Z / Shift+Z = zoom");
-            ImGui::Text("        [R] = Reset Camera");
-            ImGui::Text("Gizmo:  1 = Translate | 2 = Rotate | 3 = None");
-            ImGui::Text("Current: %s",
-                g_iGizmoMode == GIZMO_NONE ? "None" :
-                g_iGizmoMode == GIZMO_TRANSLATE ? "Translate" : "Rotate");
-            ImGui::Separator();
-            ImGui::Text("Entities:");
-            for (size_t i = 0; i < g_entities.size(); i++)
-            {
-                bool bSel = (int)i == g_iSelectedEntity;
-                if (ImGui::Selectable(g_entities[i].m_szName, bSel))
-                    g_iSelectedEntity = (int)i;
-            }
-            ImGui::Separator();
-            if (g_iSelectedEntity >= 0 && g_iSelectedEntity < (int)g_entities.size())
-            {
-                CEntity& sel2 = g_entities[g_iSelectedEntity];
-                ImGui::Text("Selected: %s", sel2.m_szName);
-                ImGui::Separator();
-                ImGui::SliderFloat("Pos X", &sel2.m_vecPos.x, -256.0f, 256.0f, "%.2f");
-                ImGui::SliderFloat("Pos Y", &sel2.m_vecPos.y, -256.0f, 256.0f, "%.2f");
-                ImGui::SliderFloat("Pos Z", &sel2.m_vecPos.z, -50.0f, 200.0f, "%.2f");
-                ImGui::Separator();
-                if (sel2.m_iType == ENTITY_PLAYER_START)
-                    ImGui::SliderFloat("Yaw", &sel2.m_angRot.y, -180.0f, 180.0f, "%.1f");
-                else
-                {
-                    ImGui::SliderFloat("Pitch", &sel2.m_angRot.x, -180.0f, 180.0f, "%.1f");
-                    ImGui::SliderFloat("Yaw",   &sel2.m_angRot.y, -180.0f, 180.0f, "%.1f");
-                    ImGui::SliderFloat("Roll",  &sel2.m_angRot.z, -180.0f, 180.0f, "%.1f");
-                }
-                ImGui::Separator();
-            }
-            ImGui::Checkbox("Show Gizmo", &g_bShowGizmo);
-            ImGui::Checkbox("X-Ray Gizmo", &g_bXRayGizmo);
-            ImGui::Text("Cam Target: (%.1f, %.1f, %.1f)", m_camTarget.x, m_camTarget.y, m_camTarget.z);
-            ImGui::Text("Cam Dist: %.1f", m_camDistance);
-            ImGui::TextColored(ImVec4(1, 0.5f, 0, 1), "Press R to reset camera!");
-            ImGui::End();
-            ImGui::Render();
-            ImDrawData *draw_data = ImGui::GetDrawData();
-            if (draw_data)
-            {
-                for (int n = 0; n < draw_data->CmdListsCount; n++)
-                {
-                    ImDrawList *cmd_list = draw_data->CmdLists[n];
-                    for (int v_idx = 0; v_idx < cmd_list->VtxBuffer.Size; v_idx++)
-                    {
-                        ImDrawVert &vertex = cmd_list->VtxBuffer.Data[v_idx];
-                        vertex.pos.y = (float)h - vertex.pos.y;
-                    }
-                    for (int cmd_i = 0; cmd_i < cmd_list->CmdBuffer.Size; cmd_i++)
-                    {
-                        ImDrawCmd *pcmd = &cmd_list->CmdBuffer[cmd_i];
-                        float clip_rect_h = pcmd->ClipRect.w - pcmd->ClipRect.y;
-                        pcmd->ClipRect.y = (float)h - pcmd->ClipRect.w;
-                        pcmd->ClipRect.w = pcmd->ClipRect.y + clip_rect_h;
-                    }
-                }
-            }
-            ImGui_ImplOpenGL3_RenderDrawData(draw_data);
+            // ===== UI 面板 =====
+            DrawMenuBar();
+
+            EditorLayout::Begin();
+
+            DrawEntityPanel(g_entities.data(), (int)g_entities.size(), &g_iSelectedEntity);
+            DrawConsolePanel(m_camTarget, m_camDistance, g_bShowGizmo, g_bXRayGizmo);
+
+            EditorLayout::End();
+
+            ImGuiLayer::EndFrameAndRender(w, h);
         }
         g_pMaterialSystem->EndFrame();
         g_pMaterialSystem->SwapBuffers();
     }
 
-    ImGui_ImplOpenGL3_Shutdown();
-    ImGui_ImplSDL2_Shutdown();
-    ImGui::DestroyContext();
+    ImGuiLayer::Shutdown();
     _exit(0);
     return 0;
 }

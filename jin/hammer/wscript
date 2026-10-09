@@ -27,6 +27,9 @@ def build(bld):
 		'scene/EntityPick.cpp',
 		'render/BoxRender.cpp',
 		'gizmo/GizmoPickTarget.cpp',
+		'app/ImGuiLayer.cpp',
+		'app/EditorLayout.cpp',
+		'ui/EditorPanels.cpp',
     ]
 
 	includes = [
