@@ -18,6 +18,15 @@ def configure(conf):
 def build(bld):
 	source = [
         'main.cpp',
+		'gizmo/GizmoHit.cpp',
+		'gizmo/GizmoDraw.cpp',
+		'render/TextureManager.cpp',
+		'scene/Brush.cpp',
+		'scene/SceneGlobals.cpp',
+		'scene/EntityRender.cpp',
+		'scene/EntityPick.cpp',
+		'render/BoxRender.cpp',
+		'gizmo/GizmoPickTarget.cpp',
     ]
 
 	includes = [
