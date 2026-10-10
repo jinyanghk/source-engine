@@ -34,10 +34,6 @@ static void EncodeColor(int axis, HandleType type, unsigned char outRGB[3])
 //-----------------------------------------------------------------------------
 bool Init(int width, int height)
 {
-GLfloat lineWidthRange[2] = {0, 0};
-glGetFloatv(GL_ALIASED_LINE_WIDTH_RANGE, lineWidthRange);
-printf("[PICK] line width range: %.1f - %.1f\n", lineWidthRange[0], lineWidthRange[1]);
-fflush(stdout);
     if (width <= 0 || height <= 0) return false;
     Resize(width, height);
     return s_fbo != 0;
@@ -137,8 +133,6 @@ void EndRender()
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, &currentFbo);
     static GLint s_lastFbo = -2;
     if (currentFbo != s_lastFbo) {
-        printf("[PICK] EndRender FBO -> %d\n", currentFbo);
-        fflush(stdout);
         s_lastFbo = currentFbo;
     }
 }
@@ -304,25 +298,16 @@ int Pick(int mouseX, int mouseY, HandleType& outType)
     if (mouseX < 0 || mouseY < 0 || mouseX >= s_width || mouseY >= s_height)
         return -1;
 
-    // SDL mouse Y is top-down; GL readback Y is bottom-up.
-    int glY = s_height - 1 - mouseY;
+    // ★ 去掉 Y 翻转。因为 g_savedView 已经 Y 翻转过了，
+    //   FBO 里的图像和屏幕坐标一致（Y 向下）。
+    // int glY = s_height - 1 - mouseY;   // ← 删掉
+    int glY = mouseY;                      // ← 改成直接用
 
-    // Preserve current FBO.
     GLint prevFbo = 0;
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prevFbo);
-
     glBindFramebuffer(GL_FRAMEBUFFER, s_fbo);
     unsigned char px[4] = {0,0,0,0};
     glReadPixels(mouseX, glY, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, px);
-// 诊断：只在读到非零时打印一次（避免刷屏）
-static unsigned char s_lastRGB[4] = {0,0,0,0};
-if (px[0] != s_lastRGB[0] || px[1] != s_lastRGB[1] || px[2] != s_lastRGB[2])
-{
-    printf("[PICK] mouse=(%d,%d) glY=%d rgb=(%d,%d,%d)\n",
-           mouseX, mouseY, glY, px[0], px[1], px[2]);
-    fflush(stdout);
-    s_lastRGB[0] = px[0]; s_lastRGB[1] = px[1]; s_lastRGB[2] = px[2];
-}    
     glBindFramebuffer(GL_FRAMEBUFFER, prevFbo);
 
     if (px[0] == 0) return -1;

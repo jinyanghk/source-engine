@@ -335,6 +335,14 @@ int CHammerApp::Main()
                                     g_iSelectedEntity >= 0 &&
                                     g_iSelectedEntity < (int)g_entities.size());
 
+        const bool bHasBrushSelection = (!g_brushes.empty() &&
+                                        g_iSelectedBrush >= 0 &&
+                                        g_iSelectedBrush < (int)g_brushes.size());
+
+        // gizmo 优先操作 brush（brush 被选中时），否则操作 entity
+        const bool bGizmoOnBrush = bHasBrushSelection;
+        const bool bGizmoActive  = bGizmoOnBrush || bHasSelection;
+
         int mouseDX = g_iMouseX - g_iLastMouseX;
         int mouseDY = g_iMouseY - g_iLastMouseY;
 
@@ -525,15 +533,22 @@ int CHammerApp::Main()
             if (g_bXRayGizmo)
                 glDisable(GL_DEPTH_TEST);
 
-            // 用一个静态 dummy 让后面的 sel.m_vecBBox* 代码不必改，
-            // 但所有 gizmo / 拖动 / UI 逻辑都要用 bHasSelection 保护。
-            static CEntity s_dummyEntity;
-            CEntity& sel = bHasSelection ? g_entities[g_iSelectedEntity] : s_dummyEntity;
-
-            Vector gizmoCenter = sel.GetCenter();
-            float bboxSize = std::max(std::max(sel.m_vecBBoxMaxs.x - sel.m_vecBBoxMins.x,
-                                               sel.m_vecBBoxMaxs.y - sel.m_vecBBoxMins.y),
-                                      sel.m_vecBBoxMaxs.z - sel.m_vecBBoxMins.z);
+            Vector gizmoCenter;
+            float bboxSize = 0.0f;
+            if (bGizmoOnBrush)
+            {
+                CBrush& b = g_brushes[g_iSelectedBrush];
+                gizmoCenter = b.m_vecPos;
+                bboxSize = std::max(std::max(b.m_vecSize.x, b.m_vecSize.y), b.m_vecSize.z) * 2.0f;
+            }
+            else if (bHasSelection)
+            {
+                CEntity& e = g_entities[g_iSelectedEntity];
+                gizmoCenter = e.GetCenter();
+                bboxSize = std::max(std::max(e.m_vecBBoxMaxs.x - e.m_vecBBoxMins.x,
+                                            e.m_vecBBoxMaxs.y - e.m_vecBBoxMins.y),
+                                    e.m_vecBBoxMaxs.z - e.m_vecBBoxMins.z);
+            }
             float axisLength = bboxSize * 1.2f;
             if (axisLength < 30.0f) axisLength = 30.0f;
 
@@ -545,7 +560,7 @@ int CHammerApp::Main()
             Vector rayOrigin = g_vecEye;
 
             // ===== 渲染 pick target（离屏 ID 缓冲）=====
-            if (bHasSelection && g_bShowGizmo && g_iGizmoMode != GIZMO_NONE)
+            if (bGizmoActive && g_bShowGizmo && g_iGizmoMode != GIZMO_NONE)
             {
                 GizmoPick::BeginRender(g_savedProj, g_savedView);
                 if (g_iGizmoMode == GIZMO_TRANSLATE)
@@ -567,7 +582,7 @@ int CHammerApp::Main()
             }
 
             // ===== Hover 检测 =====
-            if (bHasSelection)
+            if (bGizmoActive)
             {
                 if (!g_bDraggingGizmo && g_bShowGizmo && g_iGizmoMode != GIZMO_NONE)
                 {
@@ -636,13 +651,17 @@ int CHammerApp::Main()
             // ===== 点击起始拖动 =====
             if (g_bLeftMouseDown && !g_bDraggingGizmo && g_iActiveAxis < 0 && !io.WantCaptureMouse)
             {
-                if (bHasSelection && g_iHoverAxis >= 0 && g_bShowGizmo && g_iGizmoMode != GIZMO_NONE)
+                if (bGizmoActive && g_iHoverAxis >= 0 && g_bShowGizmo && g_iGizmoMode != GIZMO_NONE)
                 {
                     g_iActiveAxis = g_iHoverAxis;
                     g_bDraggingGizmo = true;
                     if (g_iGizmoMode == GIZMO_TRANSLATE)
                     {
-                        g_vecDragStartPos = sel.m_vecPos;
+                        if (bGizmoOnBrush)
+                            g_vecDragStartPos = g_brushes[g_iSelectedBrush].m_vecPos;
+                        else
+                            g_vecDragStartPos = g_entities[g_iSelectedEntity].m_vecPos;
+
                         Vector p0 = gizmoCenter;
                         Vector p1 = gizmoCenter + axisDirs[g_iActiveAxis] * axisLength;
                         float sx0, sy0, sx1, sy1;
@@ -664,27 +683,52 @@ int CHammerApp::Main()
                     {
                         g_flDragStartAngle = 0.0f;
                         RayRingPlaneAngle(rayOrigin, rayDir, gizmoCenter, g_iActiveAxis, g_flDragStartAngle);
-                        g_angDragStartRot = sel.m_angRot;
+                        if (bGizmoOnBrush)
+                            g_angDragStartRot = g_brushes[g_iSelectedBrush].m_angRot;
+                        else
+                            g_angDragStartRot = g_entities[g_iSelectedEntity].m_angRot;
                     }
                 }
                 else
                 {
-                    // 点空白 -> 拾取 entity
-                    int hit = -1;
+                    // 先拾取 entity（优先，因为 entity 通常更小更精确）
+                    int hitEntity = -1;
                     for (int i = (int)g_entities.size() - 1; i >= 0; i--)
                     {
-                        if (IsMouseOverEntityBBox(g_entities[i], g_vecEye, g_camLeft, g_camUp, g_camForward, g_camTanHalfFov, g_camAspect, w, h, g_iMouseX, g_iMouseY))
+                        if (IsMouseOverEntityBBox(g_entities[i], g_vecEye, g_camLeft, g_camUp, g_camForward,
+                                                g_camTanHalfFov, g_camAspect, w, h, g_iMouseX, g_iMouseY))
                         {
-                            hit = i;
+                            hitEntity = i;
                             break;
                         }
                     }
-                    g_iSelectedEntity = hit;   // 没拾到 -> -1（取消选中）
+
+                    if (hitEntity >= 0)
+                    {
+                        g_iSelectedEntity = hitEntity;
+                        g_iSelectedBrush  = -1;
+                    }
+                    else
+                    {
+                        // 没拾到 entity，拾取 brush
+                        int hitBrush = -1;
+                        for (int i = (int)g_brushes.size() - 1; i >= 0; i--)
+                        {
+                            if (IsMouseOverBrushBBox(g_brushes[i], g_vecEye, g_camLeft, g_camUp, g_camForward,
+                                                    g_camTanHalfFov, g_camAspect, w, h, g_iMouseX, g_iMouseY))
+                            {
+                                hitBrush = i;
+                                break;
+                            }
+                        }
+                        g_iSelectedBrush  = hitBrush;
+                        g_iSelectedEntity = -1;
+                    }
                 }
             }
 
             // ===== 拖动中 =====
-            if (bHasSelection && g_bDraggingGizmo && g_bLeftMouseDown && g_iActiveAxis >= 0)
+            if (bGizmoActive && g_bDraggingGizmo && g_bLeftMouseDown && g_iActiveAxis >= 0)
             {
                 if (g_iGizmoMode == GIZMO_TRANSLATE)
                 {
@@ -703,7 +747,11 @@ int CHammerApp::Main()
                             float worldDelta = t * axisLength;
                             if (g_flDragStartWorldT < 0.0f) g_flDragStartWorldT = worldDelta;
                             float deltaT = worldDelta - g_flDragStartWorldT;
-                            sel.m_vecPos = g_vecDragStartPos + axisDirs[g_iActiveAxis] * deltaT;
+                            Vector newPos = g_vecDragStartPos + axisDirs[g_iActiveAxis] * deltaT;
+                            if (bGizmoOnBrush)
+                                g_brushes[g_iSelectedBrush].m_vecPos = newPos;
+                            else
+                                g_entities[g_iSelectedEntity].m_vecPos = newPos;
                         }
                     }
                 }
@@ -716,15 +764,24 @@ int CHammerApp::Main()
                         if (deltaAngle > M_PI) deltaAngle -= 2.0f * M_PI;
                         if (deltaAngle < -M_PI) deltaAngle += 2.0f * M_PI;
                         float deltaDeg = deltaAngle * (180.0f / M_PI);
-                        if (g_iActiveAxis == 0)      sel.m_angRot.x = g_angDragStartRot.x + deltaDeg;
-                        else if (g_iActiveAxis == 1) sel.m_angRot.y = g_angDragStartRot.y + deltaDeg;
-                        else                          sel.m_angRot.z = g_angDragStartRot.z + deltaDeg;
+                        if (bGizmoOnBrush)
+                        {
+                            if (g_iActiveAxis == 0)      g_brushes[g_iSelectedBrush].m_angRot.x = g_angDragStartRot.x + deltaDeg;
+                            else if (g_iActiveAxis == 1) g_brushes[g_iSelectedBrush].m_angRot.y = g_angDragStartRot.y + deltaDeg;
+                            else                          g_brushes[g_iSelectedBrush].m_angRot.z = g_angDragStartRot.z + deltaDeg;
+                        }
+                        else
+                        {
+                            if (g_iActiveAxis == 0)      g_entities[g_iSelectedEntity].m_angRot.x = g_angDragStartRot.x + deltaDeg;
+                            else if (g_iActiveAxis == 1) g_entities[g_iSelectedEntity].m_angRot.y = g_angDragStartRot.y + deltaDeg;
+                            else                          g_entities[g_iSelectedEntity].m_angRot.z = g_angDragStartRot.z + deltaDeg;
+                        }
                     }
                 }
             }
 
             // ===== 绘制可见 gizmo =====
-            if (bHasSelection && g_bShowGizmo && g_iGizmoMode != GIZMO_NONE)
+            if (bGizmoActive && g_bShowGizmo && g_iGizmoMode != GIZMO_NONE)
             {
                 int highlightAxis = (g_iActiveAxis >= 0) ? g_iActiveAxis : g_iHoverAxis;
                 if (g_iGizmoMode == GIZMO_TRANSLATE)
