@@ -49,14 +49,6 @@ void BeginFrame()
 //-----------------------------------------------------------------------------
 void EndFrameAndRender(int windowWidth, int windowHeight)
 {
-GLint currentFbo = 0;
-glGetIntegerv(GL_FRAMEBUFFER_BINDING, &currentFbo);
-static GLint s_lastFbo2 = -2;
-if (currentFbo != s_lastFbo2) {
-    printf("[IMGUI] RenderDrawData FBO -> %d\n", currentFbo);
-    fflush(stdout);
-    s_lastFbo2 = currentFbo;
-}
     ImGui::Render();
     ImDrawData* draw_data = ImGui::GetDrawData();
     if (!draw_data)

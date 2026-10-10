@@ -56,9 +56,6 @@ void Begin()
         ImGui::DockBuilderDockWindow("Console",        dock_bottom);
 
         ImGui::DockBuilderFinish(dockspace_id);
-        printf("dock_main=%u dock_right=%u dock_bottom=%u\n",
-            dock_main, dock_right, dock_bottom);
-        fflush(stdout);
     }
 
     ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f),

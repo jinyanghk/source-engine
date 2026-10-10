@@ -55,8 +55,12 @@ void DrawSelectionPanel(CEntity* entities, int entityCount, int* pSelectedEntity
                 ImGui::PushID(i);
 
                 bool bSel = (i == *pSelectedEntity);
-                if (ImGui::Selectable(entities[i].m_szName.c_str(), bSel, 0, ImVec2(ImGui::GetContentRegionAvail().x - 60.0f, 0)))
+                if (ImGui::Selectable(entities[i].m_szName.c_str(), bSel, 0,
+                                    ImVec2(ImGui::GetContentRegionAvail().x - 60.0f, 0)))
+                {
                     *pSelectedEntity = i;
+                    *pSelectedBrush  = -1;   // ★ 互斥
+                }
 
                 ImGui::SameLine();
                 if (ImGui::SmallButton("Del"))
@@ -126,7 +130,10 @@ void DrawSelectionPanel(CEntity* entities, int entityCount, int* pSelectedEntity
                 snprintf(label, sizeof(label), "brush #%d", i);
                 bool bSel = (i == *pSelectedBrush);
                 if (ImGui::Selectable(label, bSel))
-                    *pSelectedBrush = i;
+                {
+                    *pSelectedBrush  = i;
+                    *pSelectedEntity = -1;   // ★ 互斥
+                }
             }
 
             ImGui::Separator();
