@@ -114,7 +114,8 @@ class GDclass
 		inline void AddHelper(CHelperInfo *pHelper);
 		inline int GetHelperCount(void) { return(m_Helpers.Count()); }
 		CHelperInfo *GetHelper(int nIndex);
-
+        inline int GetBaseCount(void) { return(m_Bases.Count()); }
+        inline GDclass* GetBase(int i) { return m_Bases[i]; }
 	protected:
 
 		//

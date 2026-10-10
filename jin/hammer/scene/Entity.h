@@ -1,6 +1,8 @@
 #ifndef SCENE_ENTITY_H
 #define SCENE_ENTITY_H
 
+#include <string>
+
 #include "mathlib/vector.h"
 #include "datacache/imdlcache.h"
 
@@ -10,7 +12,7 @@ struct CEntity
 {
     EntityType   m_iType;
     MDLHandle_t  m_hMdl;
-    const char*  m_szName;
+    std::string  m_szName;
     Vector       m_vecPos;
     QAngle       m_angRot;
     Vector       m_vecBBoxMins;

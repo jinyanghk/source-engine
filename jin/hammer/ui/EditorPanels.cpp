@@ -52,15 +52,27 @@ void DrawSelectionPanel(CEntity* entities, int entityCount, int* pSelectedEntity
             ImGui::Text("Entities:");
             for (int i = 0; i < entityCount; i++)
             {
+                ImGui::PushID(i);
+
                 bool bSel = (i == *pSelectedEntity);
-                if (ImGui::Selectable(entities[i].m_szName, bSel))
+                if (ImGui::Selectable(entities[i].m_szName.c_str(), bSel, 0, ImVec2(ImGui::GetContentRegionAvail().x - 60.0f, 0)))
                     *pSelectedEntity = i;
+
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Del"))
+                {
+                    outResult.bRequestDeleteEntity = true;
+                    outResult.iTargetEntityIndex = i;
+                }
+
+                ImGui::PopID();
             }
+
             ImGui::Separator();
             if (*pSelectedEntity >= 0 && *pSelectedEntity < entityCount)
             {
                 CEntity& sel = entities[*pSelectedEntity];
-                ImGui::Text("Selected: %s", sel.m_szName);
+                ImGui::Text("Selected: %s", sel.m_szName.c_str());
                 ImGui::Separator();
                 ImGui::SliderFloat("Pos X", &sel.m_vecPos.x, -512.0f, 512.0f, "%.2f");
                 ImGui::SliderFloat("Pos Y", &sel.m_vecPos.y, -512.0f, 512.0f, "%.2f");
@@ -179,4 +191,23 @@ void DrawConsolePanel(const Vector& camTarget, float camDist,
     ImGui::TextColored(ImVec4(1, 0.5f, 0, 1), "Press R to reset camera!");
 
     ImGui::End();
+}
+
+//-----------------------------------------------------------------------------
+void DrawViewportPanel()
+{
+    ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar
+                           | ImGuiWindowFlags_NoCollapse
+                           | ImGuiWindowFlags_NoResize
+                           | ImGuiWindowFlags_NoMove
+                           | ImGuiWindowFlags_NoBringToFrontOnFocus
+                           | ImGuiWindowFlags_NoNavFocus
+                           | ImGuiWindowFlags_NoBackground
+                           | ImGuiWindowFlags_NoScrollbar
+                           | ImGuiWindowFlags_NoScrollWithMouse;
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+    ImGui::Begin("Viewport", nullptr, flags);
+    // 什么都不画。PassthruCentralNode 让 3D 透出来。
+    ImGui::End();
+    ImGui::PopStyleVar();
 }

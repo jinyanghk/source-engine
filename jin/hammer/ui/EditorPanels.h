@@ -17,6 +17,9 @@ struct BrushPanelResult
     bool bRequestDelete = false;
     bool bRequestDuplicate = false;
     int  iTargetIndex = -1;
+    // ★ 新增：entity 删除请求
+    bool bRequestDeleteEntity = false;
+    int  iTargetEntityIndex = -1;    
 };
 
 //-----------------------------------------------------------------------------
@@ -36,5 +39,7 @@ void DrawSelectionPanel(CEntity* entities, int entityCount, int* pSelectedEntity
 //-----------------------------------------------------------------------------
 void DrawConsolePanel(const Vector& camTarget, float camDist,
                       bool bShowGizmo, bool bXRayGizmo);
+
+void DrawViewportPanel();
 
 #endif // EDITOR_PANELS_H

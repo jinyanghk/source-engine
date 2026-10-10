@@ -131,6 +131,16 @@ void EndRender()
     glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)s_prevFbo);
     glViewport(s_prevViewport[0], s_prevViewport[1],
                s_prevViewport[2], s_prevViewport[3]);
+
+
+    GLint currentFbo = 0;
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &currentFbo);
+    static GLint s_lastFbo = -2;
+    if (currentFbo != s_lastFbo) {
+        printf("[PICK] EndRender FBO -> %d\n", currentFbo);
+        fflush(stdout);
+        s_lastFbo = currentFbo;
+    }
 }
 
 //-----------------------------------------------------------------------------

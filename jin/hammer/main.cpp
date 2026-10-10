@@ -47,6 +47,8 @@
 #include "ui/EditorPanels.h"
 #include "render/BoxRender.h"
 #include "scene/Brush.h"
+#include "app/FgdManager.h"
+#include "ui/EntityPalette.h"
 
 IMaterialSystem *g_pMaterialSystem;
 IFileSystem *g_pFileSystem;
@@ -183,56 +185,48 @@ int CHammerApp::Main()
         Warning("[HAMMER] Material System SetMode tracking failure.\n");
     pWindow = SDL_GL_GetCurrentWindow();
     if (pWindow) { SDL_ShowWindow(pWindow); SDL_RaiseWindow(pWindow); }
-    
+
     SDL_GLContext glContext = SDL_GL_GetCurrentContext();
     if (!ImGuiLayer::Init(pWindow, glContext))
         Warning("[HAMMER] ImGuiLayer::Init failed.\n");
     ImGuiIO &io = ImGui::GetIO();
 
     CreatePlaceholderTextures();
+    // ★★★ 加这一行 ★★★
+    glActiveTexture(GL_TEXTURE0);
+
+    // 加载 FGD。文件路径按你项目实际位置调整。
+    if (!FgdManager::Instance().LoadFgdFile("halflife2.fgd"))
+    {
+        Warning("[HAMMER] Failed to load halflife2.fgd — Entity Palette will be empty.\n");
+    }
+
     GizmoPick::Init(w, h);
 
+    // 初始场景：地板 + 两面墙
     {
-        CEntity alyx;
-        alyx.m_iType = ENTITY_MODEL;
-        alyx.m_hMdl = g_pMDLCache->FindMDL("models/alyx.mdl");
-        alyx.m_szName = "Alyx";
-        alyx.m_vecPos = Vector(-80, 0, 0);
-        g_entities.push_back(alyx);
-
-        CEntity start;
-        start.m_iType = ENTITY_PLAYER_START;
-        start.m_hMdl = MDLHANDLE_INVALID;
-        start.m_szName = "info_player_start";
-        start.m_vecPos = Vector(80, 0, 0);
-        start.m_angRot = QAngle(0, 0, 0);
-        g_entities.push_back(start);
-    }
-    g_iSelectedEntity = 0;
-
-    // 【终极组合】Brush 用反向 Z（引擎视图矩阵 Z 轴朝下）
-    {
-        // 地板：世界 z=+8（屏幕上在 Alyx 脚下）
         CBrush floor;
         floor.m_vecPos = Vector(0, 0, -8);
         floor.m_vecSize = Vector(256, 256, 8);
         floor.m_iTexId = 2;
         g_brushes.push_back(floor);
 
-        // 北墙：世界 z=-128（屏幕上向上延伸）
         CBrush wallN;
         wallN.m_vecPos = Vector(0, 256, 128);
         wallN.m_vecSize = Vector(256, 8, 128);
         wallN.m_iTexId = 1;
         g_brushes.push_back(wallN);
 
-        // 西墙：同上
         CBrush wallW;
         wallW.m_vecPos = Vector(-256, 0, 128);
         wallW.m_vecSize = Vector(8, 256, 128);
         wallW.m_iTexId = 1;
         g_brushes.push_back(wallW);
     }
+
+    // 初始没有 entity 被选中。
+    g_iSelectedEntity = -1;
+    g_iSelectedBrush = -1;
 
     IMatRenderContext *pRenderContext = g_pMaterialSystem->GetRenderContext();
     bool bRunning = true;
@@ -265,7 +259,6 @@ int CHammerApp::Main()
     int g_iLastMouseX = 0, g_iLastMouseY = 0;
 
     // 保存当前帧的投影 / 视图矩阵，供 pick target 使用。
-    // 在每帧渲染循环里更新。
     float g_savedProj[16];
     float g_savedView[16];
     memset(g_savedProj, 0, sizeof(g_savedProj));
@@ -336,6 +329,12 @@ int CHammerApp::Main()
         if (frameTime == 0.0f) frameTime = 0.01f;
         lastTicks = currentTicks;
 
+        // 每帧检查当前是否有有效选中的 entity。
+        // 相机 orbit、gizmo hover / drag / draw、pick target、UI 都用它。
+        const bool bHasSelection = (!g_entities.empty() &&
+                                    g_iSelectedEntity >= 0 &&
+                                    g_iSelectedEntity < (int)g_entities.size());
+
         int mouseDX = g_iMouseX - g_iLastMouseX;
         int mouseDY = g_iMouseY - g_iLastMouseY;
 
@@ -366,7 +365,7 @@ int CHammerApp::Main()
 
         if (!io.WantCaptureMouse && !g_bDraggingGizmo)
         {
-            if (g_bLeftMouseDown && g_iHoverAxis < 0)
+            if (bHasSelection && g_bLeftMouseDown && g_iHoverAxis < 0)
             {
                 m_camYaw -= mouseDX * 0.25f;
                 m_camPitch += mouseDY * 0.25f;
@@ -488,15 +487,12 @@ int CHammerApp::Main()
             }
 
             // 【关键修复】引擎 D3D 后端使用 Y 轴朝下的坐标系，
-            // 而 OpenGL 期望 Y 轴朝上。翻转 glView 的 Y 行（OpenGL 列主序的第 1 列）
-            // 来纠正这个差异，让手写的 OpenGL 绘制（Brush/Gizmo/包围盒）和
-            // 引擎渲染的模型（Alyx/player_start）视觉对齐。
+            // 而 OpenGL 期望 Y 轴朝上。翻转 glView 的 Y 行。
             glView[1]  = -glView[1];
             glView[5]  = -glView[5];
             glView[9]  = -glView[9];
             glView[13] = -glView[13];
 
-            // 保存矩阵供 pick target 使用
             memcpy(g_savedProj, glProj, sizeof(glProj));
             memcpy(g_savedView, glView, sizeof(glView));
 
@@ -523,13 +519,17 @@ int CHammerApp::Main()
             for (size_t i = 0; i < g_entities.size(); i++)
                 DrawEntityBBox(g_entities[i], (int)i == g_iSelectedEntity);
             for (size_t i = 0; i < g_brushes.size(); i++)
-                DrawBrushBBox(g_brushes[i], (int)i == g_iSelectedBrush);                
+                DrawBrushBBox(g_brushes[i], (int)i == g_iSelectedBrush);
             glDepthMask(GL_TRUE);
 
             if (g_bXRayGizmo)
                 glDisable(GL_DEPTH_TEST);
 
-            CEntity& sel = g_entities[g_iSelectedEntity];
+            // 用一个静态 dummy 让后面的 sel.m_vecBBox* 代码不必改，
+            // 但所有 gizmo / 拖动 / UI 逻辑都要用 bHasSelection 保护。
+            static CEntity s_dummyEntity;
+            CEntity& sel = bHasSelection ? g_entities[g_iSelectedEntity] : s_dummyEntity;
+
             Vector gizmoCenter = sel.GetCenter();
             float bboxSize = std::max(std::max(sel.m_vecBBoxMaxs.x - sel.m_vecBBoxMins.x,
                                                sel.m_vecBBoxMaxs.y - sel.m_vecBBoxMins.y),
@@ -545,9 +545,7 @@ int CHammerApp::Main()
             Vector rayOrigin = g_vecEye;
 
             // ===== 渲染 pick target（离屏 ID 缓冲）=====
-            // 必须在可见 gizmo 绘制之后，且必须用和可见 gizmo 相同的矩阵。
-            // 无论 hover 与否，每帧都渲染一次，保证 Pick() 读到的总是最新数据。
-            if (g_bShowGizmo && g_iGizmoMode != GIZMO_NONE)
+            if (bHasSelection && g_bShowGizmo && g_iGizmoMode != GIZMO_NONE)
             {
                 GizmoPick::BeginRender(g_savedProj, g_savedView);
                 if (g_iGizmoMode == GIZMO_TRANSLATE)
@@ -562,7 +560,6 @@ int CHammerApp::Main()
                 }
                 GizmoPick::EndRender();
 
-                // 恢复矩阵（BeginRender 改了 GL 矩阵状态）
                 glMatrixMode(GL_PROJECTION);
                 glLoadMatrixf(g_savedProj);
                 glMatrixMode(GL_MODELVIEW);
@@ -570,61 +567,68 @@ int CHammerApp::Main()
             }
 
             // ===== Hover 检测 =====
-            if (!g_bDraggingGizmo && g_bShowGizmo && g_iGizmoMode != GIZMO_NONE)
+            if (bHasSelection)
             {
-                g_iHoverAxis = -1;
-                float gizmoScreenX, gizmoScreenY;
-                bool gizmoVisible = WorldToScreen(gizmoCenter, g_vecEye, g_camLeft, g_camUp, g_camForward,
-                                                   g_camTanHalfFov, g_camAspect, w, h, gizmoScreenX, gizmoScreenY);
-                if (gizmoVisible)
+                if (!g_bDraggingGizmo && g_bShowGizmo && g_iGizmoMode != GIZMO_NONE)
                 {
-                    float mdx = g_iMouseX - gizmoScreenX;
-                    float mdy = g_iMouseY - gizmoScreenY;
-                    float mouseToGizmoSq = mdx * mdx + mdy * mdy;
-                    const float MAX_SCREEN_DIST = 3000.0f;
-                    if (mouseToGizmoSq < MAX_SCREEN_DIST * MAX_SCREEN_DIST)
+                    g_iHoverAxis = -1;
+                    float gizmoScreenX, gizmoScreenY;
+                    bool gizmoVisible = WorldToScreen(gizmoCenter, g_vecEye, g_camLeft, g_camUp, g_camForward,
+                                                    g_camTanHalfFov, g_camAspect, w, h, gizmoScreenX, gizmoScreenY);
+                    if (gizmoVisible)
                     {
-                        if (g_iGizmoMode == GIZMO_TRANSLATE)
+                        float mdx = g_iMouseX - gizmoScreenX;
+                        float mdy = g_iMouseY - gizmoScreenY;
+                        float mouseToGizmoSq = mdx * mdx + mdy * mdy;
+                        const float MAX_SCREEN_DIST = 3000.0f;
+                        if (mouseToGizmoSq < MAX_SCREEN_DIST * MAX_SCREEN_DIST)
                         {
-                            GizmoPick::HandleType htype;
-                            int hitAxis = GizmoPick::Pick(g_iMouseX, g_iMouseY, htype);
-                            if (hitAxis >= 0 && htype == GizmoPick::HANDLE_TRANSLATE)
-                                g_iHoverAxis = hitAxis;
-                            else
-                                g_iHoverAxis = -1;
-                        }
-                        else if (g_iGizmoMode == GIZMO_ROTATE)
-                        {
-                            float tolerance = axisLength * 0.08f;
-                            if (tolerance < 4.0f) tolerance = 4.0f;
-                            float bestDelta = tolerance;
-                            for (int a = 0; a < 3; a++)
+                            if (g_iGizmoMode == GIZMO_TRANSLATE)
                             {
-                                Vector normal = axisDirs[a];
-                                float denom = DotProduct(rayDir, normal);
-                                if (fabsf(denom) < 0.2f) continue;
-                                float t = DotProduct(gizmoCenter - rayOrigin, normal) / denom;
-                                if (t < 0.0f) continue;
-                                Vector hitPoint = rayOrigin + rayDir * t;
-                                Vector offset = hitPoint - gizmoCenter;
-                                Vector u, v;
-                                switch (a)
+                                GizmoPick::HandleType htype;
+                                int hitAxis = GizmoPick::Pick(g_iMouseX, g_iMouseY, htype);
+                                if (hitAxis >= 0 && htype == GizmoPick::HANDLE_TRANSLATE)
+                                    g_iHoverAxis = hitAxis;
+                                else
+                                    g_iHoverAxis = -1;
+                            }
+                            else if (g_iGizmoMode == GIZMO_ROTATE)
+                            {
+                                float tolerance = axisLength * 0.08f;
+                                if (tolerance < 4.0f) tolerance = 4.0f;
+                                float bestDelta = tolerance;
+                                for (int a = 0; a < 3; a++)
                                 {
-                                case 0: u = Vector(0,1,0); v = Vector(0,0,1); break;
-                                case 1: u = Vector(1,0,0); v = Vector(0,0,1); break;
-                                case 2: u = Vector(1,0,0); v = Vector(0,1,0); break;
+                                    Vector normal = axisDirs[a];
+                                    float denom = DotProduct(rayDir, normal);
+                                    if (fabsf(denom) < 0.2f) continue;
+                                    float t = DotProduct(gizmoCenter - rayOrigin, normal) / denom;
+                                    if (t < 0.0f) continue;
+                                    Vector hitPoint = rayOrigin + rayDir * t;
+                                    Vector offset = hitPoint - gizmoCenter;
+                                    Vector u, v;
+                                    switch (a)
+                                    {
+                                    case 0: u = Vector(0,1,0); v = Vector(0,0,1); break;
+                                    case 1: u = Vector(1,0,0); v = Vector(0,0,1); break;
+                                    case 2: u = Vector(1,0,0); v = Vector(0,1,0); break;
+                                    }
+                                    float pu = DotProduct(offset, u);
+                                    float pv = DotProduct(offset, v);
+                                    float d = sqrtf(pu*pu + pv*pv);
+                                    float delta = fabsf(d - axisLength);
+                                    if (delta < bestDelta) { bestDelta = delta; g_iHoverAxis = a; }
                                 }
-                                float pu = DotProduct(offset, u);
-                                float pv = DotProduct(offset, v);
-                                float d = sqrtf(pu*pu + pv*pv);
-                                float delta = fabsf(d - axisLength);
-                                if (delta < bestDelta) { bestDelta = delta; g_iHoverAxis = a; }
                             }
                         }
                     }
                 }
+                else if (!g_bDraggingGizmo)
+                {
+                    g_iHoverAxis = -1;
+                }
             }
-            else if (!g_bDraggingGizmo)
+            else
             {
                 g_iHoverAxis = -1;
             }
@@ -632,7 +636,7 @@ int CHammerApp::Main()
             // ===== 点击起始拖动 =====
             if (g_bLeftMouseDown && !g_bDraggingGizmo && g_iActiveAxis < 0 && !io.WantCaptureMouse)
             {
-                if (g_iHoverAxis >= 0 && g_bShowGizmo && g_iGizmoMode != GIZMO_NONE)
+                if (bHasSelection && g_iHoverAxis >= 0 && g_bShowGizmo && g_iGizmoMode != GIZMO_NONE)
                 {
                     g_iActiveAxis = g_iHoverAxis;
                     g_bDraggingGizmo = true;
@@ -666,19 +670,21 @@ int CHammerApp::Main()
                 else
                 {
                     // 点空白 -> 拾取 entity
+                    int hit = -1;
                     for (int i = (int)g_entities.size() - 1; i >= 0; i--)
                     {
                         if (IsMouseOverEntityBBox(g_entities[i], g_vecEye, g_camLeft, g_camUp, g_camForward, g_camTanHalfFov, g_camAspect, w, h, g_iMouseX, g_iMouseY))
                         {
-                            g_iSelectedEntity = i;
+                            hit = i;
                             break;
                         }
                     }
+                    g_iSelectedEntity = hit;   // 没拾到 -> -1（取消选中）
                 }
             }
 
             // ===== 拖动中 =====
-            if (g_bDraggingGizmo && g_bLeftMouseDown && g_iActiveAxis >= 0)
+            if (bHasSelection && g_bDraggingGizmo && g_bLeftMouseDown && g_iActiveAxis >= 0)
             {
                 if (g_iGizmoMode == GIZMO_TRANSLATE)
                 {
@@ -718,7 +724,7 @@ int CHammerApp::Main()
             }
 
             // ===== 绘制可见 gizmo =====
-            if (g_bShowGizmo && g_iGizmoMode != GIZMO_NONE)
+            if (bHasSelection && g_bShowGizmo && g_iGizmoMode != GIZMO_NONE)
             {
                 int highlightAxis = (g_iActiveAxis >= 0) ? g_iActiveAxis : g_iHoverAxis;
                 if (g_iGizmoMode == GIZMO_TRANSLATE)
@@ -742,10 +748,52 @@ int CHammerApp::Main()
 
             EditorLayout::Begin();
 
+            std::string newClassFromPalette;
+            DrawEntityPalette(newClassFromPalette);
+
+            if (!newClassFromPalette.empty())
+            {
+                std::string modelPath = FgdManager::Instance().GetModelPathForClass(newClassFromPalette);
+                printf("[Palette] selected class='%s' model='%s'\n",
+                    newClassFromPalette.c_str(), modelPath.c_str());
+
+                CEntity e;
+                e.m_iType = ENTITY_MODEL;
+                e.m_szName = newClassFromPalette;
+                e.m_vecPos = Vector(0, 0, 0);
+
+                if (!modelPath.empty())
+                {
+                    e.m_hMdl = g_pMDLCache->FindMDL(modelPath.c_str());
+                    if (e.m_hMdl == MDLHANDLE_INVALID)
+                        printf("[Palette] FindMDL failed for '%s'\n", modelPath.c_str());
+                }
+                else
+                {
+                    e.m_hMdl = MDLHANDLE_INVALID;
+                }
+
+                g_entities.push_back(e);
+                g_iSelectedEntity = (int)g_entities.size() - 1;
+            }
+
             BrushPanelResult brushResult;
             DrawSelectionPanel(g_entities.data(), (int)g_entities.size(), &g_iSelectedEntity,
                             g_brushes.data(), (int)g_brushes.size(), &g_iSelectedBrush,
                             brushResult);
+
+            if (brushResult.bRequestDeleteEntity &&
+                brushResult.iTargetEntityIndex >= 0 &&
+                brushResult.iTargetEntityIndex < (int)g_entities.size())
+            {
+                g_entities.erase(g_entities.begin() + brushResult.iTargetEntityIndex);
+
+                // 修正选中索引
+                if (g_iSelectedEntity == brushResult.iTargetEntityIndex)
+                    g_iSelectedEntity = -1;
+                else if (g_iSelectedEntity > brushResult.iTargetEntityIndex)
+                    g_iSelectedEntity--;
+            }
 
             if (brushResult.bRequestNew)
             {

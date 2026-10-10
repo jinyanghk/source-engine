@@ -36,3 +36,36 @@ main.cpp 约 2000 行，当前可编译运行
 2. Gizmo 悬停检测：射线-圆柱相交（代替射线-线段）
 
 【即将收到完整 main.cpp】
+
+
+2026年10月10日：
+继续 Hammer 编辑器项目。当前 bug：选中 entity 后 3D 场景消失。
+下面贴项目简述和 ui/EditorPanels.cpp。
+
+项目：Linux Hammer 编辑器（C++ + SDL2 + OpenGL + ImGui docking branch + nillerusr Source 引擎）
+结构：
+  main.cpp — Main() 渲染循环 + UI 编排
+  app/ImGuiLayer — ImGui 生命周期
+  app/EditorLayout — DockSpace + 默认布局
+  app/FgdManager — FGD 解析
+  ui/EditorPanels — DrawSelectionPanel / DrawConsolePanel / DrawMenuBar
+  ui/EntityPalette — FGD 实体列表
+  scene/ — Entity / Brush / SceneGlobals / EntityRender / EntityPick
+  render/ — TextureManager / BrushRender / BoxRender
+  gizmo/ — GizmoDraw / GizmoHit / GizmoPickTarget
+  fgdlib/ — Valve FGD 解析库（gdclass.h 加了 GetBaseCount/GetBase 两个接口）
+
+现象：
+- 初始状态（无 entity 选中）：3D 场景正常可见。
+- 点 Entity Palette 里的 npc_alyx 创建 entity 后：3D 场景消失，中央变成浅灰色，
+  只剩两条墙的边缘水平线。ImGui 面板（右侧 Entity Palette / Selection，底部 Console）正常。
+- 把 npc_alyx 删掉或取消选中（点空白），3D 场景恢复。
+
+已排除：
+- FBO 状态：初始 [IMGUI] FBO=9，选中后 [PICK] EndRender FBO=9，一致。
+- DockBuilderAddNode 带 PassthruCentralNode，中央节点空（不 dock 任何窗口到 dock_main）。
+- 相机、gizmo、pick 的 GL 状态都没问题。
+
+怀疑：ui/EditorPanels.cpp 里 DrawSelectionPanel 在 *pSelectedEntity >= 0 时
+画了额外内容，可能有 ImGui::Begin/End 不匹配，导致 ImGui 窗口栈错乱，
+某个隐式窗口变成全屏遮住 3D。
