@@ -518,12 +518,6 @@ int CHammerApp::Main()
             for (size_t i = 0; i < g_brushes.size(); i++)
                 DrawBrushEdges(g_brushes[i]);
 
-            for (size_t i = 0; i < g_entities.size(); i++)
-            {
-                if (g_entities[i].m_iType == ENTITY_PLAYER_START)
-                    DrawPlayerStartModel(g_entities[i].m_vecPos, g_entities[i].m_angRot);
-            }
-
             glDepthMask(GL_FALSE);
             for (size_t i = 0; i < g_entities.size(); i++)
                 DrawEntityBBox(g_entities[i], (int)i == g_iSelectedEntity);
@@ -846,6 +840,13 @@ int CHammerApp::Main()
             if (!newClassFromPalette.empty())
             {
                 std::string modelPath = FgdManager::Instance().GetModelPathForClass(newClassFromPalette);
+                
+                // --- VALVE FIX: If it's a player start and has no model, fall back to the engine's editor model helper ---
+                if (newClassFromPalette == "info_player_start" && modelPath.empty())
+                {
+                    modelPath = "models/editor/playerstart.mdl";
+                }
+
                 printf("[Palette] selected class='%s' model='%s'\n",
                     newClassFromPalette.c_str(), modelPath.c_str());
 
@@ -856,6 +857,7 @@ int CHammerApp::Main()
 
                 if (!modelPath.empty())
                 {
+                    // This requests the engine's native cache to load the actual tool .mdl file
                     e.m_hMdl = g_pMDLCache->FindMDL(modelPath.c_str());
                     if (e.m_hMdl == MDLHANDLE_INVALID)
                         printf("[Palette] FindMDL failed for '%s'\n", modelPath.c_str());

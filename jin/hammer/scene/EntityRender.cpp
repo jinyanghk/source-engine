@@ -23,76 +23,65 @@ void BuildRotationMatrixFromQAngle(const QAngle& angles, VMatrix& outMatrix)
 //-----------------------------------------------------------------------------
 void UpdateEntityBBox(CEntity& ent)
 {
-    if (ent.m_iType == ENTITY_PLAYER_START)
-    {
-        Vector halfSize(16, 16, 36);
-        ent.m_vecBBoxMins = ent.m_vecPos - halfSize;
-        ent.m_vecBBoxMaxs = ent.m_vecPos + halfSize;
-        return;
-    }
+    // --- REMOVED THE HARDCODED ENTITY_PLAYER_START CHECKS ENTIRELY ---
+    
     if (ent.m_hMdl == MDLHANDLE_INVALID) return;
+    
     studiohdr_t *pStudioHdr = g_pMDLCache->GetStudioHdr(ent.m_hMdl);
     if (!pStudioHdr) return;
+
+    // The native engine header bounds will now load perfectly for both Alyx AND playerstart.mdl!
+    Vector localMins = pStudioHdr->hull_min;
+    Vector localMaxs = pStudioHdr->hull_max;
 
     VMatrix matModelTranslation;
     matModelTranslation.Identity();
     matModelTranslation.m[0][3] = ent.m_vecPos.x;
     matModelTranslation.m[1][3] = ent.m_vecPos.y;
     matModelTranslation.m[2][3] = ent.m_vecPos.z;
+    
     VMatrix matModelRotation;
     BuildRotationMatrixFromQAngle(ent.m_angRot, matModelRotation);
+    
     VMatrix matModel;
     MatrixMultiply(matModelTranslation, matModelRotation, matModel);
 
-    matrix3x4_t matModel3x4;
-    for (int r = 0; r < 3; r++)
-        for (int c = 0; c < 4; c++)
-            matModel3x4.m_flMatVal[r][c] = matModel.m[r][c];
+    Vector corners[8] = {
+        Vector(localMins.x, localMins.y, localMins.z),
+        Vector(localMaxs.x, localMins.y, localMins.z),
+        Vector(localMins.x, localMaxs.y, localMins.z),
+        Vector(localMaxs.x, localMaxs.y, localMins.z),
+        Vector(localMins.x, localMins.y, localMaxs.z),
+        Vector(localMaxs.x, localMins.y, localMaxs.z),
+        Vector(localMins.x, localMaxs.y, localMaxs.z),
+        Vector(localMaxs.x, localMaxs.y, localMaxs.z)
+    };
 
-    mstudiobone_t *pBoneArray = (mstudiobone_t *)((byte *)pStudioHdr + pStudioHdr->boneindex);
-    if (!pBoneArray) return;
-    int numBones = (pStudioHdr->numbones < MAXSTUDIOBONES) ? pStudioHdr->numbones : MAXSTUDIOBONES;
-    Vector localMins(1e9f, 1e9f, 1e9f);
-    Vector localMaxs(-1e9f, -1e9f, -1e9f);
-    matrix3x4_t poseBones[MAXSTUDIOBONES] = {};
-    for (int i = 0; i < numBones; i++)
+    Vector worldMins(1e9f, 1e9f, 1e9f);
+    Vector worldMaxs(-1e9f, -1e9f, -1e9f);
+
+    for (int i = 0; i < 8; i++)
     {
-        Vector bonePos = pBoneArray[i].pos;
-        Quaternion boneQuat = pBoneArray[i].quat;
-        QuaternionMatrix(boneQuat, bonePos, poseBones[i]);
-        int parentIdx = pBoneArray[i].parent;
-        if (parentIdx >= 0 && parentIdx < numBones)
-        {
-            matrix3x4_t temp; MatrixCopy(poseBones[i], temp);
-            ConcatTransforms(poseBones[parentIdx], temp, poseBones[i]);
-        }
+        Vector worldCorner;
+        matModel.V3Mul(corners[i], worldCorner);
+        
+        worldMins.x = std::min(worldMins.x, worldCorner.x);
+        worldMins.y = std::min(worldMins.y, worldCorner.y);
+        worldMins.z = std::min(worldMins.z, worldCorner.z);
+        
+        worldMaxs.x = std::max(worldMaxs.x, worldCorner.x);
+        worldMaxs.y = std::max(worldMaxs.y, worldCorner.y);
+        worldMaxs.z = std::max(worldMaxs.z, worldCorner.z);
     }
-    for (int i = 0; i < numBones; i++)
-    {
-        matrix3x4_t finalBone;
-        ConcatTransforms(matModel3x4, poseBones[i], finalBone);
-        MatrixCopy(finalBone, poseBones[i]);
-    }
-    for (int i = 0; i < numBones; i++)
-    {
-        Vector bonePosModel(poseBones[i].m_flMatVal[0][3], poseBones[i].m_flMatVal[1][3], poseBones[i].m_flMatVal[2][3]);
-        localMins.x = std::min(localMins.x, bonePosModel.x);
-        localMins.y = std::min(localMins.y, bonePosModel.y);
-        localMins.z = std::min(localMins.z, bonePosModel.z);
-        localMaxs.x = std::max(localMaxs.x, bonePosModel.x);
-        localMaxs.y = std::max(localMaxs.y, bonePosModel.y);
-        localMaxs.z = std::max(localMaxs.z, bonePosModel.z);
-    }
-    localMins -= Vector(15.0f, 15.0f, 6.0f);
-    localMaxs += Vector(15.0f, 15.0f, 14.0f);
-    ent.m_vecBBoxMins = localMins;
-    ent.m_vecBBoxMaxs = localMaxs;
+
+    ent.m_vecBBoxMins = worldMins;
+    ent.m_vecBBoxMaxs = worldMaxs;
 }
 
 //-----------------------------------------------------------------------------
 void RenderEntityModel(CEntity& ent, IMatRenderContext *pRenderContext)
 {
-    if (ent.m_iType == ENTITY_PLAYER_START) return;
+    //if (ent.m_iType == ENTITY_PLAYER_START) return;
     if (ent.m_hMdl == MDLHANDLE_INVALID) return;
     studiohdr_t *pStudioHdr = g_pMDLCache->GetStudioHdr(ent.m_hMdl);
     studiohwdata_t *pHardwareData = g_pMDLCache->GetHardwareData(ent.m_hMdl);
