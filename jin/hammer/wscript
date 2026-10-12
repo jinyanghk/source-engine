@@ -32,6 +32,9 @@ def build(bld):
 		'app/FgdManager.cpp',
 		'ui/EditorPanels.cpp',
 		'ui/EntityPalette.cpp',
+		'map/MapDocument.cpp',
+		'map/MapConverter.cpp',
+		'map/VmfIO.cpp',
     ]
 
 	includes = [

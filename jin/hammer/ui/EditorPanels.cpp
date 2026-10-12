@@ -6,6 +6,14 @@
 #include "app/EditorLayout.h"
 #include "scene/SceneGlobals.h"
 
+// 文件顶部
+static void (*s_pfnExportVMF)() = nullptr;
+
+void SetExportVMFHandler(void (*pfn)())
+{
+    s_pfnExportVMF = pfn;
+}
+
 //-----------------------------------------------------------------------------
 void DrawMenuBar()
 {
@@ -13,6 +21,11 @@ void DrawMenuBar()
     {
         if (ImGui::BeginMenu("File"))
         {
+            if (ImGui::MenuItem("Export VMF"))
+            {
+                if (s_pfnExportVMF) s_pfnExportVMF();
+            }
+            ImGui::Separator();
             if (ImGui::MenuItem("Exit")) { /* TODO */ }
             ImGui::EndMenu();
         }

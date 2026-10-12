@@ -49,6 +49,9 @@
 #include "scene/Brush.h"
 #include "app/FgdManager.h"
 #include "ui/EntityPalette.h"
+#include "map/MapConverter.h"
+#include "map/MapDocument.h"
+#include "map/VmfIO.h"
 
 IMaterialSystem *g_pMaterialSystem;
 IFileSystem *g_pFileSystem;
@@ -267,6 +270,16 @@ int CHammerApp::Main()
 
     const Uint8* keystate = SDL_GetKeyboardState(NULL);
     uint32_t lastTicks = SDL_GetTicks();
+
+    auto ExportVMF = []()
+    {
+        MapDocument doc;
+        ConvertEditorToDocument(doc);
+        bool ok = VmfIO::SaveToFile("test.vmf", doc);
+        printf("[VMF] Export %s: test.vmf\n", ok ? "OK" : "FAILED");
+    };
+
+    SetExportVMFHandler(ExportVMF);
 
     while (bRunning)
     {
