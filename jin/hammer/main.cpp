@@ -250,6 +250,7 @@ int CHammerApp::Main()
     float g_flDragStartAngle = 0.0f;
     Vector g_vecDragStartPos;
     QAngle g_angDragStartRot;
+    Vector g_vecFrozenGizmoCenterAtClick;
 
     bool g_bLeftMouseDown = false;
     bool g_bRightMouseDown = false;
@@ -553,8 +554,18 @@ int CHammerApp::Main()
             if (axisLength < 30.0f) axisLength = 30.0f;
 
             Vector axisDirs[3] = { Vector(1,0,0), Vector(0,1,0), Vector(0,0,1) };
-            float ndcX = (g_iMouseX / (float)w) * 2.0f - 1.0f;
-            float ndcY = 1.0f - (g_iMouseY / (float)h) * 2.0f;
+
+            //float ndcX = (g_iMouseX / (float)w) * 2.0f - 1.0f;
+            //float ndcY = 1.0f - (g_iMouseY / (float)h) * 2.0f;
+            // 1. Query the explicit position and size of the current central view space from ImGui
+            ImVec2 canvasMin = ImGui::GetMainViewport()->WorkPos; // Basal offset of your app workspace
+            float localMouseX = (float)g_iMouseX - canvasMin.x;
+            float localMouseY = (float)g_iMouseY - canvasMin.y;
+
+            // 2. Derive true viewport-centric NDC coordinates
+            float ndcX = (localMouseX / (float)w) * 2.0f - 1.0f;
+            float ndcY = 1.0f - (localMouseY / (float)h) * 2.0f;
+
             Vector rayDir = g_camForward - g_camLeft * (ndcX * g_camTanHalfFov * g_camAspect) + g_camUp * (ndcY * g_camTanHalfFov);
             VectorNormalize(rayDir);
             Vector rayOrigin = g_vecEye;
@@ -584,16 +595,23 @@ int CHammerApp::Main()
             // ===== Hover 检测 =====
             if (bGizmoActive)
             {
+                // Create local canvas mouse coordinates by subtracting the ImGui window offset
+                ImVec2 centralWorkPos = ImGui::GetMainViewport()->WorkPos; 
+                float localMouseX = (float)g_iMouseX - centralWorkPos.x;
+                float localMouseY = (float)g_iMouseY - centralWorkPos.y;
+
                 if (!g_bDraggingGizmo && g_bShowGizmo && g_iGizmoMode != GIZMO_NONE)
                 {
                     g_iHoverAxis = -1;
                     float gizmoScreenX, gizmoScreenY;
+                    
                     bool gizmoVisible = WorldToScreen(gizmoCenter, g_vecEye, g_camLeft, g_camUp, g_camForward,
                                                     g_camTanHalfFov, g_camAspect, w, h, gizmoScreenX, gizmoScreenY);
                     if (gizmoVisible)
                     {
-                        float mdx = g_iMouseX - gizmoScreenX;
-                        float mdy = g_iMouseY - gizmoScreenY;
+                        // Use the local viewport mouse position to calculate screenspace proximity
+                        float mdx = localMouseX - gizmoScreenX;
+                        float mdy = localMouseY - gizmoScreenY;
                         float mouseToGizmoSq = mdx * mdx + mdy * mdy;
                         const float MAX_SCREEN_DIST = 3000.0f;
                         if (mouseToGizmoSq < MAX_SCREEN_DIST * MAX_SCREEN_DIST)
@@ -601,7 +619,8 @@ int CHammerApp::Main()
                             if (g_iGizmoMode == GIZMO_TRANSLATE)
                             {
                                 GizmoPick::HandleType htype;
-                                int hitAxis = GizmoPick::Pick(g_iMouseX, g_iMouseY, htype);
+                                // Pass local layout-corrected mouse positions to the offscreen picker
+                                int hitAxis = GizmoPick::Pick((int)localMouseX, (int)localMouseY, htype);
                                 if (hitAxis >= 0 && htype == GizmoPick::HANDLE_TRANSLATE)
                                     g_iHoverAxis = hitAxis;
                                 else
@@ -609,31 +628,13 @@ int CHammerApp::Main()
                             }
                             else if (g_iGizmoMode == GIZMO_ROTATE)
                             {
-                                float tolerance = axisLength * 0.08f;
-                                if (tolerance < 4.0f) tolerance = 4.0f;
-                                float bestDelta = tolerance;
-                                for (int a = 0; a < 3; a++)
-                                {
-                                    Vector normal = axisDirs[a];
-                                    float denom = DotProduct(rayDir, normal);
-                                    if (fabsf(denom) < 0.2f) continue;
-                                    float t = DotProduct(gizmoCenter - rayOrigin, normal) / denom;
-                                    if (t < 0.0f) continue;
-                                    Vector hitPoint = rayOrigin + rayDir * t;
-                                    Vector offset = hitPoint - gizmoCenter;
-                                    Vector u, v;
-                                    switch (a)
-                                    {
-                                    case 0: u = Vector(0,1,0); v = Vector(0,0,1); break;
-                                    case 1: u = Vector(1,0,0); v = Vector(0,0,1); break;
-                                    case 2: u = Vector(1,0,0); v = Vector(0,1,0); break;
-                                    }
-                                    float pu = DotProduct(offset, u);
-                                    float pv = DotProduct(offset, v);
-                                    float d = sqrtf(pu*pu + pv*pv);
-                                    float delta = fabsf(d - axisLength);
-                                    if (delta < bestDelta) { bestDelta = delta; g_iHoverAxis = a; }
-                                }
+                                GizmoPick::HandleType htype;
+                                // ★ CLEAN FIX: Use the offscreen ID buffer for rotation hover too! ★
+                                int hitAxis = GizmoPick::Pick((int)localMouseX, (int)localMouseY, htype);
+                                if (hitAxis >= 0 && htype == GizmoPick::HANDLE_ROTATE)
+                                    g_iHoverAxis = hitAxis;
+                                else
+                                    g_iHoverAxis = -1;
                             }
                         }
                     }
@@ -655,6 +656,10 @@ int CHammerApp::Main()
                 {
                     g_iActiveAxis = g_iHoverAxis;
                     g_bDraggingGizmo = true;
+
+                    // ★ SAVE THE INITIAL GIZMO CENTER PERMANENTLY FOR THE DURATION OF THE DRAG ★
+                    g_vecFrozenGizmoCenterAtClick = gizmoCenter; 
+
                     if (g_iGizmoMode == GIZMO_TRANSLATE)
                     {
                         if (bGizmoOnBrush)
@@ -665,24 +670,14 @@ int CHammerApp::Main()
                         Vector p0 = gizmoCenter;
                         Vector p1 = gizmoCenter + axisDirs[g_iActiveAxis] * axisLength;
                         float sx0, sy0, sx1, sy1;
-                        g_flDragStartWorldT = -1.0f;
-                        if (WorldToScreen(p0, g_vecEye, g_camLeft, g_camUp, g_camForward, g_camTanHalfFov, g_camAspect, w, h, sx0, sy0) &&
-                            WorldToScreen(p1, g_vecEye, g_camLeft, g_camUp, g_camForward, g_camTanHalfFov, g_camAspect, w, h, sx1, sy1))
-                        {
-                            float dx = sx1 - sx0, dy = sy1 - sy0;
-                            float lenSq = dx*dx + dy*dy;
-                            if (lenSq > 1.0f)
-                            {
-                                float t = ((g_iMouseX - sx0) * dx + (g_iMouseY - sy0) * dy) / lenSq;
-                                t = std::max(0.0f, std::min(1.0f, t));
-                                g_flDragStartWorldT = t * axisLength;
-                            }
-                        }
+                        
+                        // Set the negative marker immediately on click
+                        g_flDragStartWorldT = -1.0f; 
                     }
                     else if (g_iGizmoMode == GIZMO_ROTATE)
                     {
-                        g_flDragStartAngle = 0.0f;
-                        RayRingPlaneAngle(rayOrigin, rayDir, gizmoCenter, g_iActiveAxis, g_flDragStartAngle);
+                        g_flDragStartAngle = -1000.0f; // Signal rotation initialization flag
+                        
                         if (bGizmoOnBrush)
                             g_angDragStartRot = g_brushes[g_iSelectedBrush].m_angRot;
                         else
@@ -691,12 +686,17 @@ int CHammerApp::Main()
                 }
                 else
                 {
-                    // 先拾取 entity（优先，因为 entity 通常更小更精确）
+                    // No gizmo axis handle was hovered, perform normal object picking/deselection
+                    ImVec2 canvasMin = ImGui::GetMainViewport()->WorkPos; 
+                    float localMouseX = (float)g_iMouseX - canvasMin.x;
+                    float localMouseY = (float)g_iMouseY - canvasMin.y;
+
+                    // 先拾取 entity
                     int hitEntity = -1;
                     for (int i = (int)g_entities.size() - 1; i >= 0; i--)
                     {
                         if (IsMouseOverEntityBBox(g_entities[i], g_vecEye, g_camLeft, g_camUp, g_camForward,
-                                                g_camTanHalfFov, g_camAspect, w, h, g_iMouseX, g_iMouseY))
+                                                g_camTanHalfFov, g_camAspect, w, h, (int)localMouseX, (int)localMouseY))
                         {
                             hitEntity = i;
                             break;
@@ -715,7 +715,7 @@ int CHammerApp::Main()
                         for (int i = (int)g_brushes.size() - 1; i >= 0; i--)
                         {
                             if (IsMouseOverBrushBBox(g_brushes[i], g_vecEye, g_camLeft, g_camUp, g_camForward,
-                                                    g_camTanHalfFov, g_camAspect, w, h, g_iMouseX, g_iMouseY))
+                                                    g_camTanHalfFov, g_camAspect, w, h, (int)localMouseX, (int)localMouseY))
                             {
                                 hitBrush = i;
                                 break;
@@ -732,8 +732,9 @@ int CHammerApp::Main()
             {
                 if (g_iGizmoMode == GIZMO_TRANSLATE)
                 {
-                    Vector p0 = gizmoCenter;
-                    Vector p1 = gizmoCenter + axisDirs[g_iActiveAxis] * axisLength;
+                    Vector p0 = g_vecFrozenGizmoCenterAtClick; 
+                    Vector p1 = g_vecFrozenGizmoCenterAtClick + axisDirs[g_iActiveAxis] * axisLength;
+                    
                     float sx0, sy0, sx1, sy1;
                     if (WorldToScreen(p0, g_vecEye, g_camLeft, g_camUp, g_camForward, g_camTanHalfFov, g_camAspect, w, h, sx0, sy0) &&
                         WorldToScreen(p1, g_vecEye, g_camLeft, g_camUp, g_camForward, g_camTanHalfFov, g_camAspect, w, h, sx1, sy1))
@@ -742,16 +743,31 @@ int CHammerApp::Main()
                         float lenSq = dx*dx + dy*dy;
                         if (lenSq > 1.0f)
                         {
-                            float t = ((g_iMouseX - sx0) * dx + (g_iMouseY - sy0) * dy) / lenSq;
-                            t = std::max(0.0f, std::min(1.0f, t));
+                            // Calculate displacement metrics using localized canvas positions
+                            // This ensures accuracy when docking panels are active
+                            ImVec2 centralWorkPos = ImGui::GetMainViewport()->WorkPos; 
+                            float localMouseX = (float)g_iMouseX - centralWorkPos.x;
+                            float localMouseY = (float)g_iMouseY - centralWorkPos.y;
+
+                            float t = ((localMouseX - sx0) * dx + (localMouseY - sy0) * dy) / lenSq; 
                             float worldDelta = t * axisLength;
-                            if (g_flDragStartWorldT < 0.0f) g_flDragStartWorldT = worldDelta;
-                            float deltaT = worldDelta - g_flDragStartWorldT;
-                            Vector newPos = g_vecDragStartPos + axisDirs[g_iActiveAxis] * deltaT;
-                            if (bGizmoOnBrush)
-                                g_brushes[g_iSelectedBrush].m_vecPos = newPos;
-                            else
-                                g_entities[g_iSelectedEntity].m_vecPos = newPos;
+                            
+                            // If this is the initial click frame, lock down the anchor value and STOP here.
+                            if (g_flDragStartWorldT < 0.0f) 
+                            {
+                                g_flDragStartWorldT = worldDelta; // Freezes the starting world offset where you clicked
+                            }
+                            else 
+                            {
+                                // Regular dragging frames: calculate displacement relative to the locked baseline
+                                float deltaT = worldDelta - g_flDragStartWorldT;
+                                Vector newPos = g_vecDragStartPos + axisDirs[g_iActiveAxis] * deltaT;
+                                
+                                if (bGizmoOnBrush)
+                                    g_brushes[g_iSelectedBrush].m_vecPos = newPos;
+                                else
+                                    g_entities[g_iSelectedEntity].m_vecPos = newPos;
+                            }
                         }
                     }
                 }
@@ -760,21 +776,40 @@ int CHammerApp::Main()
                     float curAngle = 0.0f;
                     if (RayRingPlaneAngle(rayOrigin, rayDir, gizmoCenter, g_iActiveAxis, curAngle))
                     {
-                        float deltaAngle = curAngle - g_flDragStartAngle;
-                        if (deltaAngle > M_PI) deltaAngle -= 2.0f * M_PI;
-                        if (deltaAngle < -M_PI) deltaAngle += 2.0f * M_PI;
-                        float deltaDeg = deltaAngle * (180.0f / M_PI);
-                        if (bGizmoOnBrush)
+                        if (g_flDragStartAngle < -900.0f)
                         {
-                            if (g_iActiveAxis == 0)      g_brushes[g_iSelectedBrush].m_angRot.x = g_angDragStartRot.x + deltaDeg;
-                            else if (g_iActiveAxis == 1) g_brushes[g_iSelectedBrush].m_angRot.y = g_angDragStartRot.y + deltaDeg;
-                            else                          g_brushes[g_iSelectedBrush].m_angRot.z = g_angDragStartRot.z + deltaDeg;
+                            g_flDragStartAngle = curAngle;
                         }
                         else
                         {
-                            if (g_iActiveAxis == 0)      g_entities[g_iSelectedEntity].m_angRot.x = g_angDragStartRot.x + deltaDeg;
-                            else if (g_iActiveAxis == 1) g_entities[g_iSelectedEntity].m_angRot.y = g_angDragStartRot.y + deltaDeg;
-                            else                          g_entities[g_iSelectedEntity].m_angRot.z = g_angDragStartRot.z + deltaDeg;
+                            float deltaAngle = curAngle - g_flDragStartAngle;
+                            if (deltaAngle > M_PI) deltaAngle -= 2.0f * M_PI;
+                            if (deltaAngle < -M_PI) deltaAngle += 2.0f * M_PI;
+                            float deltaDeg = deltaAngle * (180.0f / M_PI);
+                            
+                            // ★ FIX: Use the correct lower-case engine struct names ★
+                            matrix3x4_t matStart, matDelta, matFinal;
+                            AngleMatrix(g_angDragStartRot, matStart);
+                            
+                            // Generate a clean isolated Delta Matrix tracking ONLY your current drag ring
+                            // In Source, QAngle maps to: x = Pitch, y = Yaw, z = Roll
+                            QAngle angDelta(0, 0, 0);
+                            if (g_iActiveAxis == 0)      angDelta.x = deltaDeg; // Pitch (Red Ring)
+                            else if (g_iActiveAxis == 1) angDelta.y = deltaDeg; // Yaw (Green Ring)
+                            else                          angDelta.z = deltaDeg; // Roll (Blue Ring)
+                            AngleMatrix(angDelta, matDelta);
+                            
+                            // Multiply them to accumulate the true spatial rotation sequence
+                            ConcatTransforms(matDelta, matStart, matFinal);
+                            
+                            // Extract the final corrected Euler angles back to your layout variables
+                            QAngle finalAngles;
+                            MatrixAngles(matFinal, finalAngles);
+                            
+                            if (bGizmoOnBrush)
+                                g_brushes[g_iSelectedBrush].m_angRot = finalAngles;
+                            else
+                                g_entities[g_iSelectedEntity].m_angRot = finalAngles;
                         }
                     }
                 }

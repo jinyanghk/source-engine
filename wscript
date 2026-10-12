@@ -120,7 +120,6 @@ projects={
 		'utils/vtex_launcher',
 		'utils/obj2mdl',
 		'jin/libimgui',
-		'jin/libgizmo',
 		'jin/hammer',
 		'jin/hlmv',
 	],
@@ -217,7 +216,6 @@ projects={
 		'utils/vrad',
 		'utils/obj2mdl',
 		#'jin/libimgui',
-		#'jin/libgizmo',
 		#'jin/hammer',
 	]
 }
