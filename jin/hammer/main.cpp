@@ -397,8 +397,8 @@ int CHammerApp::Main()
                 if (m_camDistance > 3000.0f) m_camDistance = 3000.0f;
             }
         }
-        g_iLastMouseX = g_iMouseX;
-        g_iLastMouseY = g_iMouseY;
+        //g_iLastMouseX = g_iMouseX;
+        //g_iLastMouseY = g_iMouseY;
 
         {
             float rp = m_camPitch * (float)M_PI / 180.0f;
@@ -510,19 +510,64 @@ int CHammerApp::Main()
             glMatrixMode(GL_MODELVIEW);
             glLoadMatrixf(glView);
 
+            // --- REPLACE THIS OLD LOOP ---
+            // glEnable(GL_TEXTURE_2D);
+            // for (size_t i = 0; i < g_brushes.size(); i++)
+            //     DrawBrush(g_brushes[i]);
+            // glDisable(GL_TEXTURE_2D);
+
+            // --- WITH THIS ROTATION-AWARE PASSTHROUGH LOOP ---
             glEnable(GL_TEXTURE_2D);
             for (size_t i = 0; i < g_brushes.size(); i++)
+            {
+                glPushMatrix();
+                
+                // 1. Move the OpenGL coordinate system to the center of the brush
+                glTranslatef(g_brushes[i].m_vecPos.x, g_brushes[i].m_vecPos.y, g_brushes[i].m_vecPos.z);
+                
+                // 2. Apply Euler rotations matching your active gizmo axes (Pitch, Yaw, Roll layout)
+                glRotatef(g_brushes[i].m_angRot.y, 0.0f, 1.0f, 0.0f); // Yaw (Green Ring)
+                glRotatef(g_brushes[i].m_angRot.x, 1.0f, 0.0f, 0.0f); // Pitch (Red Ring)
+                glRotatef(g_brushes[i].m_angRot.z, 0.0f, 0.0f, 1.0f); // Roll (Blue Ring)
+                
+                // 3. Temporarily offset back to local origin so vertices align perfectly
+                glTranslatef(-g_brushes[i].m_vecPos.x, -g_brushes[i].m_vecPos.y, -g_brushes[i].m_vecPos.z);
+                
                 DrawBrush(g_brushes[i]);
+                
+                glPopMatrix();
+            }
             glDisable(GL_TEXTURE_2D);
 
+            // Locate your brush edges loop right below it:
             for (size_t i = 0; i < g_brushes.size(); i++)
+            {
+                glPushMatrix();
+                
+                glTranslatef(g_brushes[i].m_vecPos.x, g_brushes[i].m_vecPos.y, g_brushes[i].m_vecPos.z);
+                glRotatef(g_brushes[i].m_angRot.y, 0.0f, 1.0f, 0.0f);
+                glRotatef(g_brushes[i].m_angRot.x, 1.0f, 0.0f, 0.0f);
+                glRotatef(g_brushes[i].m_angRot.z, 0.0f, 0.0f, 1.0f);
+                glTranslatef(-g_brushes[i].m_vecPos.x, -g_brushes[i].m_vecPos.y, -g_brushes[i].m_vecPos.z);
+                
                 DrawBrushEdges(g_brushes[i]);
+                
+                // Also transform the selection box visualization if it is the active brush
+                if ((int)i == g_iSelectedBrush)
+                {
+                    glDepthMask(GL_FALSE);
+                    DrawBrushBBox(g_brushes[i], true);
+                    glDepthMask(GL_TRUE);
+                }
+                
+                glPopMatrix();
+            }
 
             glDepthMask(GL_FALSE);
             for (size_t i = 0; i < g_entities.size(); i++)
                 DrawEntityBBox(g_entities[i], (int)i == g_iSelectedEntity);
-            for (size_t i = 0; i < g_brushes.size(); i++)
-                DrawBrushBBox(g_brushes[i], (int)i == g_iSelectedBrush);
+            //for (size_t i = 0; i < g_brushes.size(); i++)
+            //    DrawBrushBBox(g_brushes[i], (int)i == g_iSelectedBrush);
             glDepthMask(GL_TRUE);
 
             if (g_bXRayGizmo)
@@ -767,44 +812,41 @@ int CHammerApp::Main()
                 }
                 else if (g_iGizmoMode == GIZMO_ROTATE)
                 {
-                    float curAngle = 0.0f;
-                    if (RayRingPlaneAngle(rayOrigin, rayDir, gizmoCenter, g_iActiveAxis, curAngle))
+                    // 1. Calculate how many pixels the mouse traveled horizontally this frame
+                    int screenDeltaX = g_iMouseX - g_iLastMouseX;
+                    
+                    // 2. Convert pixels to degrees (adjust 0.5f to change mouse sensitivity)
+                    float deltaDeg = (float)screenDeltaX * 0.5f; 
+                    
+                    if (fabsf(deltaDeg) > 0.001f)
                     {
-                        if (g_flDragStartAngle < -900.0f)
-                        {
-                            g_flDragStartAngle = curAngle;
-                        }
+                        matrix3x4_t matStart, matDelta, matFinal;
+                        
+                        // 3. Fetch the object's CURRENT rotation matrix from the engine structures
+                        if (bGizmoOnBrush)
+                            AngleMatrix(g_brushes[g_iSelectedBrush].m_angRot, matStart);
                         else
-                        {
-                            float deltaAngle = curAngle - g_flDragStartAngle;
-                            if (deltaAngle > M_PI) deltaAngle -= 2.0f * M_PI;
-                            if (deltaAngle < -M_PI) deltaAngle += 2.0f * M_PI;
-                            float deltaDeg = deltaAngle * (180.0f / M_PI);
-                            
-                            // ★ FIX: Use the correct lower-case engine struct names ★
-                            matrix3x4_t matStart, matDelta, matFinal;
-                            AngleMatrix(g_angDragStartRot, matStart);
-                            
-                            // Generate a clean isolated Delta Matrix tracking ONLY your current drag ring
-                            // In Source, QAngle maps to: x = Pitch, y = Yaw, z = Roll
-                            QAngle angDelta(0, 0, 0);
-                            if (g_iActiveAxis == 0)      angDelta.x = deltaDeg; // Pitch (Red Ring)
-                            else if (g_iActiveAxis == 1) angDelta.y = deltaDeg; // Yaw (Green Ring)
-                            else                          angDelta.z = deltaDeg; // Roll (Blue Ring)
-                            AngleMatrix(angDelta, matDelta);
-                            
-                            // Multiply them to accumulate the true spatial rotation sequence
-                            ConcatTransforms(matDelta, matStart, matFinal);
-                            
-                            // Extract the final corrected Euler angles back to your layout variables
-                            QAngle finalAngles;
-                            MatrixAngles(matFinal, finalAngles);
-                            
-                            if (bGizmoOnBrush)
-                                g_brushes[g_iSelectedBrush].m_angRot = finalAngles;
-                            else
-                                g_entities[g_iSelectedEntity].m_angRot = finalAngles;
-                        }
+                            AngleMatrix(g_entities[g_iSelectedEntity].m_angRot, matStart);
+                        
+                        // 4. Build a clean isolated Delta Matrix tracking ONLY your current active axis ring
+                        // Source Engine Euler mapping: X = Pitch (Red), Y = Yaw (Green), Z = Roll (Blue)
+                        QAngle angDelta(0, 0, 0);
+                        if (g_iActiveAxis == 0)      angDelta.x = deltaDeg; // Pitch (Red Ring)
+                        else if (g_iActiveAxis == 1) angDelta.y = deltaDeg; // Yaw (Green Ring)
+                        else                          angDelta.z = deltaDeg; // Roll (Blue Ring)
+                        AngleMatrix(angDelta, matDelta);
+                        
+                        // 5. Multiply the matrices together to accumulate the spatial rotation perfectly
+                        ConcatTransforms(matDelta, matStart, matFinal);
+                        
+                        // 6. Extract the final corrected Euler angles back to your layout variables
+                        QAngle finalAngles;
+                        MatrixAngles(matFinal, finalAngles);
+                        
+                        if (bGizmoOnBrush)
+                            g_brushes[g_iSelectedBrush].m_angRot = finalAngles;
+                        else
+                            g_entities[g_iSelectedEntity].m_angRot = finalAngles;
                     }
                 }
             }
@@ -922,6 +964,10 @@ int CHammerApp::Main()
         }
         g_pMaterialSystem->EndFrame();
         g_pMaterialSystem->SwapBuffers();
+
+        // ★ THE FIX: Record the historical mouse position at the VERY END of the frame! ★
+        g_iLastMouseX = g_iMouseX;
+        g_iLastMouseY = g_iMouseY;        
     }
 
     ImGuiLayer::Shutdown();
