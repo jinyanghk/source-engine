@@ -21,6 +21,7 @@ namespace GizmoPick
         HANDLE_NONE      = 0,
         HANDLE_TRANSLATE = 1,
         HANDLE_ROTATE    = 2,
+        HANDLE_SCALE     = 3,   // ★ 新增
     };
 
     // Create / destroy the off-screen buffer. Init must be called once after
@@ -43,6 +44,7 @@ namespace GizmoPick
     // gizmo (same arrow size / orientation / ring radius).
     void DrawPickableTranslateArrow(int axis, const Vector& center, float length);
     void DrawPickableRotateRing(int axis, const Vector& center, float radius, int segments);
+    void DrawPickableScaleHandle(int axis, const Vector& center, float length);
 
     // Decode a mouse pick. Mouse coords are SDL convention (top-left origin,
     // Y grows down). Returns -1 if nothing is under the cursor, otherwise

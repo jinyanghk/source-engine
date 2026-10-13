@@ -17,6 +17,12 @@ void DrawRotationRing(const Vector& center, int axis, float radius, int segments
                       unsigned char r, unsigned char g, unsigned char b);
 
 //-----------------------------------------------------------------------------
+// Draws a scale gizmo (3 axes + small cubes at the ends) centered at 'center'.
+// 'highlightAxis' is -1 for none, 0/1/2 for X/Y/Z highlight.
+//-----------------------------------------------------------------------------
+void DrawScaleGizmo(const Vector& center, float length, int highlightAxis);
+
+//-----------------------------------------------------------------------------
 // Draws the info_player_start placeholder (green capsule + facing arrow).
 //-----------------------------------------------------------------------------
 void DrawPlayerStartModel(const Vector& pos, const QAngle& ang);

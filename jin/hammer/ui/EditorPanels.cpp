@@ -370,7 +370,7 @@ void DrawConsolePanel(const Vector& camTarget, float camDist,
     ImGui::Text("Camera: LMB empty = orbit | RMB/MMB = pan | Wheel = zoom");
     ImGui::Text("        W/A/S/D = fly | Q/E = down/up | Z / Shift+Z = zoom");
     ImGui::Text("        [R] = Reset Camera");
-    ImGui::Text("Gizmo:  1 = Translate | 2 = Rotate | 3 = None");
+    ImGui::Text("Gizmo:  1 = Translate | 2 = Rotate | 3 = None | 4 = Scale");
     ImGui::Separator();
     ImGui::Text("Cam Target: (%.1f, %.1f, %.1f)", camTarget.x, camTarget.y, camTarget.z);
     ImGui::Text("Cam Dist: %.1f", camDist);

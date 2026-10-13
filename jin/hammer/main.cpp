@@ -52,6 +52,7 @@
 #include "map/MapConverter.h"
 #include "map/MapDocument.h"
 #include "map/VmfIO.h"
+#include "gizmo/GizmoDraw.h"   // DrawScaleGizmo
 
 IMaterialSystem *g_pMaterialSystem;
 IFileSystem *g_pFileSystem;
@@ -146,7 +147,7 @@ void CHammerApp::PostShutdown() {}
 
 //-----------------------------------------------------------------------------
 
-enum GizmoMode { GIZMO_NONE = 0, GIZMO_TRANSLATE, GIZMO_ROTATE };
+enum GizmoMode { GIZMO_NONE = 0, GIZMO_TRANSLATE, GIZMO_ROTATE, GIZMO_SCALE };
 
 //-----------------------------------------------------------------------------
 // 执行 shell 命令，返回是否成功
@@ -325,6 +326,7 @@ int CHammerApp::Main()
     Vector g_vecDragStartPos;
     QAngle g_angDragStartRot;
     Vector g_vecFrozenGizmoCenterAtClick;
+    float g_flDragStartSize = 0.0f;   // ★ scale 拖动时保存起始半尺寸
 
     bool g_bLeftMouseDown = false;
     bool g_bRightMouseDown = false;
@@ -393,6 +395,7 @@ int CHammerApp::Main()
                     else if (event.key.keysym.sym == SDLK_1) g_iGizmoMode = GIZMO_TRANSLATE;
                     else if (event.key.keysym.sym == SDLK_2) g_iGizmoMode = GIZMO_ROTATE;
                     else if (event.key.keysym.sym == SDLK_3) g_iGizmoMode = GIZMO_NONE;
+                    else if (event.key.keysym.sym == SDLK_4) g_iGizmoMode = GIZMO_SCALE;
                     else if (event.key.keysym.sym == SDLK_r)
                     {
                         m_camTarget = Vector(0, 0, 40);
@@ -695,7 +698,8 @@ int CHammerApp::Main()
             Vector rayOrigin = g_vecEye;
 
             // ===== 渲染 pick target（离屏 ID 缓冲）=====
-            if (bGizmoActive && g_bShowGizmo && g_iGizmoMode != GIZMO_NONE)
+            if (bGizmoActive && g_bShowGizmo && g_iGizmoMode != GIZMO_NONE
+                && !(g_iGizmoMode == GIZMO_SCALE && !bGizmoOnBrush))   // ★ scale 只对 brush 生效
             {
                 GizmoPick::BeginRender(g_savedProj, g_savedView);
                 if (g_iGizmoMode == GIZMO_TRANSLATE)
@@ -708,6 +712,11 @@ int CHammerApp::Main()
                     for (int a = 0; a < 3; a++)
                         GizmoPick::DrawPickableRotateRing(a, gizmoCenter, axisLength, 64);
                 }
+                else if (g_iGizmoMode == GIZMO_SCALE)
+                {
+                    for (int a = 0; a < 3; a++)
+                        GizmoPick::DrawPickableScaleHandle(a, gizmoCenter, axisLength);
+                }
                 GizmoPick::EndRender();
 
                 glMatrixMode(GL_PROJECTION);
@@ -717,7 +726,7 @@ int CHammerApp::Main()
             }
 
             // ===== Hover 检测 =====
-            if (bGizmoActive)
+            if (bGizmoActive && !(g_iGizmoMode == GIZMO_SCALE && !bGizmoOnBrush))
             {
                 // Create local canvas mouse coordinates by subtracting the ImGui window offset
                 ImVec2 centralWorkPos = ImGui::GetMainViewport()->WorkPos; 
@@ -756,6 +765,15 @@ int CHammerApp::Main()
                                 // ★ CLEAN FIX: Use the offscreen ID buffer for rotation hover too! ★
                                 int hitAxis = GizmoPick::Pick((int)localMouseX, (int)localMouseY, htype);
                                 if (hitAxis >= 0 && htype == GizmoPick::HANDLE_ROTATE)
+                                    g_iHoverAxis = hitAxis;
+                                else
+                                    g_iHoverAxis = -1;
+                            }
+                            else if (g_iGizmoMode == GIZMO_SCALE && bGizmoOnBrush)
+                            {
+                                GizmoPick::HandleType htype;
+                                int hitAxis = GizmoPick::Pick((int)localMouseX, (int)localMouseY, htype);
+                                if (hitAxis >= 0 && htype == GizmoPick::HANDLE_SCALE)
                                     g_iHoverAxis = hitAxis;
                                 else
                                     g_iHoverAxis = -1;
@@ -807,6 +825,16 @@ int CHammerApp::Main()
                         else
                             g_angDragStartRot = g_entities[g_iSelectedEntity].m_angRot;
                     }
+                    else if (g_iGizmoMode == GIZMO_SCALE && bGizmoOnBrush)
+                    {
+                        g_vecDragStartPos = g_brushes[g_iSelectedBrush].m_vecPos;
+
+                        if (g_iActiveAxis == 0)      g_flDragStartSize = g_brushes[g_iSelectedBrush].m_vecSize.x;
+                        else if (g_iActiveAxis == 1) g_flDragStartSize = g_brushes[g_iSelectedBrush].m_vecSize.y;
+                        else                          g_flDragStartSize = g_brushes[g_iSelectedBrush].m_vecSize.z;
+
+                        g_flDragStartWorldT = -1.0f;
+                    }                  
                 }
                 else
                 {
@@ -934,10 +962,44 @@ int CHammerApp::Main()
                             g_entities[g_iSelectedEntity].m_angRot = finalAngles;
                     }
                 }
+                else if (g_iGizmoMode == GIZMO_SCALE && bGizmoOnBrush)
+                {
+                    // 和 translate 一样，用屏幕空间投影算 delta
+                    Vector p0 = g_vecFrozenGizmoCenterAtClick;
+                    Vector p1 = g_vecFrozenGizmoCenterAtClick + axisDirs[g_iActiveAxis] * axisLength;
+
+                    float sx0, sy0, sx1, sy1;
+                    if (WorldToScreen(p0, g_vecEye, g_camLeft, g_camUp, g_camForward, g_camTanHalfFov, g_camAspect, w, h, sx0, sy0) &&
+                        WorldToScreen(p1, g_vecEye, g_camLeft, g_camUp, g_camForward, g_camTanHalfFov, g_camAspect, w, h, sx1, sy1))
+                    {
+                        float dx = sx1 - sx0, dy = sy1 - sy0;
+                        float lenSq = dx*dx + dy*dy;
+                        if (lenSq > 1.0f)
+                        {
+                            ImVec2 centralWorkPos = ImGui::GetMainViewport()->WorkPos;
+                            float localMouseX = (float)g_iMouseX - centralWorkPos.x;
+                            float localMouseY = (float)g_iMouseY - centralWorkPos.y;
+
+                            float t = ((localMouseX - sx0) * dx + (localMouseY - sy0) * dy) / lenSq;
+
+                            if (g_flDragStartWorldT < 0.0f)
+                                g_flDragStartWorldT = t;   // 起始 t
+
+                            float deltaT = t - g_flDragStartWorldT;
+                            float newSize = g_flDragStartSize + deltaT * axisLength * 0.5f;
+                            if (newSize < 1.0f) newSize = 1.0f;   // ★ 防止负数/零
+
+                            if (g_iActiveAxis == 0)      g_brushes[g_iSelectedBrush].m_vecSize.x = newSize;
+                            else if (g_iActiveAxis == 1) g_brushes[g_iSelectedBrush].m_vecSize.y = newSize;
+                            else                          g_brushes[g_iSelectedBrush].m_vecSize.z = newSize;
+                        }
+                    }
+                }                
             }
 
             // ===== 绘制可见 gizmo =====
-            if (bGizmoActive && g_bShowGizmo && g_iGizmoMode != GIZMO_NONE)
+            if (bGizmoActive && g_bShowGizmo && g_iGizmoMode != GIZMO_NONE
+                && !(g_iGizmoMode == GIZMO_SCALE && !bGizmoOnBrush))   // ★ scale 只对 brush
             {
                 int highlightAxis = (g_iActiveAxis >= 0) ? g_iActiveAxis : g_iHoverAxis;
                 if (g_iGizmoMode == GIZMO_TRANSLATE)
@@ -953,6 +1015,10 @@ int CHammerApp::Main()
                     DrawRotationRing(gizmoCenter, 0, axisLength, 64, rX, gX, bX);
                     DrawRotationRing(gizmoCenter, 1, axisLength, 64, rY, gY, bY);
                     DrawRotationRing(gizmoCenter, 2, axisLength, 64, rZ, gZ, bZ);
+                }
+                else if (g_iGizmoMode == GIZMO_SCALE)
+                {
+                    DrawScaleGizmo(gizmoCenter, axisLength, highlightAxis);
                 }
             }
 

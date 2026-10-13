@@ -291,6 +291,73 @@ void DrawPickableRotateRing(int axis, const Vector& center, float radius, int se
 }
 
 //-----------------------------------------------------------------------------
+// Scale pick target：末端一个小方块（cube），不依赖 glLineWidth。
+// 方块的位置在轴末端，半宽 = length * 0.12f。
+//-----------------------------------------------------------------------------
+void DrawPickableScaleHandle(int axis, const Vector& center, float length)
+{
+    if (!s_bInRender) return;
+
+    unsigned char rgb[3];
+    EncodeColor(axis, HANDLE_SCALE, rgb);
+
+    Vector axisDir = (axis == 0) ? Vector(1,0,0)
+                   : (axis == 1) ? Vector(0,1,0)
+                                 : Vector(0,0,1);
+
+    // 方块中心在轴的末端
+    Vector boxCenter = center + axisDir * length;
+
+    // 半宽：让方块足够大，鼠标能点中
+    float halfW = length * 0.10f;
+    if (halfW < 3.0f) halfW = 3.0f;
+
+    Vector u, v;
+    switch (axis)
+    {
+    case 0: u = Vector(0,1,0); v = Vector(0,0,1); break;
+    case 1: u = Vector(1,0,0); v = Vector(0,0,1); break;
+    default: u = Vector(1,0,0); v = Vector(0,1,0); break;
+    }
+
+    // 8 个角点
+    Vector c[8] = {
+        boxCenter + u*halfW + v*halfW + axisDir*halfW,
+        boxCenter + u*halfW + v*halfW - axisDir*halfW,
+        boxCenter + u*halfW - v*halfW + axisDir*halfW,
+        boxCenter + u*halfW - v*halfW - axisDir*halfW,
+        boxCenter - u*halfW + v*halfW + axisDir*halfW,
+        boxCenter - u*halfW + v*halfW - axisDir*halfW,
+        boxCenter - u*halfW - v*halfW + axisDir*halfW,
+        boxCenter - u*halfW - v*halfW - axisDir*halfW,
+    };
+
+    glColor3ub(rgb[0], rgb[1], rgb[2]);
+
+    // 6 个面（每面 2 个三角形）
+    glBegin(GL_TRIANGLES);
+    // +axisDir 面
+    glVertex3f(c[0].x, c[0].y, c[0].z); glVertex3f(c[2].x, c[2].y, c[2].z); glVertex3f(c[6].x, c[6].y, c[6].z);
+    glVertex3f(c[0].x, c[0].y, c[0].z); glVertex3f(c[6].x, c[6].y, c[6].z); glVertex3f(c[4].x, c[4].y, c[4].z);
+    // -axisDir 面
+    glVertex3f(c[1].x, c[1].y, c[1].z); glVertex3f(c[5].x, c[5].y, c[5].z); glVertex3f(c[7].x, c[7].y, c[7].z);
+    glVertex3f(c[1].x, c[1].y, c[1].z); glVertex3f(c[7].x, c[7].y, c[7].z); glVertex3f(c[3].x, c[3].y, c[3].z);
+    // +u 面
+    glVertex3f(c[0].x, c[0].y, c[0].z); glVertex3f(c[4].x, c[4].y, c[4].z); glVertex3f(c[5].x, c[5].y, c[5].z);
+    glVertex3f(c[0].x, c[0].y, c[0].z); glVertex3f(c[5].x, c[5].y, c[5].z); glVertex3f(c[1].x, c[1].y, c[1].z);
+    // -u 面
+    glVertex3f(c[2].x, c[2].y, c[2].z); glVertex3f(c[3].x, c[3].y, c[3].z); glVertex3f(c[7].x, c[7].y, c[7].z);
+    glVertex3f(c[2].x, c[2].y, c[2].z); glVertex3f(c[7].x, c[7].y, c[7].z); glVertex3f(c[6].x, c[6].y, c[6].z);
+    // +v 面
+    glVertex3f(c[0].x, c[0].y, c[0].z); glVertex3f(c[1].x, c[1].y, c[1].z); glVertex3f(c[3].x, c[3].y, c[3].z);
+    glVertex3f(c[0].x, c[0].y, c[0].z); glVertex3f(c[3].x, c[3].y, c[3].z); glVertex3f(c[2].x, c[2].y, c[2].z);
+    // -v 面
+    glVertex3f(c[4].x, c[4].y, c[4].z); glVertex3f(c[6].x, c[6].y, c[6].z); glVertex3f(c[7].x, c[7].y, c[7].z);
+    glVertex3f(c[4].x, c[4].y, c[4].z); glVertex3f(c[7].x, c[7].y, c[7].z); glVertex3f(c[5].x, c[5].y, c[5].z);
+    glEnd();
+}
+
+//-----------------------------------------------------------------------------
 int Pick(int mouseX, int mouseY, HandleType& outType)
 {
     outType = HANDLE_NONE;
