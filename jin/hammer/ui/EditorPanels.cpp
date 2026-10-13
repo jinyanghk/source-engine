@@ -2,6 +2,7 @@
 
 #include "ui/EditorPanels.h"
 #include "render/MaterialList.h"
+#include "app/CompileSettings.h"
 
 #include "imgui.h"
 #include "app/EditorLayout.h"
@@ -37,7 +38,11 @@ void DrawMenuBar()
             if (ImGui::MenuItem("Compile & Run"))
             {
                 if (s_pfnCompileAndRun) s_pfnCompileAndRun();
-            }            
+            }
+            if (ImGui::MenuItem("Compile Options..."))
+            {
+                OpenCompileOptionsWindow();
+            }                  
             ImGui::Separator();
             if (ImGui::MenuItem("Exit")) { /* TODO */ }
             ImGui::EndMenu();
@@ -412,4 +417,52 @@ void DrawViewportPanel()
     // 什么都不画。PassthruCentralNode 让 3D 透出来。
     ImGui::End();
     ImGui::PopStyleVar();
+}
+
+//-----------------------------------------------------------------------------
+// 编译配置窗口
+//-----------------------------------------------------------------------------
+static bool s_bCompileOptionsOpen = false;
+
+void OpenCompileOptionsWindow()
+{
+    s_bCompileOptionsOpen = true;
+}
+
+void DrawCompileOptionsWindow()
+{
+    if (!s_bCompileOptionsOpen) return;
+
+    ImGui::SetNextWindowSize(ImVec2(480, 360), ImGuiCond_FirstUseEver);
+    if (ImGui::Begin("Compile Options", &s_bCompileOptionsOpen))
+    {
+        ImGui::InputText("Map Name", g_compileSettings.mapName, sizeof(g_compileSettings.mapName));
+        ImGui::InputText("Game Dir", g_compileSettings.gameDir, sizeof(g_compileSettings.gameDir));
+
+        ImGui::Separator();
+
+        ImGui::Checkbox("Run VBSP", &g_compileSettings.bRunVbsp);
+        ImGui::Checkbox("Run VVIS", &g_compileSettings.bRunVvis);
+        ImGui::Checkbox("Run VRAD", &g_compileSettings.bRunVrad);
+        ImGui::Checkbox("Copy BSP to maps/", &g_compileSettings.bCopyToMaps);
+        ImGui::Checkbox("Launch game", &g_compileSettings.bLaunchGame);
+
+        ImGui::Separator();
+        ImGui::Text("Extra Args:");
+
+        ImGui::InputText("VBSP args", g_compileSettings.vbspArgs, sizeof(g_compileSettings.vbspArgs));
+        ImGui::InputText("VVIS args", g_compileSettings.vvisArgs, sizeof(g_compileSettings.vvisArgs));
+        ImGui::InputText("VRAD args", g_compileSettings.vradArgs, sizeof(g_compileSettings.vradArgs));
+
+        ImGui::Separator();
+
+        if (ImGui::Button("Compile & Run"))
+        {
+            if (s_pfnCompileAndRun) s_pfnCompileAndRun();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Close"))
+            s_bCompileOptionsOpen = false;
+    }
+    ImGui::End();
 }

@@ -54,6 +54,7 @@
 #include "map/VmfIO.h"
 #include "gizmo/GizmoDraw.h"   // DrawScaleGizmo
 #include "render/MaterialList.h"
+#include "app/CompileSettings.h"
 
 IMaterialSystem *g_pMaterialSystem;
 IFileSystem *g_pFileSystem;
@@ -169,33 +170,68 @@ static bool RunCommand(const char* cmd)
 //-----------------------------------------------------------------------------
 static void CompileAndRun()
 {
+    char cmd[1024];
+    const char* mapName = g_compileSettings.mapName;
+    const char* gameDir = g_compileSettings.gameDir;
+
+    // VMF / BSP 用地图名命名
+    char vmfPath[128];
+    char bspPath[128];
+    snprintf(vmfPath, sizeof(vmfPath), "%s.vmf", mapName);
+    snprintf(bspPath, sizeof(bspPath), "%s.bsp", mapName);
+
     // 1. 导出 VMF
     MapDocument doc;
     ConvertEditorToDocument(doc);
-    if (!VmfIO::SaveToFile("test.vmf", doc))
+    if (!VmfIO::SaveToFile(vmfPath, doc))
     {
         printf("[COMPILE] VMF export FAILED\n");
         return;
     }
-    printf("[COMPILE] VMF export OK\n");
+    printf("[COMPILE] VMF export OK: %s\n", vmfPath);
 
     // 2. VBSP
-    if (!RunCommand("./vbsp -game hl2 test.vmf")) { printf("[COMPILE] VBSP FAILED\n"); return; }
+    if (g_compileSettings.bRunVbsp)
+    {
+        snprintf(cmd, sizeof(cmd), "./vbsp -game %s %s %s",
+                 gameDir, g_compileSettings.vbspArgs, vmfPath);
+        if (!RunCommand(cmd)) { printf("[COMPILE] VBSP FAILED\n"); return; }
+    }
 
     // 3. VVIS
-    if (!RunCommand("./vvis -game hl2 test.bsp")) { printf("[COMPILE] VVIS FAILED\n"); return; }
+    if (g_compileSettings.bRunVvis)
+    {
+        snprintf(cmd, sizeof(cmd), "./vvis -game %s %s %s",
+                 gameDir, g_compileSettings.vvisArgs, bspPath);
+        if (!RunCommand(cmd)) { printf("[COMPILE] VVIS FAILED\n"); return; }
+    }
 
     // 4. VRAD
-    if (!RunCommand("./vrad -game hl2 test.bsp")) { printf("[COMPILE] VRAD FAILED\n"); return; }
+    if (g_compileSettings.bRunVrad)
+    {
+        snprintf(cmd, sizeof(cmd), "./vrad -game %s %s %s",
+                 gameDir, g_compileSettings.vradArgs, bspPath);
+        if (!RunCommand(cmd)) { printf("[COMPILE] VRAD FAILED\n"); return; }
+    }
 
-    // 5. 复制 BSP 到游戏目录
-    if (!RunCommand("cp test.bsp hl2/maps/test.bsp")) { printf("[COMPILE] cp FAILED\n"); return; }
+    // 5. 复制 BSP 到 maps/
+    if (g_compileSettings.bCopyToMaps)
+    {
+        snprintf(cmd, sizeof(cmd), "cp %s %s/maps/%s", bspPath, gameDir, bspPath);
+        if (!RunCommand(cmd)) { printf("[COMPILE] cp FAILED\n"); return; }
+    }
 
     // 6. 启动 HL2
-    RunCommand("./hl2_launcher -game hl2 -console +map test");
+    if (g_compileSettings.bLaunchGame)
+    {
+        snprintf(cmd, sizeof(cmd), "./hl2_launcher -game %s -console +map %s",
+                 gameDir, mapName);
+        RunCommand(cmd);
+    }
 
     printf("[COMPILE] Done.\n");
 }
+
 //-----------------------------------------------------------------------------
 
 int CHammerApp::Main()
@@ -354,8 +390,10 @@ int CHammerApp::Main()
     {
         MapDocument doc;
         ConvertEditorToDocument(doc);
-        bool ok = VmfIO::SaveToFile("test.vmf", doc);
-        printf("[VMF] Export %s: test.vmf\n", ok ? "OK" : "FAILED");
+        char vmfPath[128];
+        snprintf(vmfPath, sizeof(vmfPath), "%s.vmf", g_compileSettings.mapName);
+        bool ok = VmfIO::SaveToFile(vmfPath, doc);
+        printf("[VMF] Export %s: %s\n", ok ? "OK" : "FAILED", vmfPath);
     };
 
     SetExportVMFHandler(ExportVMF);
@@ -1035,6 +1073,7 @@ int CHammerApp::Main()
 
             std::string newClassFromPalette;
             DrawEntityPalette(newClassFromPalette);
+            DrawCompileOptionsWindow();
 
             if (!newClassFromPalette.empty())
             {
