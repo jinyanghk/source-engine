@@ -895,13 +895,6 @@ int CHammerApp::Main()
             if (!newClassFromPalette.empty())
             {
                 std::string modelPath = FgdManager::Instance().GetModelPathForClass(newClassFromPalette);
-                
-                // --- VALVE FIX: If it's a player start and has no model, fall back to the engine's editor model helper ---
-                if (newClassFromPalette == "info_player_start" && modelPath.empty())
-                {
-                    modelPath = "models/editor/playerstart.mdl";
-                }
-
                 printf("[Palette] selected class='%s' model='%s'\n",
                     newClassFromPalette.c_str(), modelPath.c_str());
 

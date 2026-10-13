@@ -5,6 +5,8 @@
 #include "imgui.h"
 #include "app/EditorLayout.h"
 #include "scene/SceneGlobals.h"
+#include "app/FgdManager.h"
+#include "fgdlib/gdvar.h"   // GDIV_TYPE 枚举
 
 // 文件顶部
 static void (*s_pfnExportVMF)() = nullptr;
@@ -91,9 +93,11 @@ void DrawSelectionPanel(CEntity* entities, int entityCount, int* pSelectedEntity
                 CEntity& sel = entities[*pSelectedEntity];
                 ImGui::Text("Selected: %s", sel.m_szName.c_str());
                 ImGui::Separator();
+
                 ImGui::SliderFloat("Pos X", &sel.m_vecPos.x, -512.0f, 512.0f, "%.2f");
                 ImGui::SliderFloat("Pos Y", &sel.m_vecPos.y, -512.0f, 512.0f, "%.2f");
                 ImGui::SliderFloat("Pos Z", &sel.m_vecPos.z, -128.0f, 256.0f, "%.2f");
+
                 ImGui::Separator();
                 if (sel.m_iType == ENTITY_PLAYER_START)
                 {
@@ -105,7 +109,162 @@ void DrawSelectionPanel(CEntity* entities, int entityCount, int* pSelectedEntity
                     ImGui::SliderFloat("Yaw",   &sel.m_angRot.y, -180.0f, 180.0f, "%.1f");
                     ImGui::SliderFloat("Roll",  &sel.m_angRot.z, -180.0f, 180.0f, "%.1f");
                 }
+
+                // ★★★ Properties 区（在 if 块内，sel 有效）★★★
+                ImGui::Separator();
+                ImGui::Text("Properties:");
+
+                std::vector<FgdKeyValue> kvList;
+                if (FgdManager::Instance().GetKeyValuesForClass(sel.m_szName, kvList))
+                {
+                    for (const auto& kv : kvList)
+                    {
+                        ImGui::PushID(kv.name.c_str());
+
+                        // 当前值：优先用 m_properties，否则用默认值
+                        std::string curValue;
+                        auto it = sel.m_properties.find(kv.name);
+                        if (it != sel.m_properties.end())
+                            curValue = it->second;
+                        else
+                            curValue = kv.defaultValue;
+
+                        // 显示名（如果 FGD 没给，用 key 名）
+                        std::string label = kv.displayName.empty() ? kv.name : kv.displayName;
+
+                        switch ((GDIV_TYPE)kv.type)
+                        {
+                        case ivString:
+                        case ivTargetDest:
+                        case ivTargetNameOrClass:
+                        case ivTargetSrc:
+                        case ivStudioModel:
+                        case ivSprite:
+                        case ivSound:
+                        case ivMaterial:
+                        case ivDecal:
+                        case ivScene:
+                        case ivInstanceFile:
+                        case ivPointEntityClass:
+                        case ivNodeDest:
+                        {
+                            char buf[512];
+                            strncpy(buf, curValue.c_str(), sizeof(buf) - 1);
+                            buf[sizeof(buf) - 1] = '\0';
+                            if (ImGui::InputText(label.c_str(), buf, sizeof(buf)))
+                                sel.m_properties[kv.name] = buf;
+                            break;
+                        }
+                        case ivInteger:
+                        {
+                            int v = atoi(curValue.c_str());
+                            if (ImGui::InputInt(label.c_str(), &v))
+                                sel.m_properties[kv.name] = std::to_string(v);
+                            break;
+                        }
+                        case ivFloat:
+                        case ivAngle:
+                        case ivAngleNegativePitch:
+                        {
+                            float v = (float)atof(curValue.c_str());
+                            if (ImGui::InputFloat(label.c_str(), &v, 1.0f, 10.0f, "%.2f"))
+                            {
+                                char buf[64];
+                                snprintf(buf, sizeof(buf), "%.2f", v);
+                                sel.m_properties[kv.name] = buf;
+                            }
+                            break;
+                        }
+                        case ivChoices:
+                        {
+                            int curIdx = 0;
+                            for (size_t ci = 0; ci < kv.choices.size(); ++ci)
+                            {
+                                if (kv.choices[ci].value == curValue) { curIdx = (int)ci; break; }
+                            }
+                            std::vector<const char*> captions;
+                            for (const auto& ch : kv.choices) captions.push_back(ch.caption.c_str());
+
+                            if (!captions.empty())
+                            {
+                                if (ImGui::Combo(label.c_str(), &curIdx, captions.data(), (int)captions.size()))
+                                    sel.m_properties[kv.name] = kv.choices[curIdx].value;
+                            }
+                            break;
+                        }
+                        case ivFlags:
+                        {
+                            unsigned long curFlags = (unsigned long)strtoul(curValue.c_str(), nullptr, 10);
+                            unsigned long newFlags = curFlags;
+                            bool changed = false;
+                            for (size_t fi = 0; fi < kv.choices.size(); ++fi)
+                            {
+                                bool bSet = (curFlags & kv.flagMasks[fi]) != 0;
+                                if (ImGui::Checkbox(kv.choices[fi].caption.c_str(), &bSet))
+                                {
+                                    if (bSet) newFlags |= kv.flagMasks[fi];
+                                    else      newFlags &= ~kv.flagMasks[fi];
+                                    changed = true;
+                                }
+                            }
+                            if (changed)
+                                sel.m_properties[kv.name] = std::to_string(newFlags);
+                            break;
+                        }
+                        case ivColor255:
+                        case ivColor1:
+                        {
+                            int r = 255, g = 255, b = 255;
+                            sscanf(curValue.c_str(), "%d %d %d", &r, &g, &b);
+                            float col[3] = { r / 255.0f, g / 255.0f, b / 255.0f };
+                            if (ImGui::ColorEdit3(label.c_str(), col))
+                            {
+                                char buf[64];
+                                snprintf(buf, sizeof(buf), "%d %d %d",
+                                        (int)(col[0] * 255), (int)(col[1] * 255), (int)(col[2] * 255));
+                                sel.m_properties[kv.name] = buf;
+                            }
+                            break;
+                        }
+                        case ivVector:
+                        case ivOrigin:
+                        case ivVecLine:
+                        {
+                            float x = 0, y = 0, z = 0;
+                            sscanf(curValue.c_str(), "%f %f %f", &x, &y, &z);
+                            float vec[3] = { x, y, z };
+                            if (ImGui::InputFloat3(label.c_str(), vec, "%.2f"))
+                            {
+                                char buf[128];
+                                snprintf(buf, sizeof(buf), "%.2f %.2f %.2f", vec[0], vec[1], vec[2]);
+                                sel.m_properties[kv.name] = buf;
+                            }
+                            break;
+                        }
+                        default:
+                        {
+                            char buf[512];
+                            strncpy(buf, curValue.c_str(), sizeof(buf) - 1);
+                            buf[sizeof(buf) - 1] = '\0';
+                            if (ImGui::InputText(label.c_str(), buf, sizeof(buf)))
+                                sel.m_properties[kv.name] = buf;
+                            break;
+                        }
+                        }
+
+                        // 鼠标悬停显示描述
+                        if (!kv.description.empty() && ImGui::IsItemHovered())
+                            ImGui::SetTooltip("%s", kv.description.c_str());
+
+                        ImGui::PopID();
+                    }
+                }
+                else
+                {
+                    ImGui::TextDisabled("(no FGD data)");
+                }
             }
+
             ImGui::EndTabItem();
         }
 
@@ -153,9 +312,6 @@ void DrawSelectionPanel(CEntity* entities, int entityCount, int* pSelectedEntity
 
             if (*pSelectedBrush >= 0 && *pSelectedBrush < brushCount)
             {
-                // 注意：brushes 是 const，不能直接改。属性编辑通过 const_cast 或
-                // 让 main.cpp 也拿指针。这里为了简单，直接用 const_cast —— 因为
-                // 面板本身的职责就是"编辑"，传 const 只是为了让接口明确"面板不增删"。
                 CBrush& b = const_cast<CBrush&>(brushes[*pSelectedBrush]);
 
                 ImGui::Text("Brush #%d", *pSelectedBrush);

@@ -2,6 +2,7 @@
 #define SCENE_ENTITY_H
 
 #include <string>
+#include <map>          // ★ 新增
 
 #include "mathlib/vector.h"
 #include "datacache/imdlcache.h"
@@ -17,6 +18,7 @@ struct CEntity
     QAngle       m_angRot;
     Vector       m_vecBBoxMins;
     Vector       m_vecBBoxMaxs;
+    std::map<std::string, std::string> m_properties;   // ★ 新增
 
     CEntity()
         : m_iType(ENTITY_MODEL)

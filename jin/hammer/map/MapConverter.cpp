@@ -146,6 +146,14 @@ void ConvertEditorToDocument(MapDocument& doc)
                      e.m_angRot.x, e.m_angRot.y, e.m_angRot.z);
             ent.properties.push_back({"angles", buf});
         }
+        
+        // 把 CEntity 的通用 keyvalue 写进 VMF
+        for (const auto& kv : e.m_properties) {
+            // 跳过已经处理过的
+            if (kv.first == "origin" || kv.first == "classname" || kv.first == "angles")
+                continue;
+            ent.properties.push_back({kv.first, kv.second});
+        }
 
         doc.AddEntity(ent);
     }

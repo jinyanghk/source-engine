@@ -23,6 +23,23 @@ struct FgdEntityTemplate {
     unsigned char b = 0;
 };
 
+// ★ 新增：keyvalue 描述
+struct FgdKeyValue {
+    std::string name;           // "targetname"
+    std::string displayName;    // "Name"
+    std::string description;
+    std::string defaultValue;   // 默认值（字符串形式）
+    int         type = 0;       // GDIV_TYPE 枚举值
+    bool        readOnly = false;
+
+    // choices / flags 的选项：(value, caption)
+    struct Choice { std::string value; std::string caption; };
+    std::vector<Choice> choices;
+
+    // flags 的 mask（仅 ivFlags 类型用）
+    std::vector<unsigned long> flagMasks;
+};
+
 class FgdManager {
 public:
     // Singleton entry reference accessor
@@ -35,6 +52,10 @@ public:
     std::vector<std::string> GetAvailablePointClasses() const;
     bool FindTemplate(const std::string& classname, FgdEntityTemplate& outTemplate) const;
     std::string GetModelPathForClass(const std::string& classname) const;
+
+    // ★ 新增：拿某个 class 的所有 keyvalue 定义
+    bool GetKeyValuesForClass(const std::string& classname,
+                              std::vector<FgdKeyValue>& out) const;
 
 private:
     FgdManager();

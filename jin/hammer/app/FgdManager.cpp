@@ -9,6 +9,7 @@
 #include "fgdlib/gdclass.h"
 #include "fgdlib/gdvar.h"       // GDinputvariable
 #include "fgdlib/helperinfo.h"  // CHelperInfo
+#include "fgdlib/gdvar.h"
 
 //-----------------------------------------------------------------------------
 FgdManager& FgdManager::Instance() {
@@ -205,4 +206,71 @@ std::string FgdManager::GetModelPathForClass(const std::string& classname) const
     }
     fflush(stdout);
     return result;
+}
+
+//-----------------------------------------------------------------------------
+// 把 GDinputvariable 的类型转成 FgdKeyValue
+//-----------------------------------------------------------------------------
+bool FgdManager::GetKeyValuesForClass(const std::string& classname,
+                                      std::vector<FgdKeyValue>& out) const
+{
+    out.clear();
+    if (!m_pGameData) return false;
+
+    GDclass* pClass = m_pGameData->ClassForName(classname.c_str());
+    if (!pClass) return false;
+
+    int varCount = pClass->GetVariableCount();
+    for (int i = 0; i < varCount; ++i)
+    {
+        GDinputvariable* pVar = pClass->GetVariableAt(i);
+        if (!pVar) continue;
+
+        FgdKeyValue kv;
+        kv.name = pVar->GetName() ? pVar->GetName() : "";
+        kv.displayName = pVar->GetLongName() ? pVar->GetLongName() : kv.name;
+        kv.description = pVar->GetDescription() ? pVar->GetDescription() : "";
+        kv.type = (int)pVar->GetType();
+        kv.readOnly = pVar->IsReadOnly() ? true : false;
+
+        // 默认值
+        char defaultBuf[MAX_STRING];
+        defaultBuf[0] = '\0';
+        pVar->GetDefault(defaultBuf);
+        kv.defaultValue = defaultBuf;
+
+        // choices / flags
+        if (pVar->GetType() == ivChoices)
+        {
+            int n = pVar->GetChoiceCount();
+            for (int c = 0; c < n; ++c)
+            {
+                const char* caption = pVar->GetChoiceCaption(c);
+                if (!caption) continue;
+                const char* value = pVar->ItemValueForString(caption);
+                FgdKeyValue::Choice ch;
+                ch.value = value ? value : caption;
+                ch.caption = caption;
+                kv.choices.push_back(ch);
+            }
+        }
+        else if (pVar->GetType() == ivFlags)
+        {
+            int n = pVar->GetFlagCount();
+            for (int c = 0; c < n; ++c)
+            {
+                const char* caption = pVar->GetFlagCaption(c);
+                unsigned long mask = (unsigned long)pVar->GetFlagMask(c);
+                FgdKeyValue::Choice ch;
+                ch.value = std::to_string(mask);
+                ch.caption = caption ? caption : "";
+                kv.choices.push_back(ch);
+                kv.flagMasks.push_back(mask);
+            }
+        }
+
+        out.push_back(kv);
+    }
+
+    return true;
 }
