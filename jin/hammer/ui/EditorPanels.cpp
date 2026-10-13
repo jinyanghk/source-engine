@@ -3,6 +3,7 @@
 #include "ui/EditorPanels.h"
 #include "render/MaterialList.h"
 #include "app/CompileSettings.h"
+#include "render/MaterialPreview.h"
 
 #include "imgui.h"
 #include "app/EditorLayout.h"
@@ -352,15 +353,35 @@ void DrawSelectionPanel(CEntity* entities, int entityCount, int* pSelectedEntity
                 if (ImGui::BeginCombo("##MaterialCombo", "Select..."))
                 {
                     auto filtered = MaterialList::Instance().Filter(s_materialFilter, 200);
-                    for (const auto& mat : filtered)
+                    
+                    ImGuiListClipper clipper;
+                    clipper.Begin((int)filtered.size(), ImGui::GetTextLineHeightWithSpacing() + 32);
+                    while (clipper.Step())
                     {
-                        bool bSelected = (mat == b.m_szMaterial);
-                        if (ImGui::Selectable(mat.c_str(), bSelected))
-                            b.m_szMaterial = mat;
-                        if (bSelected) ImGui::SetItemDefaultFocus();
+                        for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
+                        {
+                            const auto& mat = filtered[i];
+                            ImGui::PushID(i);
+                            
+                            GLuint tex = MaterialPreview::Instance().GetPreviewTexture(mat);
+                            if (tex) {
+                                ImGui::Image((ImTextureID)(intptr_t)tex, ImVec2(32, 32));
+                                ImGui::SameLine();
+                            } else {
+                                ImGui::Dummy(ImVec2(32, 32));
+                                ImGui::SameLine();
+                            }
+                            
+                            bool bSelected = (mat == b.m_szMaterial);
+                            if (ImGui::Selectable(mat.c_str(), bSelected, 0, ImVec2(0, 32)))
+                                b.m_szMaterial = mat;
+                            if (bSelected) ImGui::SetItemDefaultFocus();
+                            
+                            ImGui::PopID();
+                        }
                     }
-                    if (filtered.empty())
-                        ImGui::TextDisabled("(no matches)");
+                    clipper.End();
+                    
                     ImGui::EndCombo();
                 }
 

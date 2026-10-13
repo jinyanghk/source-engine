@@ -56,10 +56,10 @@
 #include "render/MaterialList.h"
 #include "app/CompileSettings.h"
 
-IMaterialSystem *g_pMaterialSystem;
+extern IMaterialSystem *g_pMaterialSystem;
 IFileSystem *g_pFileSystem;
 IDataCache *g_pDataCache;
-IInputSystem *g_pInputSystem;
+extern IInputSystem *g_pInputSystem;
 IStudioRender *g_pStudioRender;
 IMDLCache *g_pMDLCache;
 
