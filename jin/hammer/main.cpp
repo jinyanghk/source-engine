@@ -53,6 +53,7 @@
 #include "map/MapDocument.h"
 #include "map/VmfIO.h"
 #include "gizmo/GizmoDraw.h"   // DrawScaleGizmo
+#include "render/MaterialList.h"
 
 IMaterialSystem *g_pMaterialSystem;
 IFileSystem *g_pFileSystem;
@@ -249,6 +250,11 @@ int CHammerApp::Main()
     if (!FgdManager::Instance().LoadFgdFile("halflife2.fgd"))
     {
         Warning("[HAMMER] Failed to load halflife2.fgd — Entity Palette will be empty.\n");
+    }
+
+    if (!MaterialList::Instance().LoadFromFile("materials.txt"))
+    {
+        Warning("[HAMMER] Failed to load materials.txt\n");
     }
 
     GizmoPick::Init(w, h);

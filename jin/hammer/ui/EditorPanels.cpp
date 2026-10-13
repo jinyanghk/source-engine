@@ -1,6 +1,7 @@
 #include <cstdio>
 
 #include "ui/EditorPanels.h"
+#include "render/MaterialList.h"
 
 #include "imgui.h"
 #include "app/EditorLayout.h"
@@ -337,11 +338,26 @@ void DrawSelectionPanel(CEntity* entities, int entityCount, int* pSelectedEntity
                 ImGui::SliderFloat("SY", &b.m_vecSize.y, 1.0f, 512.0f, "%.1f");
                 ImGui::SliderFloat("SZ", &b.m_vecSize.z, 1.0f, 512.0f, "%.1f");
 
-                ImGui::Text("Texture");
-                int texId = b.m_iTexId;
-                const char* texNames[] = {"Checker", "Brick", "Floor"};
-                if (ImGui::Combo("TexId", &texId, texNames, 3))
-                    b.m_iTexId = texId;
+                ImGui::Text("Material:");
+                ImGui::TextWrapped("%s", b.m_szMaterial.c_str());
+
+                static char s_materialFilter[64] = "";
+                ImGui::InputText("Filter##mat", s_materialFilter, sizeof(s_materialFilter));
+
+                if (ImGui::BeginCombo("##MaterialCombo", "Select..."))
+                {
+                    auto filtered = MaterialList::Instance().Filter(s_materialFilter, 200);
+                    for (const auto& mat : filtered)
+                    {
+                        bool bSelected = (mat == b.m_szMaterial);
+                        if (ImGui::Selectable(mat.c_str(), bSelected))
+                            b.m_szMaterial = mat;
+                        if (bSelected) ImGui::SetItemDefaultFocus();
+                    }
+                    if (filtered.empty())
+                        ImGui::TextDisabled("(no matches)");
+                    ImGui::EndCombo();
+                }
 
                 ImGui::Separator();
                 if (ImGui::Button("Deselect"))

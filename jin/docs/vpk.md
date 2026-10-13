@@ -53,6 +53,10 @@ Options:
          Align files within chunk on n-byte boundary.  Default is 1.
 ```
 
+```sh
+LD_LIBRARY_PATH=bin:$LD_LIBRARY_PATH ./vpk l hl2/hl2_misc.vpk | grep "\.vmt$" > materials.txt
+```
+
 #### openssl
 
 openssl version does not work, there're a few undefined variables not found anywhere

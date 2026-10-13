@@ -8,25 +8,13 @@
 
 #include <cstdio>
 
-// 贴图 ID → VMF material 路径
-static const char* TexIdToMaterial(int texId)
-{
-    switch (texId)
-    {
-    case 0: return "DEV/DEV_MEASUREGENERIC01";   // Checker
-    case 1: return "BRICK/BRICKWALL001A";         // Brick
-    case 2: return "CONCRETE/CONCRETEFLOOR001A";  // Floor
-    default: return "DEV/DEV_MEASUREGENERIC01";
-    }
-}
-
 // VMF 约定：每个面 3 个平面点，逆时针 = 法线朝外
 // 顺序来自 Valve 官方 hammer 导出的轴对齐 brush 模板
 static void BuildAABBFaces(const CBrush& b, VmfSolid& solid, int& nextFaceId)
 {
     Vector mins = b.m_vecPos - b.m_vecSize;
     Vector maxs = b.m_vecPos + b.m_vecSize;
-    const char* mat = TexIdToMaterial(b.m_iTexId);
+    const char* mat = b.m_szMaterial.c_str();
 
     // 每个面 3 个点：p0, p1, p2
     struct FaceDef {
