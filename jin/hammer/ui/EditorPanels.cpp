@@ -10,10 +10,16 @@
 
 // 文件顶部
 static void (*s_pfnExportVMF)() = nullptr;
+static void (*s_pfnCompileAndRun)() = nullptr;
 
 void SetExportVMFHandler(void (*pfn)())
 {
     s_pfnExportVMF = pfn;
+}
+
+void SetCompileAndRunHandler(void (*pfn)())
+{
+    s_pfnCompileAndRun = pfn;
 }
 
 //-----------------------------------------------------------------------------
@@ -27,6 +33,10 @@ void DrawMenuBar()
             {
                 if (s_pfnExportVMF) s_pfnExportVMF();
             }
+            if (ImGui::MenuItem("Compile & Run"))
+            {
+                if (s_pfnCompileAndRun) s_pfnCompileAndRun();
+            }            
             ImGui::Separator();
             if (ImGui::MenuItem("Exit")) { /* TODO */ }
             ImGui::EndMenu();

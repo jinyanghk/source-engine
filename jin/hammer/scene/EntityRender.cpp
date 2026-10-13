@@ -1,4 +1,5 @@
 #include "scene/EntityRender.h"
+#include "app/FgdManager.h"
 
 #include <cstring>
 #include "mathlib/mathlib.h"
@@ -25,7 +26,25 @@ void UpdateEntityBBox(CEntity& ent)
 {
     // --- REMOVED THE HARDCODED ENTITY_PLAYER_START CHECKS ENTIRELY ---
     
-    if (ent.m_hMdl == MDLHANDLE_INVALID) return;
+    if (ent.m_hMdl == MDLHANDLE_INVALID)
+    {
+        // 没有模型，用 FGD 的 bbox
+        FgdEntityTemplate tmpl;
+        if (FgdManager::Instance().FindTemplate(ent.m_szName, tmpl))
+        {
+            Vector mins(tmpl.mins[0], tmpl.mins[1], tmpl.mins[2]);
+            Vector maxs(tmpl.maxs[0], tmpl.maxs[1], tmpl.maxs[2]);
+            ent.m_vecBBoxMins = ent.m_vecPos + mins;
+            ent.m_vecBBoxMaxs = ent.m_vecPos + maxs;
+        }
+        else
+        {
+            // FGD 也没有，用默认
+            ent.m_vecBBoxMins = ent.m_vecPos + Vector(-8, -8, -8);
+            ent.m_vecBBoxMaxs = ent.m_vecPos + Vector(8, 8, 8);
+        }
+        return;
+    }
     
     studiohdr_t *pStudioHdr = g_pMDLCache->GetStudioHdr(ent.m_hMdl);
     if (!pStudioHdr) return;

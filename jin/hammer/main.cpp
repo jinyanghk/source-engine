@@ -149,6 +149,52 @@ void CHammerApp::PostShutdown() {}
 enum GizmoMode { GIZMO_NONE = 0, GIZMO_TRANSLATE, GIZMO_ROTATE };
 
 //-----------------------------------------------------------------------------
+// 执行 shell 命令，返回是否成功
+//-----------------------------------------------------------------------------
+static bool RunCommand(const char* cmd)
+{
+    printf("[COMPILE] $ %s\n", cmd);
+    fflush(stdout);
+
+    int ret = system(cmd);
+    printf("[COMPILE] exit code = %d\n", ret);
+    fflush(stdout);
+    return ret == 0;
+}
+
+//-----------------------------------------------------------------------------
+// 一键编译 + 启动 HL2
+//-----------------------------------------------------------------------------
+static void CompileAndRun()
+{
+    // 1. 导出 VMF
+    MapDocument doc;
+    ConvertEditorToDocument(doc);
+    if (!VmfIO::SaveToFile("test.vmf", doc))
+    {
+        printf("[COMPILE] VMF export FAILED\n");
+        return;
+    }
+    printf("[COMPILE] VMF export OK\n");
+
+    // 2. VBSP
+    if (!RunCommand("./vbsp -game hl2 test.vmf")) { printf("[COMPILE] VBSP FAILED\n"); return; }
+
+    // 3. VVIS
+    if (!RunCommand("./vvis -game hl2 test.bsp")) { printf("[COMPILE] VVIS FAILED\n"); return; }
+
+    // 4. VRAD
+    if (!RunCommand("./vrad -game hl2 test.bsp")) { printf("[COMPILE] VRAD FAILED\n"); return; }
+
+    // 5. 复制 BSP 到游戏目录
+    if (!RunCommand("cp test.bsp hl2/maps/test.bsp")) { printf("[COMPILE] cp FAILED\n"); return; }
+
+    // 6. 启动 HL2
+    RunCommand("./hl2_launcher -game hl2 -console +map test");
+
+    printf("[COMPILE] Done.\n");
+}
+//-----------------------------------------------------------------------------
 
 int CHammerApp::Main()
 {
@@ -206,25 +252,50 @@ int CHammerApp::Main()
 
     GizmoPick::Init(w, h);
 
-    // 初始场景：地板 + 两面墙
+    // 初始场景：封闭房间（地板 + 天花板 + 四面墙）
+    // 关键：所有 brush 在 Z 方向必须有重叠，不能只是面接触，否则 VBSP 会 leak
     {
+        // 地板：z 从 -16 到 0
         CBrush floor;
         floor.m_vecPos = Vector(0, 0, -8);
-        floor.m_vecSize = Vector(256, 256, 8);
+        floor.m_vecSize = Vector(264, 264, 8);
         floor.m_iTexId = 2;
         g_brushes.push_back(floor);
 
+        // 天花板：z 从 256 到 272
+        CBrush ceiling;
+        ceiling.m_vecPos = Vector(0, 0, 264);
+        ceiling.m_vecSize = Vector(264, 264, 8);
+        ceiling.m_iTexId = 1;
+        g_brushes.push_back(ceiling);
+
+        // 北墙：y 从 252 到 268，z 从 -16 到 272（贯穿地板到天花板）
         CBrush wallN;
-        wallN.m_vecPos = Vector(0, 256, 128);
-        wallN.m_vecSize = Vector(256, 8, 128);
+        wallN.m_vecPos = Vector(0, 260, 128);
+        wallN.m_vecSize = Vector(264, 8, 144);
         wallN.m_iTexId = 1;
         g_brushes.push_back(wallN);
 
+        // 南墙：y 从 -268 到 -252，z 从 -16 到 272
+        CBrush wallS;
+        wallS.m_vecPos = Vector(0, -260, 128);
+        wallS.m_vecSize = Vector(264, 8, 144);
+        wallS.m_iTexId = 1;
+        g_brushes.push_back(wallS);
+
+        // 西墙：x 从 -268 到 -252，z 从 -16 到 272
         CBrush wallW;
-        wallW.m_vecPos = Vector(-256, 0, 128);
-        wallW.m_vecSize = Vector(8, 256, 128);
+        wallW.m_vecPos = Vector(-260, 0, 128);
+        wallW.m_vecSize = Vector(8, 264, 144);
         wallW.m_iTexId = 1;
         g_brushes.push_back(wallW);
+
+        // 东墙：x 从 252 到 268，z 从 -16 到 272
+        CBrush wallE;
+        wallE.m_vecPos = Vector(260, 0, 128);
+        wallE.m_vecSize = Vector(8, 264, 144);
+        wallE.m_iTexId = 1;
+        g_brushes.push_back(wallE);
     }
 
     // 初始没有 entity 被选中。
@@ -280,6 +351,7 @@ int CHammerApp::Main()
     };
 
     SetExportVMFHandler(ExportVMF);
+    SetCompileAndRunHandler(CompileAndRun);
 
     while (bRunning)
     {

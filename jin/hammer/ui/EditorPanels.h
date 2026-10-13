@@ -27,6 +27,7 @@ struct BrushPanelResult
 //-----------------------------------------------------------------------------
 void DrawMenuBar();
 void SetExportVMFHandler(void (*pfn)());
+void SetCompileAndRunHandler(void (*pfn)());
 
 //-----------------------------------------------------------------------------
 // 右侧主面板：把 Entities 和 Brushes 做成两个 Tab。
