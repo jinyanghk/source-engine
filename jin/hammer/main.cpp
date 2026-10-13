@@ -309,7 +309,7 @@ int CHammerApp::Main()
     Vector m_camTarget(0, 0, 40);
     float m_camYaw = 90.0f;
     float m_camPitch = -15.0f;
-    float m_camDistance = 450.0f;
+    float m_camDistance = 150.0f;
 
     Vector g_vecEye(0,0,0), g_vecAt(0,0,0);
     Vector g_camForward(0,0,0), g_camLeft(0,0,0), g_camUp(0,0,0);

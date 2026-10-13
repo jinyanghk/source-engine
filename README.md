@@ -4,26 +4,25 @@ This project was forked from https://github.com/nillerusr/source-engine, I'm wor
 
 ![lambda](jin/lambda.png)
 
-### working in progress
+### utilities
 
-* hammer
-* hlmv
-
-### completed
-
+* hammer (in progress)
+* hlmv (in progress)
+* glview
 * vpk
 * vbsp
+* vbspinfo
 * vvis
 * vrad
 * studiomdl
 * vtex
-* vbspinfo
-* bspzip
-* glview
 * dmxconvert
 * obj2mdl
+* bspzip
 
 ### snapshots
+
+![hlmv](jin/hammer.png)
 
 ![hlmv](jin/hlmv.png)
 
