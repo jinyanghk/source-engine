@@ -335,14 +335,42 @@ void DrawSelectionPanel(CEntity* entities, int entityCount, int* pSelectedEntity
                 ImGui::Separator();
 
                 ImGui::Text("Center");
-                ImGui::SliderFloat("CX", &b.m_vecPos.x, -512.0f, 512.0f, "%.1f");
-                ImGui::SliderFloat("CY", &b.m_vecPos.y, -512.0f, 512.0f, "%.1f");
-                ImGui::SliderFloat("CZ", &b.m_vecPos.z, -128.0f, 256.0f, "%.1f");
+                Vector oldPos = b.m_vecPos;
+                bool posChanged = false;
+                posChanged |= ImGui::SliderFloat("CX", &b.m_vecPos.x, -512.0f, 512.0f, "%.1f");
+                posChanged |= ImGui::SliderFloat("CY", &b.m_vecPos.y, -512.0f, 512.0f, "%.1f");
+                posChanged |= ImGui::SliderFloat("CZ", &b.m_vecPos.z, -128.0f, 256.0f, "%.1f");
 
                 ImGui::Text("Half-size");
-                ImGui::SliderFloat("SX", &b.m_vecSize.x, 1.0f, 512.0f, "%.1f");
-                ImGui::SliderFloat("SY", &b.m_vecSize.y, 1.0f, 512.0f, "%.1f");
-                ImGui::SliderFloat("SZ", &b.m_vecSize.z, 1.0f, 512.0f, "%.1f");
+                Vector oldSize = b.m_vecSize;
+                bool sizeChanged = false;
+                sizeChanged |= ImGui::SliderFloat("SX", &b.m_vecSize.x, 1.0f, 512.0f, "%.1f");
+                sizeChanged |= ImGui::SliderFloat("SY", &b.m_vecSize.y, 1.0f, 512.0f, "%.1f");
+                sizeChanged |= ImGui::SliderFloat("SZ", &b.m_vecSize.z, 1.0f, 512.0f, "%.1f");
+
+                // ★ 关键：如果 pos/size 变了，把 m_vertices 也重建
+                if (posChanged || sizeChanged)
+                {
+                    // 1. 先算"位移"和"缩放"
+                    Vector delta = b.m_vecPos - oldPos;
+                    Vector scale;
+                    scale.x = (oldSize.x > 0.0001f) ? (b.m_vecSize.x / oldSize.x) : 1.0f;
+                    scale.y = (oldSize.y > 0.0001f) ? (b.m_vecSize.y / oldSize.y) : 1.0f;
+                    scale.z = (oldSize.z > 0.0001f) ? (b.m_vecSize.z / oldSize.z) : 1.0f;
+
+                    // 2. 对每个顶点应用"先按 old center 缩放，再平移"
+                    //    这是"面板编辑 = 整体变换"的语义
+                    for (auto& v : b.m_vertices)
+                    {
+                        Vector local = v - oldPos;
+                        local.x *= scale.x;
+                        local.y *= scale.y;
+                        local.z *= scale.z;
+                        v = oldPos + local + delta;
+                    }
+
+                    b.RecalcFaceNormals();
+                }
 
                 ImGui::Text("Material:");
                 ImGui::TextWrapped("%s", b.m_szMaterial.c_str());

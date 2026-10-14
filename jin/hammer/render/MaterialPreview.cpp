@@ -126,11 +126,19 @@ MaterialTextureResource_t MaterialPreview::LoadMaterialResource(const std::strin
     MaterialTextureResource_t res;
 
     std::string baseTex = ParseBaseTextureFromVMT(materialPath);
-    if (baseTex.empty()) return res;
+    if (baseTex.empty())
+    {
+        printf("[PREVIEW] No basetexture for '%s'\n", materialPath.c_str());
+        return res;
+    }
 
     std::string vtfPath = "materials/" + baseTex + ".vtf";
     FileHandle_t f = g_pFileSystem->Open(vtfPath.c_str(), "rb", "GAME");
-    if (!f) return res;
+    if (!f)
+    {
+        printf("[PREVIEW] Cannot open VTF: %s\n", vtfPath.c_str());
+        return res;
+    }
 
     int size = g_pFileSystem->Size(f);
     if (size <= 0) { g_pFileSystem->Close(f); return res; }

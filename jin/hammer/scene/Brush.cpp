@@ -77,8 +77,8 @@ void DrawBrush(const CBrush& b)
             float rawU = DotProduct(vertexPos, uAxis) + shiftU;
             float rawV = DotProduct(vertexPos, vAxis) + shiftV;
 
-            float finalU = rawU / ((float)tex.nativeWidth  * textureScale);
-            float finalV = rawV / ((float)tex.nativeHeight * textureScale);
+            float finalU = rawU * 0.25f;   // 直接乘以 0.25
+            float finalV = rawV * 0.25f;
 
             glTexCoord2f(finalU, finalV);
             glVertex3f(vertexPos.x, vertexPos.y, vertexPos.z);
@@ -146,4 +146,53 @@ void CBrush::RebuildPrimitiveMesh()
     m_faces[FACE_POS_Y] = { Vector(0,1,0),  {3, 7, 6, 2}, m_szMaterial };
     // -Y (Back Face)
     m_faces[FACE_NEG_Y] = { Vector(0,-1,0), {0, 1, 5, 4}, m_szMaterial };
+}
+
+void CBrush::RecalcBoundsFromVertices()
+{
+    if (m_vertices.size() < 8) return;
+
+    Vector vMins(1e9f, 1e9f, 1e9f);
+    Vector vMaxs(-1e9f, -1e9f, -1e9f);
+    for (const auto& p : m_vertices)
+    {
+        vMins.x = std::min(vMins.x, p.x); vMaxs.x = std::max(vMaxs.x, p.x);
+        vMins.y = std::min(vMins.y, p.y); vMaxs.y = std::max(vMaxs.y, p.y);
+        vMins.z = std::min(vMins.z, p.z); vMaxs.z = std::max(vMaxs.z, p.z);
+    }
+    m_vecPos = (vMins + vMaxs) * 0.5f;
+    m_vecSize = (vMaxs - vMins) * 0.5f;
+}
+
+void CBrush::RecalcFaceNormals()
+{
+    for (auto& face : m_faces)
+    {
+        int i0 = face.m_nVertexIndices[0];
+        int i1 = face.m_nVertexIndices[1];
+        int i2 = face.m_nVertexIndices[2];
+
+        Vector edge1 = m_vertices[i1] - m_vertices[i0];
+        Vector edge2 = m_vertices[i2] - m_vertices[i0];
+        Vector n;
+        CrossProduct(edge1, edge2, n);
+        VectorNormalize(n);
+        face.m_vecNormal = n;
+    }
+}
+
+void CBrush::RotateVertices(const QAngle& deltaAngles)
+{
+    if (m_vertices.size() < 8) return;
+
+    matrix3x4_t matRot;
+    AngleMatrix(deltaAngles, matRot);
+
+    for (int v = 0; v < 8; v++)
+    {
+        Vector local = m_vertices[v] - m_vecPos;
+        Vector rotated;
+        VectorRotate(local, matRot, rotated);
+        m_vertices[v] = m_vecPos + rotated;
+    }
 }

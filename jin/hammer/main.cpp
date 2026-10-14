@@ -65,6 +65,10 @@ IMDLCache *g_pMDLCache;
 
 extern void *CreateSDLMgr();
 
+// 全局：face / vertex gizmo 的 hover / active 状态
+int g_iHoverFace = -1;
+int g_iActiveFace = -1;
+
 //-----------------------------------------------------------------------------
 
 class CHammerApp : public CAppSystemGroup
@@ -377,16 +381,16 @@ int CHammerApp::Main()
     int g_iActiveAxis = -1;
     int g_iHoverAxis = -1;
     float g_flDragStartWorldT = 0.0f;
-    float g_flDragStartAngle = 0.0f;
+    //float g_flDragStartAngle = 0.0f;
     Vector g_vecDragStartPos;
-    QAngle g_angDragStartRot;
+    //QAngle g_angDragStartRot;
     Vector g_vecFrozenGizmoCenterAtClick;
     float g_flDragStartSize = 0.0f;   // ★ scale 拖动时保存起始半尺寸
-    int g_iHoverFace = -1;  // Tracks which brush face is hovered
-    int g_iActiveFace = -1; // Tracks which face is actively clicked and dragged    
+    //int g_iHoverFace = -1;  // Tracks which brush face is hovered
+    //int g_iActiveFace = -1; // Tracks which face is actively clicked and dragged    
     int g_iHoverVertex = -1;  // Tracks which of the 8 vertices is hovered (-1 to 7)
     int g_iActiveVertex = -1; // Tracks which vertex is locked during an active drag
-    Vector g_vecDragStartVertexPos; // Caches the individual point's starting position
+    //Vector g_vecDragStartVertexPos; // Caches the individual point's starting position
 
     bool g_bLeftMouseDown = false;
     bool g_bRightMouseDown = false;
@@ -1027,7 +1031,7 @@ int CHammerApp::Main()
                         g_bDraggingGizmo = true;
                         g_iActiveAxis = 0; // Lock safety constraint placeholder safely
                         
-                        g_vecDragStartVertexPos = g_brushes[g_iSelectedBrush].m_vertices[vertexPixelID];
+                        //g_vecDragStartVertexPos = g_brushes[g_iSelectedBrush].m_vertices[vertexPixelID];
                         g_vecFrozenGizmoCenterAtClick = gizmoCenter;
                         g_flDragStartWorldT = -1.0f;
                     }
@@ -1069,9 +1073,9 @@ int CHammerApp::Main()
                     {
                         g_iActiveAxis = g_iHoverAxis;
                         g_bDraggingGizmo = true;
-                        g_flDragStartAngle = -1000.0f; 
-                        if (bGizmoOnBrush) g_angDragStartRot = g_brushes[g_iSelectedBrush].m_angRot;
-                        else g_angDragStartRot = g_entities[g_iSelectedEntity].m_angRot;
+                        //g_flDragStartAngle = -1000.0f; 
+                        //if (bGizmoOnBrush) g_angDragStartRot = g_brushes[g_iSelectedBrush].m_angRot;
+                        //else g_angDragStartRot = g_entities[g_iSelectedEntity].m_angRot;
                     }
                     else if (g_iGizmoMode == GIZMO_SCALE && bGizmoOnBrush)
                     {
@@ -1181,44 +1185,39 @@ int CHammerApp::Main()
                 }
                 else if (g_iGizmoMode == GIZMO_ROTATE)
                 {
-                    // 1. Calculate how many pixels the mouse traveled horizontally this frame
+                    // 用像素位移算角度（和之前一样）
                     int screenDeltaX = g_iMouseX - g_iLastMouseX;
-                    
-                    // 2. Convert pixels to degrees (adjust 0.5f to change mouse sensitivity)
-                    float deltaDeg = (float)screenDeltaX * 0.5f; 
-                    
+                    float deltaDeg = (float)screenDeltaX * 0.5f;
+
                     if (fabsf(deltaDeg) > 0.001f)
                     {
-                        matrix3x4_t matStart, matDelta, matFinal;
-                        
-                        // 3. Fetch the object's CURRENT rotation matrix from the engine structures
-                        if (bGizmoOnBrush)
-                            AngleMatrix(g_brushes[g_iSelectedBrush].m_angRot, matStart);
-                        else
-                            AngleMatrix(g_entities[g_iSelectedEntity].m_angRot, matStart);
-                        
-                        // 4. Build a clean isolated Delta Matrix tracking ONLY your current active axis ring
                         QAngle angDelta(0, 0, 0);
-                        if (g_iActiveAxis == 0)      angDelta.x = deltaDeg; // Pitch (Red Ring)
-                        else if (g_iActiveAxis == 1) angDelta.y = deltaDeg; // Yaw (Green Ring)
-                        else                          angDelta.z = deltaDeg; // Roll (Blue Ring)
-                        AngleMatrix(angDelta, matDelta);
-                        
-                        // 5. Multiply the matrices together to accumulate the spatial rotation perfectly
-                        ConcatTransforms(matDelta, matStart, matFinal);
-                        
-                        // 6. Extract the final corrected Euler angles back to your layout variables
-                        QAngle finalAngles;
-                        MatrixAngles(matFinal, finalAngles);
-                        
+                        if (g_iActiveAxis == 0)      angDelta.x = deltaDeg;
+                        else if (g_iActiveAxis == 1) angDelta.y = deltaDeg;
+                        else                          angDelta.z = deltaDeg;
+
                         if (bGizmoOnBrush)
                         {
-                            g_brushes[g_iSelectedBrush].m_angRot = finalAngles;
-                            // ★ REMOVED: Bypassing this call stops the brush shape from resetting back to a primitive cube! ★
-                            // g_brushes[g_iSelectedBrush].RebuildPrimitiveMesh();
+                            CBrush& activeBrush = g_brushes[g_iSelectedBrush];
+
+                            // 1. 把 delta 旋转直接应用到顶点
+                            activeBrush.RotateVertices(angDelta);
+
+                            // 2. 重算 bbox + 法线
+                            activeBrush.RecalcBoundsFromVertices();
+                            activeBrush.RecalcFaceNormals();
+
+                            // 3. m_angRot 保持 (0,0,0)（旋转已烘进顶点）
                         }
                         else
                         {
+                            // entity 仍然用 m_angRot（entity 是点，没有顶点）
+                            matrix3x4_t matStart, matDelta, matFinal;
+                            AngleMatrix(g_entities[g_iSelectedEntity].m_angRot, matStart);
+                            AngleMatrix(angDelta, matDelta);
+                            ConcatTransforms(matDelta, matStart, matFinal);
+                            QAngle finalAngles;
+                            MatrixAngles(matFinal, finalAngles);
                             g_entities[g_iSelectedEntity].m_angRot = finalAngles;
                         }
                     }
@@ -1241,63 +1240,28 @@ int CHammerApp::Main()
                             float localMouseY = (float)g_iMouseY - centralWorkPos.y;
 
                             float t = ((localMouseX - sx0) * dx + (localMouseY - sy0) * dy) / lenSq;
-                            if (g_flDragStartWorldT < 0.0f) g_flDragStartWorldT = t;   
+                            if (g_flDragStartWorldT < 0.0f) g_flDragStartWorldT = t;
 
                             float deltaT = t - g_flDragStartWorldT;
-                            
-                            // Calculate scale multiplier factor safely (centered around 1.0)
+
                             float scaleFactor = 1.0f + deltaT * 0.5f;
-                            if (scaleFactor < 0.01f) scaleFactor = 0.01f; // Prevent micro-inversions
+                            if (scaleFactor < 0.01f) scaleFactor = 0.01f;
 
                             CBrush& activeBrush = g_brushes[g_iSelectedBrush];
 
-                            // ★ THE UPGRADE: Scale vertices directly relative to the brush center pivot! ★
+                            // 1. 缩放顶点（一次）
                             for (int v = 0; v < 8; v++)
                             {
-                                // Subtract center to scale in local space
                                 Vector localV = activeBrush.m_vertices[v] - activeBrush.m_vecPos;
-                                
-                                // Multiply ONLY the active scaling vector axis direction component
                                 localV[g_iActiveAxis] *= scaleFactor;
-                                
-                                // Restore world position back into mesh cache array
                                 activeBrush.m_vertices[v] = activeBrush.m_vecPos + localV;
                             }
 
-                            // Update bounding box fields dynamically for panel reading parity
-                            activeBrush.m_vecSize[g_iActiveAxis] *= scaleFactor;
+                            // 2. 从顶点重算 bbox + 法线
+                            activeBrush.RecalcBoundsFromVertices();
+                            activeBrush.RecalcFaceNormals();
 
-                            // ★ THE CORRECTION: Expand the explicit loop layout to clear the bracket typo ★
-                            for (int f = 0; f < 6; f++)
-                            {
-                                int idx0 = activeBrush.m_faces[f].m_nVertexIndices[0];
-                                int idx1 = activeBrush.m_faces[f].m_nVertexIndices[1];
-                                int idx2 = activeBrush.m_faces[f].m_nVertexIndices[2];
-                                
-                                Vector edge1 = activeBrush.m_vertices[idx1] - activeBrush.m_vertices[idx0];
-                                Vector edge2 = activeBrush.m_vertices[idx2] - activeBrush.m_vertices[idx0];
-                                Vector faceNormal;
-                                CrossProduct(edge1, edge2, faceNormal);
-                                VectorNormalize(faceNormal);
-                                activeBrush.m_faces[f].m_vecNormal = faceNormal;
-                            }
-
-                            // ★ THE BBOX PARITY FIX: Update bounding fields dynamically from vertices! ★
-                            Vector vMins( 99999.0f,  99999.0f,  99999.0f);
-                            Vector vMaxs(-99999.0f, -99999.0f, -99999.0f);
-                            for (int v = 0; v < 8; v++)
-                            {
-                                const Vector& p = activeBrush.m_vertices[v];
-                                vMins.x = std::min(vMins.x, p.x); vMaxs.x = std::max(vMaxs.x, p.x);
-                                vMins.y = std::min(vMins.y, p.y); vMaxs.y = std::max(vMaxs.y, p.y);
-                                vMins.z = std::min(vMins.z, p.z); vMaxs.z = std::max(vMaxs.z, p.z);
-                            }
-                            
-                            // Re-calculate center position and half-size boundaries cleanly
-                            activeBrush.m_vecPos = (vMins + vMaxs) * 0.5f;
-                            activeBrush.m_vecSize = (vMaxs - vMins) * 0.5f;
-                            
-                            g_flDragStartWorldT = t; 
+                            g_flDragStartWorldT = t;
                         }
                     }
                 }
@@ -1358,19 +1322,8 @@ int CHammerApp::Main()
                             }
 
                             // Recalculate planar orientation geometry normals dynamically to warp textures instantly
-                            for (int f = 0; f < 6; f++)
-                            {
-                                int idx0 = activeBrush.m_faces[f].m_nVertexIndices[0];
-                                int idx1 = activeBrush.m_faces[f].m_nVertexIndices[1];
-                                int idx2 = activeBrush.m_faces[f].m_nVertexIndices[2];
-                                
-                                Vector edge1 = activeBrush.m_vertices[idx1] - activeBrush.m_vertices[idx0];
-                                Vector edge2 = activeBrush.m_vertices[idx2] - activeBrush.m_vertices[idx0];
-                                Vector faceNormal;
-                                CrossProduct(edge1, edge2, faceNormal);
-                                VectorNormalize(faceNormal);
-                                activeBrush.m_faces[f].m_vecNormal = faceNormal;
-                            }
+                            activeBrush.RecalcBoundsFromVertices();
+                            activeBrush.RecalcFaceNormals();
                             
                             // Clean drag tracker states for subsequent frame calculations
                             g_flDragStartWorldT = t; 
@@ -1391,6 +1344,8 @@ int CHammerApp::Main()
 
                     // Update ONLY the selected handle coordinates point in memory
                     activeBrush.m_vertices[g_iActiveVertex] += worldDisplacement;
+                    activeBrush.RecalcBoundsFromVertices();
+                    activeBrush.RecalcFaceNormals();
 
                     // Recalculate planar orientation geometry normals dynamically to warp textures instantly
                     for (int f = 0; f < 6; f++)

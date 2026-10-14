@@ -3,7 +3,9 @@
 
 #include <string>
 #include <vector>
+
 #include "mathlib/vector.h"
+#include "mathlib/mathlib.h"   // matrix3x4_t, AngleMatrix, VectorRotate
 
 enum BrushFaceIndex {
     FACE_NONE = -1,
@@ -48,6 +50,16 @@ struct CBrush
 
     Vector GetBBoxMins() const { return m_vecPos - m_vecSize; }
     Vector GetBBoxMaxs() const { return m_vecPos + m_vecSize; }
+
+    // 从 m_vertices 重算 m_vecPos 和 m_vecSize
+    void RecalcBoundsFromVertices();
+
+    // 把 8 个顶点绕中心旋转（旋转烘进顶点）
+    void RotateVertices(const QAngle& deltaAngles);
+
+    // 重算法线
+    void RecalcFaceNormals();
+
 };
 
 extern int g_iHoverFace;   
