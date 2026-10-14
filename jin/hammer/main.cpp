@@ -1368,32 +1368,28 @@ int CHammerApp::Main()
                     }
                 }
             }    
-/*
-            // ===== 绘制可见 gizmo =====
-            if (bGizmoActive && g_bShowGizmo && g_iGizmoMode != GIZMO_NONE
-                && !(g_iGizmoMode == GIZMO_SCALE && !bGizmoOnBrush))   // ★ scale 只对 brush
+            // ===== 绘制 entity 的可见 gizmo =====
+            // brush 的 gizmo 已经在 brush 循环里画了，这里只画 entity 的
+            if (!bGizmoOnBrush && bHasSelection && g_bShowGizmo && g_iGizmoMode != GIZMO_NONE)
             {
                 int highlightAxis = (g_iActiveAxis >= 0) ? g_iActiveAxis : g_iHoverAxis;
+
                 if (g_iGizmoMode == GIZMO_TRANSLATE)
                     DrawTranslateGizmo(gizmoCenter, axisLength, highlightAxis);
                 else if (g_iGizmoMode == GIZMO_ROTATE)
                 {
-                    unsigned char rX=255,gX=0,bX=0;
-                    unsigned char rY=0,gY=255,bY=0;
-                    unsigned char rZ=0,gZ=128,bZ=255;
-                    if (highlightAxis == 0) { rX=255; gX=255; bX=0; }
-                    if (highlightAxis == 1) { rY=255; gY=255; bY=0; }
-                    if (highlightAxis == 2) { rZ=255; gZ=255; bZ=0; }
+                    unsigned char rX = 255, gX = 0,   bX = 0;
+                    unsigned char rY = 0,   gY = 255, bY = 0;
+                    unsigned char rZ = 0,   gZ = 128, bZ = 255;
+                    if (highlightAxis == 0) { rX = 255; gX = 255; bX = 0; }
+                    if (highlightAxis == 1) { rY = 255; gY = 255; bY = 0; }
+                    if (highlightAxis == 2) { rZ = 255; gZ = 255; bZ = 0; }
                     DrawRotationRing(gizmoCenter, 0, axisLength, 64, rX, gX, bX);
                     DrawRotationRing(gizmoCenter, 1, axisLength, 64, rY, gY, bY);
                     DrawRotationRing(gizmoCenter, 2, axisLength, 64, rZ, gZ, bZ);
                 }
-                else if (g_iGizmoMode == GIZMO_SCALE)
-                {
-                    DrawScaleGizmo(gizmoCenter, axisLength, highlightAxis);
-                }
+                // scale 不支持 entity，不画
             }
-*/
             // ===== UI 面板 =====
             DrawMenuBar();
 
