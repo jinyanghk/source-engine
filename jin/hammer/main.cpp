@@ -149,7 +149,14 @@ void CHammerApp::PostShutdown() {}
 
 //-----------------------------------------------------------------------------
 
-enum GizmoMode { GIZMO_NONE = 0, GIZMO_TRANSLATE, GIZMO_ROTATE, GIZMO_SCALE, GIZMO_FACE };
+enum GizmoMode { 
+    GIZMO_NONE = 0, 
+    GIZMO_TRANSLATE, 
+    GIZMO_ROTATE, 
+    GIZMO_SCALE, 
+    GIZMO_FACE,
+    GIZMO_VERTEX
+};
 
 //-----------------------------------------------------------------------------
 // 执行 shell 命令，返回是否成功
@@ -304,46 +311,46 @@ int CHammerApp::Main()
     // 初始场景：封闭房间（地板 + 天花板 + 四面墙）
     // 关键：所有 brush 在 Z 方向必须有重叠，不能只是面接触，否则 VBSP 会 leak
     {
-        // 地板：z 从 -16 到 0
         CBrush floor;
         floor.m_vecPos = Vector(0, 0, -8);
         floor.m_vecSize = Vector(264, 264, 8);
         floor.m_iTexId = 2;
+        floor.RebuildPrimitiveMesh(); // ★ UPDATE MATRIX POINTS HERE
         g_brushes.push_back(floor);
 
-        // 天花板：z 从 256 到 272
         CBrush ceiling;
         ceiling.m_vecPos = Vector(0, 0, 264);
         ceiling.m_vecSize = Vector(264, 264, 8);
         ceiling.m_iTexId = 1;
+        ceiling.RebuildPrimitiveMesh(); // ★ UPDATE MATRIX POINTS HERE
         g_brushes.push_back(ceiling);
 
-        // 北墙：y 从 252 到 268，z 从 -16 到 272（贯穿地板到天花板）
         CBrush wallN;
         wallN.m_vecPos = Vector(0, 260, 128);
         wallN.m_vecSize = Vector(264, 8, 144);
         wallN.m_iTexId = 1;
+        wallN.RebuildPrimitiveMesh(); // ★ UPDATE MATRIX POINTS HERE
         g_brushes.push_back(wallN);
 
-        // 南墙：y 从 -268 到 -252，z 从 -16 到 272
         CBrush wallS;
         wallS.m_vecPos = Vector(0, -260, 128);
         wallS.m_vecSize = Vector(264, 8, 144);
         wallS.m_iTexId = 1;
+        wallS.RebuildPrimitiveMesh(); // ★ UPDATE MATRIX POINTS HERE
         g_brushes.push_back(wallS);
 
-        // 西墙：x 从 -268 到 -252，z 从 -16 到 272
         CBrush wallW;
         wallW.m_vecPos = Vector(-260, 0, 128);
         wallW.m_vecSize = Vector(8, 264, 144);
         wallW.m_iTexId = 1;
+        wallW.RebuildPrimitiveMesh(); // ★ UPDATE MATRIX POINTS HERE
         g_brushes.push_back(wallW);
 
-        // 东墙：x 从 252 到 268，z 从 -16 到 272
         CBrush wallE;
         wallE.m_vecPos = Vector(260, 0, 128);
         wallE.m_vecSize = Vector(8, 264, 144);
         wallE.m_iTexId = 1;
+        wallE.RebuildPrimitiveMesh(); // ★ UPDATE MATRIX POINTS HERE
         g_brushes.push_back(wallE);
     }
 
@@ -377,6 +384,9 @@ int CHammerApp::Main()
     float g_flDragStartSize = 0.0f;   // ★ scale 拖动时保存起始半尺寸
     int g_iHoverFace = -1;  // Tracks which brush face is hovered
     int g_iActiveFace = -1; // Tracks which face is actively clicked and dragged    
+    int g_iHoverVertex = -1;  // Tracks which of the 8 vertices is hovered (-1 to 7)
+    int g_iActiveVertex = -1; // Tracks which vertex is locked during an active drag
+    Vector g_vecDragStartVertexPos; // Caches the individual point's starting position
 
     bool g_bLeftMouseDown = false;
     bool g_bRightMouseDown = false;
@@ -441,6 +451,7 @@ int CHammerApp::Main()
                     g_bDraggingGizmo = false; 
                     g_iActiveAxis = -1; 
                     g_iActiveFace = -1;
+                    g_iActiveVertex = -1;
                 }
                 else if (event.button.button == SDL_BUTTON_RIGHT) g_bRightMouseDown = false;
                 else if (event.button.button == SDL_BUTTON_MIDDLE) g_bMiddleMouseDown = false;
@@ -453,6 +464,7 @@ int CHammerApp::Main()
                     else if (event.key.keysym.sym == SDLK_2) g_iGizmoMode = GIZMO_ROTATE;
                     else if (event.key.keysym.sym == SDLK_3) g_iGizmoMode = GIZMO_SCALE;
                     else if (event.key.keysym.sym == SDLK_4) g_iGizmoMode = GIZMO_FACE;
+                    else if (event.key.keysym.sym == SDLK_5) g_iGizmoMode = GIZMO_VERTEX;
                     else if (event.key.keysym.sym == SDLK_0) g_iGizmoMode = GIZMO_NONE;
                     else if (event.key.keysym.sym == SDLK_r)
                     {
@@ -656,38 +668,105 @@ int CHammerApp::Main()
             glMatrixMode(GL_MODELVIEW);
             glLoadMatrixf(glView);
 
-            // --- REPLACE THIS OLD LOOP ---
-            // glEnable(GL_TEXTURE_2D);
-            // for (size_t i = 0; i < g_brushes.size(); i++)
-            //     DrawBrush(g_brushes[i]);
-            // glDisable(GL_TEXTURE_2D);
+            // ★ THE CORRECTION STEP 1: Compute axisLength BEFORE the brush render loop pass! ★
+            Vector gizmoCenterFallback;
+            float bboxSizeFallback = 0.0f;
+            if (bHasBrushSelection)
+            {
+                CBrush& b = g_brushes[g_iSelectedBrush];
+                gizmoCenterFallback = b.m_vecPos;
+                bboxSizeFallback = std::max(std::max(b.m_vecSize.x, b.m_vecSize.y), b.m_vecSize.z) * 2.0f;
+            }
+            else if (bHasSelection)
+            {
+                CEntity& e = g_entities[g_iSelectedEntity];
+                gizmoCenterFallback = e.GetCenter();
+                bboxSizeFallback = std::max(std::max(e.m_vecBBoxMaxs.x - e.m_vecBBoxMins.x,
+                                            e.m_vecBBoxMaxs.y - e.m_vecBBoxMins.y),
+                                    e.m_vecBBoxMaxs.z - e.m_vecBBoxMins.z);
+            }
+            float localAxisLength = bboxSizeFallback * 1.2f;
+            if (localAxisLength < 30.0f) localAxisLength = 30.0f;
 
-            // --- WITH THIS ROTATION-AWARE PASSTHROUGH LOOP ---
+            // ===== 绘制可见 Brushes (Textured Surfaces, Edge Wireframes, and ALL Rotating/Scaling Gizmos) =====
             glEnable(GL_TEXTURE_2D);
             for (size_t i = 0; i < g_brushes.size(); i++)
             {
+                // Group ALL brush components inside the local matrix transformation stack safely
                 glPushMatrix();
                 
-                // 1. Move the OpenGL coordinate system to the center of the brush
                 glTranslatef(g_brushes[i].m_vecPos.x, g_brushes[i].m_vecPos.y, g_brushes[i].m_vecPos.z);
-                
-                // 2. Apply Euler rotations matching your active gizmo axes (Pitch, Yaw, Roll layout)
                 glRotatef(g_brushes[i].m_angRot.y, 0.0f, 1.0f, 0.0f); // Yaw (Green Ring)
                 glRotatef(g_brushes[i].m_angRot.x, 1.0f, 0.0f, 0.0f); // Pitch (Red Ring)
                 glRotatef(g_brushes[i].m_angRot.z, 0.0f, 0.0f, 1.0f); // Roll (Blue Ring)
-                
-                // 3. Temporarily offset back to local origin so vertices align perfectly
                 glTranslatef(-g_brushes[i].m_vecPos.x, -g_brushes[i].m_vecPos.y, -g_brushes[i].m_vecPos.z);
-                
+
                 DrawBrush(g_brushes[i]);
+                DrawBrushEdges(g_brushes[i]);
                 
-                glPopMatrix();
+                if ((int)i == g_iSelectedBrush)
+                {
+                    glDepthMask(GL_FALSE);
+                    DrawBrushBBox(g_brushes[i], true); 
+                    glDepthMask(GL_TRUE);
+                }
+
+                // Render your 3D editing spheres over corners inside vertex mode
+                if (g_iGizmoMode == GIZMO_VERTEX && (int)i == g_iSelectedBrush)
+                {
+                    glDisable(GL_TEXTURE_2D);
+                    glDisable(GL_DEPTH_TEST); 
+                    for (int v = 0; v < 8; v++)
+                    {
+                        Vector vPos = g_brushes[i].m_vertices[v];
+                        if (v == g_iHoverAxis) glColor3ub(255, 255, 0);   // Flash bright yellow on hover!
+                        else glColor3ub(255, 255, 255);                 
+
+                        DrawGlowSphere(vPos.x, vPos.y, vPos.z, 3.0f, 8);
+                    }
+                    glEnable(GL_DEPTH_TEST);
+                }
+
+                // ★ THE UNIFIED GIZMO DRAW ENGINE: Draw ALL 3 Gizmos inside matching local spaces! ★
+                // Draw your active Translate and Scaling handles inside local space
+                if ((int)i == g_iSelectedBrush && g_bShowGizmo && g_iGizmoMode != GIZMO_NONE)
+                {
+                    int highlightAxis = (g_iActiveAxis >= 0) ? g_iActiveAxis : g_iHoverAxis;
+                    
+                    // ★ THE RESTORATION: Use the local brush position variable directly! ★
+                    if (g_iGizmoMode == GIZMO_TRANSLATE)
+                        DrawTranslateGizmo(g_brushes[i].m_vecPos, localAxisLength, highlightAxis);
+                    else if (g_iGizmoMode == GIZMO_SCALE)
+                        DrawScaleGizmo(g_brushes[i].m_vecPos, localAxisLength, highlightAxis);
+                    else if (g_iGizmoMode == GIZMO_ROTATE)
+                    {
+                        // Draw your rotation rings with pixel-perfect yellow feedback!
+                        unsigned char rX = 255, gX = 0,   bX = 0;
+                        unsigned char rY = 0,   gY = 255, bY = 0;
+                        unsigned char rZ = 0,   gZ = 128, bZ = 255;
+                        
+                        if (highlightAxis == 0) { rX = 255; gX = 255; bX = 0; } // Active ring turns yellow!
+                        if (highlightAxis == 1) { rY = 255; gY = 255; bY = 0; }
+                        if (highlightAxis == 2) { rZ = 255; gZ = 255; bZ = 0; }
+                        
+                        DrawRotationRing(g_brushes[i].m_vecPos, 0, localAxisLength, 64, rX, gX, bX);
+                        DrawRotationRing(g_brushes[i].m_vecPos, 1, localAxisLength, 64, rY, gY, bY);
+                        DrawRotationRing(g_brushes[i].m_vecPos, 2, localAxisLength, 64, rZ, gZ, bZ);
+                    }
+                }
+                
+                glPopMatrix(); // Safely clear matrix parameters
             }
             glDisable(GL_TEXTURE_2D);
 
-            // Locate your brush edges loop right below it:
+            // =========================================================================
+            // ★ MAKE SURE LINES 482-508 IN YOUR CURRENT FILE ARE REMOVED OR DELETED! ★
+            // =========================================================================
+/*
+            // Locate your brush loops inside your immediate OpenGL viewport pass:
             for (size_t i = 0; i < g_brushes.size(); i++)
             {
+                // --- Part 1: Keep ALL local brush geometry inside the matrix stack ---
                 glPushMatrix();
                 
                 glTranslatef(g_brushes[i].m_vecPos.x, g_brushes[i].m_vecPos.y, g_brushes[i].m_vecPos.z);
@@ -696,19 +775,43 @@ int CHammerApp::Main()
                 glRotatef(g_brushes[i].m_angRot.z, 0.0f, 0.0f, 1.0f);
                 glTranslatef(-g_brushes[i].m_vecPos.x, -g_brushes[i].m_vecPos.y, -g_brushes[i].m_vecPos.z);
                 
+                // Draw the textured faces and wireframe outlines together
+                DrawBrush(g_brushes[i]);
                 DrawBrushEdges(g_brushes[i]);
                 
-                // Also transform the selection box visualization if it is the active brush
+                // Draw selection handles over the dynamic corners
+                if (g_iGizmoMode == GIZMO_VERTEX && (int)i == g_iSelectedBrush)
+                {
+                    glDisable(GL_TEXTURE_2D);
+                    glDisable(GL_DEPTH_TEST); 
+                    for (int v = 0; v < 8; v++)
+                    {
+                        Vector vPos = g_brushes[i].m_vertices[v];
+                        if (v == g_iHoverAxis) glColor3ub(255, 255, 0); 
+                        else glColor3ub(255, 255, 255);
+
+                        float hSz = 2.0f;
+                        glBegin(GL_LINE_LOOP);
+                        glVertex3f(vPos.x-hSz, vPos.y-hSz, vPos.z+hSz); 
+                        glVertex3f(vPos.x+hSz, vPos.y-hSz, vPos.z+hSz);
+                        glVertex3f(vPos.x+hSz, vPos.y+hSz, vPos.z+hSz); 
+                        glVertex3f(vPos.x-hSz, vPos.y+hSz, vPos.z+hSz);
+                        glEnd();
+                    }
+                    glEnable(GL_DEPTH_TEST);
+                }
+                
+                glPopMatrix(); // ★ Pop matrix here to reset safely back to world space!
+
+                // --- Part 2: Draw only the yellow selection box in absolute world space ---
                 if ((int)i == g_iSelectedBrush)
                 {
                     glDepthMask(GL_FALSE);
-                    DrawBrushBBox(g_brushes[i], true);
+                    DrawBrushBBox(g_brushes[i], true); // Resolves the floating box issue perfectly
                     glDepthMask(GL_TRUE);
                 }
-                
-                glPopMatrix();
             }
-
+*/
             glDepthMask(GL_FALSE);
             for (size_t i = 0; i < g_entities.size(); i++)
                 DrawEntityBBox(g_entities[i], (int)i == g_iSelectedEntity);
@@ -785,8 +888,46 @@ int CHammerApp::Main()
                 }
                 else if (g_iGizmoMode == GIZMO_FACE && bGizmoOnBrush)
                 {
-                    GizmoPick::DrawPickableBrushFaces(g_brushes[g_iSelectedBrush]);
-                }                
+                    const CBrush& b = g_brushes[g_iSelectedBrush];
+                    
+                    // ★ APPLY MATRIX TRANSFORMS TO FACE PULLING FBO BUFFERS TOO! ★
+                    glPushMatrix();
+                    glTranslatef(b.m_vecPos.x, b.m_vecPos.y, b.m_vecPos.z);
+                    glRotatef(b.m_angRot.y, 0.0f, 1.0f, 0.0f);
+                    glRotatef(b.m_angRot.x, 1.0f, 0.0f, 0.0f);
+                    glRotatef(b.m_angRot.z, 0.0f, 0.0f, 1.0f);
+                    glTranslatef(-b.m_vecPos.x, -b.m_vecPos.y, -b.m_vecPos.z);
+
+                    GizmoPick::DrawPickableBrushFaces(b);
+                    
+                    glPopMatrix(); // Safely clear matrix parameters
+                }    
+                // ★ FIX 1: Wrap the offscreen vertex picker back inside the rotation matrix stack! ★
+                else if (g_iGizmoMode == GIZMO_VERTEX && bGizmoOnBrush)
+                {
+                    const CBrush& b = g_brushes[g_iSelectedBrush];
+                    
+                    glPushMatrix();
+                    glTranslatef(b.m_vecPos.x, b.m_vecPos.y, b.m_vecPos.z);
+                    glRotatef(b.m_angRot.y, 0.0f, 1.0f, 0.0f);
+                    glRotatef(b.m_angRot.x, 1.0f, 0.0f, 0.0f);
+                    glRotatef(b.m_angRot.z, 0.0f, 0.0f, 1.0f);
+                    glTranslatef(-b.m_vecPos.x, -b.m_vecPos.y, -b.m_vecPos.z);
+
+                    glDisable(GL_TEXTURE_2D);
+                    glDisable(GL_DEPTH_TEST); 
+
+                    for (int i = 0; i < 8; i++)
+                    {
+                        Vector vPos = b.m_vertices[i];
+                        glColor4ub(i + 1, 0, 0, 255); 
+                        DrawGlowSphere(vPos.x, vPos.y, vPos.z, 3.5f, 8); 
+                    }
+                    glEnable(GL_DEPTH_TEST);
+                    glPopMatrix(); 
+                }
+
+                   
                 GizmoPick::EndRender();
 
                 glMatrixMode(GL_PROJECTION);
@@ -849,6 +990,15 @@ int CHammerApp::Main()
                                     g_iHoverFace = facePixelID; 
                                 }
                             }
+                            else if (g_iGizmoMode == GIZMO_VERTEX && bGizmoOnBrush)
+                            {
+                                GizmoPick::HandleType htype;
+                                int vertexPixelID = GizmoPick::Pick((int)localMouseX, (int)localMouseY, htype);
+                                if (vertexPixelID >= 0 && vertexPixelID < 8)
+                                {
+                                    g_iHoverAxis = vertexPixelID; // Set HoverAxis >= 0 to open Click Guard checks
+                                }
+                            }                            
                         }
                     }
                 }
@@ -867,8 +1017,22 @@ int CHammerApp::Main()
             // ===== 点击起始拖动 =====
             if (g_bLeftMouseDown && !g_bDraggingGizmo && g_iActiveAxis < 0 && !io.WantCaptureMouse)
             {
-                // ★ CLEAN FIX 2: Restructure the conditional trees to evaluate handle axis claims and face pulls independently ★
-                if (g_iGizmoMode == GIZMO_FACE && bGizmoOnBrush)
+                if (g_iGizmoMode == GIZMO_VERTEX && bGizmoOnBrush)
+                {
+                    GizmoPick::HandleType htype;
+                    int vertexPixelID = GizmoPick::Pick((int)localMouseX, (int)localMouseY, htype);
+                    if (vertexPixelID >= 0 && vertexPixelID < 8)
+                    {
+                        g_iActiveVertex = vertexPixelID;
+                        g_bDraggingGizmo = true;
+                        g_iActiveAxis = 0; // Lock safety constraint placeholder safely
+                        
+                        g_vecDragStartVertexPos = g_brushes[g_iSelectedBrush].m_vertices[vertexPixelID];
+                        g_vecFrozenGizmoCenterAtClick = gizmoCenter;
+                        g_flDragStartWorldT = -1.0f;
+                    }
+                }
+                else if (g_iGizmoMode == GIZMO_FACE && bGizmoOnBrush)
                 {
                     if (g_iHoverFace != FACE_NONE)
                     {
@@ -877,9 +1041,9 @@ int CHammerApp::Main()
                         g_vecFrozenGizmoCenterAtClick = gizmoCenter; 
                         g_vecDragStartPos = g_brushes[g_iSelectedBrush].m_vecPos;
 
-                        if (g_iActiveFace == 2 || g_iActiveFace == 3)      g_iActiveAxis = 0; // X Axis Pull
-                        else if (g_iActiveFace == 4 || g_iActiveFace == 5) g_iActiveAxis = 1; // Y Axis Pull
-                        else if (g_iActiveFace == 0 || g_iActiveFace == 1) g_iActiveAxis = 2; // Z Axis Pull
+                        if (g_iActiveFace == 2 || g_iActiveFace == 3)      g_iActiveAxis = 0;
+                        else if (g_iActiveFace == 4 || g_iActiveFace == 5) g_iActiveAxis = 1;
+                        else if (g_iActiveFace == 0 || g_iActiveFace == 1) g_iActiveAxis = 2;
 
                         if (g_iActiveAxis == 0)      g_flDragStartSize = g_brushes[g_iSelectedBrush].m_vecSize.x;
                         else if (g_iActiveAxis == 1) g_flDragStartSize = g_brushes[g_iSelectedBrush].m_vecSize.y;
@@ -888,6 +1052,7 @@ int CHammerApp::Main()
                         g_flDragStartWorldT = -1.0f;
                     }
                 }
+                // ★ CLEAN ISOLATION: Re-route general gizmo inputs inside this explicit ELSE branch! ★
                 else if (bGizmoActive && g_iHoverAxis >= 0 && g_bShowGizmo && g_iGizmoMode != GIZMO_NONE)
                 {
                     g_vecFrozenGizmoCenterAtClick = gizmoCenter; 
@@ -919,9 +1084,8 @@ int CHammerApp::Main()
                         else                          g_flDragStartSize = g_brushes[g_iSelectedBrush].m_vecSize.z;
 
                         g_flDragStartWorldT = -1.0f;
-                    }
+                    }                    
                 }
-                // General background scene selection triggers remain safe here
                 else
                 {
                     ImVec2 canvasMin = ImGui::GetMainViewport()->WorkPos; 
@@ -972,8 +1136,6 @@ int CHammerApp::Main()
                         float lenSq = dx*dx + dy*dy;
                         if (lenSq > 1.0f)
                         {
-                            // Calculate displacement metrics using localized canvas positions
-                            // This ensures accuracy when docking panels are active
                             ImVec2 centralWorkPos = ImGui::GetMainViewport()->WorkPos; 
                             float localMouseX = (float)g_iMouseX - centralWorkPos.x;
                             float localMouseY = (float)g_iMouseY - centralWorkPos.y;
@@ -981,21 +1143,38 @@ int CHammerApp::Main()
                             float t = ((localMouseX - sx0) * dx + (localMouseY - sy0) * dy) / lenSq; 
                             float worldDelta = t * axisLength;
                             
-                            // If this is the initial click frame, lock down the anchor value and STOP here.
                             if (g_flDragStartWorldT < 0.0f) 
                             {
-                                g_flDragStartWorldT = worldDelta; // Freezes the starting world offset where you clicked
+                                g_flDragStartWorldT = worldDelta; 
                             }
                             else 
                             {
-                                // Regular dragging frames: calculate displacement relative to the locked baseline
                                 float deltaT = worldDelta - g_flDragStartWorldT;
-                                Vector newPos = g_vecDragStartPos + axisDirs[g_iActiveAxis] * deltaT;
+                                
+                                // Calculate the explicit physical displacement vector direction
+                                Vector translationOffsetVector = axisDirs[g_iActiveAxis] * deltaT;
                                 
                                 if (bGizmoOnBrush)
-                                    g_brushes[g_iSelectedBrush].m_vecPos = newPos;
+                                {
+                                    CBrush& activeBrush = g_brushes[g_iSelectedBrush];
+                                    
+                                    // ★ THE FIX: Move ALL vertices by the spatial offset delta directly! ★
+                                    // This completely preserves any custom vertex sculpting or face extensions.
+                                    for (int v = 0; v < 8; v++)
+                                    {
+                                        activeBrush.m_vertices[v] += translationOffsetVector;
+                                    }
+                                    
+                                    // Slide the bounding container properties inline to sync highlights
+                                    activeBrush.m_vecPos += translationOffsetVector;
+                                }
                                 else
-                                    g_entities[g_iSelectedEntity].m_vecPos = newPos;
+                                {
+                                    g_entities[g_iSelectedEntity].m_vecPos = g_vecDragStartPos + axisDirs[g_iActiveAxis] * deltaT;
+                                }
+                                
+                                // Advance our tracking baseline state smoothly to avoid coordinate runaway jumps
+                                g_flDragStartWorldT = worldDelta;
                             }
                         }
                     }
@@ -1019,7 +1198,6 @@ int CHammerApp::Main()
                             AngleMatrix(g_entities[g_iSelectedEntity].m_angRot, matStart);
                         
                         // 4. Build a clean isolated Delta Matrix tracking ONLY your current active axis ring
-                        // Source Engine Euler mapping: X = Pitch (Red), Y = Yaw (Green), Z = Roll (Blue)
                         QAngle angDelta(0, 0, 0);
                         if (g_iActiveAxis == 0)      angDelta.x = deltaDeg; // Pitch (Red Ring)
                         else if (g_iActiveAxis == 1) angDelta.y = deltaDeg; // Yaw (Green Ring)
@@ -1034,14 +1212,19 @@ int CHammerApp::Main()
                         MatrixAngles(matFinal, finalAngles);
                         
                         if (bGizmoOnBrush)
+                        {
                             g_brushes[g_iSelectedBrush].m_angRot = finalAngles;
+                            // ★ REMOVED: Bypassing this call stops the brush shape from resetting back to a primitive cube! ★
+                            // g_brushes[g_iSelectedBrush].RebuildPrimitiveMesh();
+                        }
                         else
+                        {
                             g_entities[g_iSelectedEntity].m_angRot = finalAngles;
+                        }
                     }
                 }
                 else if (g_iGizmoMode == GIZMO_SCALE && bGizmoOnBrush)
                 {
-                    // 和 translate 一样，用屏幕空间投影算 delta
                     Vector p0 = g_vecFrozenGizmoCenterAtClick;
                     Vector p1 = g_vecFrozenGizmoCenterAtClick + axisDirs[g_iActiveAxis] * axisLength;
 
@@ -1058,17 +1241,63 @@ int CHammerApp::Main()
                             float localMouseY = (float)g_iMouseY - centralWorkPos.y;
 
                             float t = ((localMouseX - sx0) * dx + (localMouseY - sy0) * dy) / lenSq;
-
-                            if (g_flDragStartWorldT < 0.0f)
-                                g_flDragStartWorldT = t;   // 起始 t
+                            if (g_flDragStartWorldT < 0.0f) g_flDragStartWorldT = t;   
 
                             float deltaT = t - g_flDragStartWorldT;
-                            float newSize = g_flDragStartSize + deltaT * axisLength * 0.5f;
-                            if (newSize < 1.0f) newSize = 1.0f;   // ★ 防止负数/零
+                            
+                            // Calculate scale multiplier factor safely (centered around 1.0)
+                            float scaleFactor = 1.0f + deltaT * 0.5f;
+                            if (scaleFactor < 0.01f) scaleFactor = 0.01f; // Prevent micro-inversions
 
-                            if (g_iActiveAxis == 0)      g_brushes[g_iSelectedBrush].m_vecSize.x = newSize;
-                            else if (g_iActiveAxis == 1) g_brushes[g_iSelectedBrush].m_vecSize.y = newSize;
-                            else                          g_brushes[g_iSelectedBrush].m_vecSize.z = newSize;
+                            CBrush& activeBrush = g_brushes[g_iSelectedBrush];
+
+                            // ★ THE UPGRADE: Scale vertices directly relative to the brush center pivot! ★
+                            for (int v = 0; v < 8; v++)
+                            {
+                                // Subtract center to scale in local space
+                                Vector localV = activeBrush.m_vertices[v] - activeBrush.m_vecPos;
+                                
+                                // Multiply ONLY the active scaling vector axis direction component
+                                localV[g_iActiveAxis] *= scaleFactor;
+                                
+                                // Restore world position back into mesh cache array
+                                activeBrush.m_vertices[v] = activeBrush.m_vecPos + localV;
+                            }
+
+                            // Update bounding box fields dynamically for panel reading parity
+                            activeBrush.m_vecSize[g_iActiveAxis] *= scaleFactor;
+
+                            // ★ THE CORRECTION: Expand the explicit loop layout to clear the bracket typo ★
+                            for (int f = 0; f < 6; f++)
+                            {
+                                int idx0 = activeBrush.m_faces[f].m_nVertexIndices[0];
+                                int idx1 = activeBrush.m_faces[f].m_nVertexIndices[1];
+                                int idx2 = activeBrush.m_faces[f].m_nVertexIndices[2];
+                                
+                                Vector edge1 = activeBrush.m_vertices[idx1] - activeBrush.m_vertices[idx0];
+                                Vector edge2 = activeBrush.m_vertices[idx2] - activeBrush.m_vertices[idx0];
+                                Vector faceNormal;
+                                CrossProduct(edge1, edge2, faceNormal);
+                                VectorNormalize(faceNormal);
+                                activeBrush.m_faces[f].m_vecNormal = faceNormal;
+                            }
+
+                            // ★ THE BBOX PARITY FIX: Update bounding fields dynamically from vertices! ★
+                            Vector vMins( 99999.0f,  99999.0f,  99999.0f);
+                            Vector vMaxs(-99999.0f, -99999.0f, -99999.0f);
+                            for (int v = 0; v < 8; v++)
+                            {
+                                const Vector& p = activeBrush.m_vertices[v];
+                                vMins.x = std::min(vMins.x, p.x); vMaxs.x = std::max(vMaxs.x, p.x);
+                                vMins.y = std::min(vMins.y, p.y); vMaxs.y = std::max(vMaxs.y, p.y);
+                                vMins.z = std::min(vMins.z, p.z); vMaxs.z = std::max(vMaxs.z, p.z);
+                            }
+                            
+                            // Re-calculate center position and half-size boundaries cleanly
+                            activeBrush.m_vecPos = (vMins + vMaxs) * 0.5f;
+                            activeBrush.m_vecSize = (vMaxs - vMins) * 0.5f;
+                            
+                            g_flDragStartWorldT = t; 
                         }
                     }
                 }
@@ -1093,42 +1322,98 @@ int CHammerApp::Main()
                             if (g_flDragStartWorldT < 0.0f) g_flDragStartWorldT = t;   
 
                             float deltaT = t - g_flDragStartWorldT;
+                            
+                            // Calculate your displacement distance relative to your click anchor frame
                             float totalExtrusionDelta = deltaT * axisLength;
                             
+                            // ★ THE INTERACTION FIX 2: Extrude vertices directly, preserving warped shapes! ★
                             CBrush& activeBrush = g_brushes[g_iSelectedBrush];
+                            
+                            // Determine displacement direction based on positive vs negative faces
+                            float directionalSign = 1.0f;
+                            if (g_iActiveFace == 1 || g_iActiveFace == 3 || g_iActiveFace == 5)
+                                directionalSign = -1.0f;
+                                
+                            // Calculate movement vector along the active manipulation axis
+                            Vector displacementVector(0, 0, 0);
+                            displacementVector[g_iActiveAxis] = totalExtrusionDelta * directionalSign;
+                            
+                            // Get the 4 vertex points explicitly mapped to our active face index ring
+                            // Mapping directly from the standard structural definitions we built in Brush.cpp
+                            // ★ THE ALIGNMENT REPAIR: Clean vertex lookup array rings ★
+                            int targetVertexIndices[4];
+                            if (g_iActiveFace == 0)      { targetVertexIndices[0]=4; targetVertexIndices[1]=5; targetVertexIndices[2]=6; targetVertexIndices[3]=7; } // +Z
+                            else if (g_iActiveFace == 1) { targetVertexIndices[0]=0; targetVertexIndices[1]=3; targetVertexIndices[2]=2; targetVertexIndices[3]=1; } // -Z
+                            else if (g_iActiveFace == 2) { targetVertexIndices[0]=1; targetVertexIndices[1]=2; targetVertexIndices[2]=6; targetVertexIndices[3]=5; } // +X
+                            else if (g_iActiveFace == 3) { targetVertexIndices[0]=0; targetVertexIndices[1]=4; targetVertexIndices[2]=7; targetVertexIndices[3]=3; } // -X
+                            else if (g_iActiveFace == 4) { targetVertexIndices[0]=3; targetVertexIndices[1]=7; targetVertexIndices[2]=6; targetVertexIndices[3]=2; } // +Y
+                            else                          { targetVertexIndices[0]=0; targetVertexIndices[1]=1; targetVertexIndices[2]=5; targetVertexIndices[3]=4; } // -Y
 
-                            if (g_iActiveAxis == 0) // X Axis Pull
+
+                            // Extrude ONLY the active face vertices, keeping any custom vertex adjustments intact!
+                            for (int v = 0; v < 4; v++)
                             {
-                                float rawChange = totalExtrusionDelta;
-                                if (g_iActiveFace == 3) rawChange = -totalExtrusionDelta; // FACE_NEG_X
-
-                                activeBrush.m_vecSize.x = g_flDragStartSize + rawChange * 0.5f;
-                                if (activeBrush.m_vecSize.x < 1.0f) activeBrush.m_vecSize.x = 1.0f;
-                                else activeBrush.m_vecPos.x = g_vecDragStartPos.x + (g_iActiveFace == 2 ? rawChange * 0.5f : -rawChange * 0.5f);
+                                int idx = targetVertexIndices[v];
+                                activeBrush.m_vertices[idx] += displacementVector;
                             }
-                            else if (g_iActiveAxis == 1) // Y Axis Pull
+
+                            // Recalculate planar orientation geometry normals dynamically to warp textures instantly
+                            for (int f = 0; f < 6; f++)
                             {
-                                float rawChange = totalExtrusionDelta;
-                                if (g_iActiveFace == 5) rawChange = -totalExtrusionDelta; // FACE_NEG_Y
-
-                                activeBrush.m_vecSize.y = g_flDragStartSize + rawChange * 0.5f;
-                                if (activeBrush.m_vecSize.y < 1.0f) activeBrush.m_vecSize.y = 1.0f;
-                                else activeBrush.m_vecPos.y = g_vecDragStartPos.y + (g_iActiveFace == 4 ? rawChange * 0.5f : -rawChange * 0.5f);
+                                int idx0 = activeBrush.m_faces[f].m_nVertexIndices[0];
+                                int idx1 = activeBrush.m_faces[f].m_nVertexIndices[1];
+                                int idx2 = activeBrush.m_faces[f].m_nVertexIndices[2];
+                                
+                                Vector edge1 = activeBrush.m_vertices[idx1] - activeBrush.m_vertices[idx0];
+                                Vector edge2 = activeBrush.m_vertices[idx2] - activeBrush.m_vertices[idx0];
+                                Vector faceNormal;
+                                CrossProduct(edge1, edge2, faceNormal);
+                                VectorNormalize(faceNormal);
+                                activeBrush.m_faces[f].m_vecNormal = faceNormal;
                             }
-                            else if (g_iActiveAxis == 2) // Z Axis Pull
-                            {
-                                float rawChange = totalExtrusionDelta;
-                                if (g_iActiveFace == 1) rawChange = -totalExtrusionDelta; // FACE_NEG_Z
-
-                                activeBrush.m_vecSize.z = g_flDragStartSize + rawChange * 0.5f;
-                                if (activeBrush.m_vecSize.z < 1.0f) activeBrush.m_vecSize.z = 1.0f;
-                                else activeBrush.m_vecPos.z = g_vecDragStartPos.z + (g_iActiveFace == 0 ? rawChange * 0.5f : -rawChange * 0.5f);
-                            }
+                            
+                            // Clean drag tracker states for subsequent frame calculations
+                            g_flDragStartWorldT = t; 
                         }
                     }
-                }                                
-            }
+                }
+                // ★ UPGRADE: Clean World-Space Proj-T Drag Engine for Vertex Editing! ★
+                else if (g_iGizmoMode == GIZMO_VERTEX && bGizmoOnBrush && g_iActiveVertex != -1)
+                {
+                    float deltaScreenX = (float)g_iMouseX - (float)g_iLastMouseX;
+                    float deltaScreenY = (float)g_iMouseY - (float)g_iLastMouseY;
 
+                    CBrush& activeBrush = g_brushes[g_iSelectedBrush];
+                    
+                    // Translate flat 2D viewport delta pixels into true 3D spatial transformations
+                    float dragSensitivity = m_camDistance * 0.0015f; 
+                    Vector worldDisplacement = (g_camLeft * deltaScreenX - g_camUp * deltaScreenY) * dragSensitivity;
+
+                    // Update ONLY the selected handle coordinates point in memory
+                    activeBrush.m_vertices[g_iActiveVertex] += worldDisplacement;
+
+                    // Recalculate planar orientation geometry normals dynamically to warp textures instantly
+                    for (int f = 0; f < 6; f++)
+                    {
+                        int i0 = activeBrush.m_faces[f].m_nVertexIndices[0];
+                        int i1 = activeBrush.m_faces[f].m_nVertexIndices[1];
+                        int i2 = activeBrush.m_faces[f].m_nVertexIndices[2];
+                        
+                        Vector v0 = activeBrush.m_vertices[i0];
+                        Vector v1 = activeBrush.m_vertices[i1];
+                        Vector v2 = activeBrush.m_vertices[i2];
+                        
+                        Vector edge1 = v1 - v0;
+                        Vector edge2 = v2 - v0;
+                        Vector faceNormal;
+                        CrossProduct(edge1, edge2, faceNormal);
+                        VectorNormalize(faceNormal);
+                        
+                        activeBrush.m_faces[f].m_vecNormal = faceNormal;
+                    }
+                }
+            }    
+/*
             // ===== 绘制可见 gizmo =====
             if (bGizmoActive && g_bShowGizmo && g_iGizmoMode != GIZMO_NONE
                 && !(g_iGizmoMode == GIZMO_SCALE && !bGizmoOnBrush))   // ★ scale 只对 brush
@@ -1153,7 +1438,7 @@ int CHammerApp::Main()
                     DrawScaleGizmo(gizmoCenter, axisLength, highlightAxis);
                 }
             }
-
+*/
             // ===== UI 面板 =====
             DrawMenuBar();
 
@@ -1214,6 +1499,7 @@ int CHammerApp::Main()
                 b.m_vecPos = Vector(0, 0, 32);
                 b.m_vecSize = Vector(32, 32, 32);
                 b.m_iTexId = 0;
+                b.RebuildPrimitiveMesh(); // ★ THE FIX: Invalidate and rebuild immediately upon creation!
                 g_brushes.push_back(b);
                 g_iSelectedBrush = (int)g_brushes.size() - 1;
             }

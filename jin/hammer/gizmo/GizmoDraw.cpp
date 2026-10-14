@@ -161,6 +161,34 @@ void DrawScaleGizmo(const Vector& center, float length, int highlightAxis)
 }
 
 //-----------------------------------------------------------------------------
+void DrawGlowSphere(float cx, float cy, float cz, float r, int segments)
+{
+    for (int i = 0; i < segments; i++)
+    {
+        float lat0 = (float)M_PI * (-0.5f + (float)(i) / segments);
+        float z0  = std::sin(lat0) * r;
+        float r0  = std::cos(lat0) * r;
+
+        float lat1 = (float)M_PI * (-0.5f + (float)(i + 1) / segments);
+        float z1  = std::sin(lat1) * r;
+        float r1  = std::cos(lat1) * r;
+
+        glBegin(GL_QUAD_STRIP);
+        for (int j = 0; j <= segments; j++)
+        {
+            float lng = 2.0f * (float)M_PI * (float)(j) / segments;
+            float x = std::cos(lng);
+            float y = std::sin(lng);
+
+            glVertex3f(cx + x * r0, cy + y * r0, cz + z0);
+            glVertex3f(cx + x * r1, cy + y * r1, cz + z1);
+        }
+        glEnd();
+    }
+}
+
+
+//-----------------------------------------------------------------------------
 void DrawPlayerStartModel(const Vector& pos, const QAngle& ang)
 {
     const float radius = 16.0f;

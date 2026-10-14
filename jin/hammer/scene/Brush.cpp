@@ -38,98 +38,112 @@ static void GetBaseTextureVectors(const Vector& normal, Vector& outU, Vector& ou
 //-----------------------------------------------------------------------------
 void DrawBrush(const CBrush& b)
 {
-    Vector mins = b.GetBBoxMins(); //
-    Vector maxs = b.GetBBoxMaxs(); //
-    float x0 = mins.x, x1 = maxs.x; //
-    float y0 = mins.y, y1 = maxs.y; //
-    float z0 = mins.z, z1 = maxs.z; //
-
     // 1. Fetch our unified dual-resource container from the cache manager
-    MaterialTextureResource_t tex = MaterialPreview::Instance().GetMaterialResource(b.m_szMaterial); //
+    MaterialTextureResource_t tex = MaterialPreview::Instance().GetMaterialResource(b.m_szMaterial);
     
-    // Fall back to your editor placeholder texture if no VPK asset matches or is still loading
     if (tex.worldRenderTexID == 0)
     {
-        glBindTexture(GL_TEXTURE_2D, GetBrushTexture(b.m_iTexId)); //
-        tex.nativeWidth = 64;  // Fallback dimension tracking
+        glBindTexture(GL_TEXTURE_2D, GetBrushTexture(b.m_iTexId));
+        tex.nativeWidth = 64;
         tex.nativeHeight = 64;
     }
     else
     {
-        glBindTexture(GL_TEXTURE_2D, tex.worldRenderTexID); //
+        glBindTexture(GL_TEXTURE_2D, tex.worldRenderTexID);
     }
 
-    // Default Hammer texturing alignment scalars
-    const float textureScale = 0.25f; // Standard Valve editor default scale multiplier (maps pixels perfectly to grid units)
+    const float textureScale = 0.25f; 
     const float shiftU = 0.0f;
     const float shiftV = 0.0f;
 
-    glColor3ub(255, 255, 255); //
-    glBegin(GL_QUADS); //
+    glColor3ub(255, 255, 255);
+    glBegin(GL_QUADS);
 
-    // Structure defining the 6 quad face configurations: Face Normal, and its 4 absolute world corner vertices
-    struct FaceDefinition_t {
-        Vector normal;
-        Vector v[4];
-    };
-
-    FaceDefinition_t faces[6] = {
-        { Vector(0,0,1),  { Vector(x0,y0,z1), Vector(x1,y0,z1), Vector(x1,y1,z1), Vector(x0,y1,z1) } }, // +Z
-        { Vector(0,0,-1), { Vector(x0,y0,z0), Vector(x0,y1,z0), Vector(x1,y1,z0), Vector(x1,y0,z0) } }, // -Z
-        { Vector(1,0,0),  { Vector(x1,y0,z0), Vector(x1,y1,z0), Vector(x1,y1,z1), Vector(x1,y0,z1) } }, // +X
-        { Vector(-1,0,0), { Vector(x0,y0,z0), Vector(x0,y0,z1), Vector(x0,y1,z1), Vector(x0,y1,z0) } }, // -X
-        { Vector(0,1,0),  { Vector(x0,y1,z0), Vector(x1,y1,z0), Vector(x1,y1,z1), Vector(x0,y1,z1) } }, // +Y
-        { Vector(0,-1,0), { Vector(x0,y0,z0), Vector(x0,y0,z1), Vector(x1,y0,z1), Vector(x1,y0,z0) } }  // -Y
-    };
-
+    // ★ THE CORE CORRECTION: Loop over the 6 explicit index faces rather than static box bounds! ★
     for (int f = 0; f < 6; f++)
     {
+        const BrushFace_t& face = b.m_faces[f];
+        
         Vector uAxis, vAxis;
-        GetBaseTextureVectors(faces[f].normal, uAxis, vAxis);
+        GetBaseTextureVectors(face.m_vecNormal, uAxis, vAxis);
 
         for (int v = 0; v < 4; v++)
         {
-            const Vector& vertexPos = faces[f].v[v];
+            // Lookup the physical vertex index dynamically out of the mesh cache!
+            int vertexIndex = face.m_nVertexIndices[v];
+            const Vector& vertexPos = b.m_vertices[vertexIndex];
 
-            // 2. Linear Dot Product World-to-Texture projections
+            // Linear Dot Product World-to-Texture projections
             float rawU = DotProduct(vertexPos, uAxis) + shiftU;
             float rawV = DotProduct(vertexPos, vAxis) + shiftV;
 
-            // 3. Normalize UV coordinates based on layout width/height metrics and default texture scales
             float finalU = rawU / ((float)tex.nativeWidth  * textureScale);
             float finalV = rawV / ((float)tex.nativeHeight * textureScale);
 
-            glTexCoord2f(finalU, finalV); //
-            glVertex3f(vertexPos.x, vertexPos.y, vertexPos.z); //
+            glTexCoord2f(finalU, finalV);
+            glVertex3f(vertexPos.x, vertexPos.y, vertexPos.z);
         }
     }
 
-    glEnd(); //
+    glEnd();
 }
 
 //-----------------------------------------------------------------------------
 void DrawBrushEdges(const CBrush& b)
 {
-    Vector mins = b.GetBBoxMins();
-    Vector maxs = b.GetBBoxMaxs();
-    float x0 = mins.x, x1 = maxs.x;
-    float y0 = mins.y, y1 = maxs.y;
-    float z0 = mins.z, z1 = maxs.z;
     glLineWidth(1.5f);
     glColor3ub(60, 60, 60);
     glBegin(GL_LINES);
-    glVertex3f(x0,y0,z0); glVertex3f(x1,y0,z0);
-    glVertex3f(x1,y0,z0); glVertex3f(x1,y1,z0);
-    glVertex3f(x1,y1,z0); glVertex3f(x0,y1,z0);
-    glVertex3f(x0,y1,z0); glVertex3f(x0,y0,z0);
-    glVertex3f(x0,y0,z1); glVertex3f(x1,y0,z1);
-    glVertex3f(x1,y0,z1); glVertex3f(x1,y1,z1);
-    glVertex3f(x1,y1,z1); glVertex3f(x0,y1,z1);
-    glVertex3f(x0,y1,z1); glVertex3f(x0,y0,z1);
-    glVertex3f(x0,y0,z0); glVertex3f(x0,y0,z1);
-    glVertex3f(x1,y0,z0); glVertex3f(x1,y0,z1);
-    glVertex3f(x1,y1,z0); glVertex3f(x1,y1,z1);
-    glVertex3f(x0,y1,z0); glVertex3f(x0,y1,z1);
+
+    // Loop through the faces to draw edge boundaries out of explicit vertex loops
+    for (int f = 0; f < 6; f++)
+    {
+        const BrushFace_t& face = b.m_faces[f];
+        for (int v = 0; v < 4; v++)
+            {
+                int i0 = face.m_nVertexIndices[v];
+                int i1 = face.m_nVertexIndices[(v + 1) % 4];
+                
+                glVertex3f(b.m_vertices[i0].x, b.m_vertices[i0].y, b.m_vertices[i0].z);
+                glVertex3f(b.m_vertices[i1].x, b.m_vertices[i1].y, b.m_vertices[i1].z);
+            }
+    }
+    
     glEnd();
     glLineWidth(1.0f);
+}
+
+
+// Append this method inside hammer/scene/Brush.cpp:
+void CBrush::RebuildPrimitiveMesh()
+{
+    Vector mins = GetBBoxMins();
+    Vector maxs = GetBBoxMaxs();
+
+    // 1. Generate the 8 unique local/world point coordinates of a standard bounding box
+    m_vertices.resize(8);
+    m_vertices[0] = Vector(mins.x, mins.y, mins.z); // Bottom-Back-Left
+    m_vertices[1] = Vector(maxs.x, mins.y, mins.z); // Bottom-Back-Right
+    m_vertices[2] = Vector(maxs.x, maxs.y, mins.z); // Bottom-Forward-Right
+    m_vertices[3] = Vector(mins.x, maxs.y, mins.z); // Bottom-Forward-Left
+    m_vertices[4] = Vector(mins.x, mins.y, maxs.z); // Top-Back-Left
+    m_vertices[5] = Vector(maxs.x, mins.y, maxs.z); // Top-Back-Right
+    m_vertices[6] = Vector(maxs.x, maxs.y, maxs.z); // Top-Forward-Right
+    m_vertices[7] = Vector(mins.x, maxs.y, maxs.z); // Top-Forward-Left
+
+    // 2. Define standard polygon index rings mapping our vertices counter-clockwise
+    m_faces.resize(6);
+    
+    // +Z (Top Face)
+    m_faces[FACE_POS_Z] = { Vector(0,0,1),  {4, 5, 6, 7}, m_szMaterial };
+    // -Z (Bottom Face)
+    m_faces[FACE_NEG_Z] = { Vector(0,0,-1), {0, 3, 2, 1}, m_szMaterial };
+    // +X (Right Face)
+    m_faces[FACE_POS_X] = { Vector(1,0,0),  {1, 2, 6, 5}, m_szMaterial };
+    // -X (Left Face)
+    m_faces[FACE_NEG_X] = { Vector(-1,0,0), {0, 4, 7, 3}, m_szMaterial };
+    // +Y (Front Face)
+    m_faces[FACE_POS_Y] = { Vector(0,1,0),  {3, 7, 6, 2}, m_szMaterial };
+    // -Y (Back Face)
+    m_faces[FACE_NEG_Y] = { Vector(0,-1,0), {0, 1, 5, 4}, m_szMaterial };
 }

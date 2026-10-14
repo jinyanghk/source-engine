@@ -22,6 +22,8 @@ void DrawRotationRing(const Vector& center, int axis, float radius, int segments
 //-----------------------------------------------------------------------------
 void DrawScaleGizmo(const Vector& center, float length, int highlightAxis);
 
+void DrawGlowSphere(float cx, float cy, float cz, float r, int segments);
+
 //-----------------------------------------------------------------------------
 // Draws the info_player_start placeholder (green capsule + facing arrow).
 //-----------------------------------------------------------------------------
