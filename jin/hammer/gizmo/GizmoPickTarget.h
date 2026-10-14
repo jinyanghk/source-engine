@@ -1,6 +1,8 @@
 #ifndef GIZMO_PICK_TARGET_H
 #define GIZMO_PICK_TARGET_H
 
+#include "scene/Brush.h" 
+
 #include "mathlib/vector.h"
 
 //-----------------------------------------------------------------------------
@@ -45,6 +47,7 @@ namespace GizmoPick
     void DrawPickableTranslateArrow(int axis, const Vector& center, float length);
     void DrawPickableRotateRing(int axis, const Vector& center, float radius, int segments);
     void DrawPickableScaleHandle(int axis, const Vector& center, float length);
+    void DrawPickableBrushFaces(const CBrush& b);
 
     // Decode a mouse pick. Mouse coords are SDL convention (top-left origin,
     // Y grows down). Returns -1 if nothing is under the cursor, otherwise

@@ -358,6 +358,46 @@ void DrawPickableScaleHandle(int axis, const Vector& center, float length)
 }
 
 //-----------------------------------------------------------------------------
+void DrawPickableBrushFaces(const CBrush& b)
+{
+    Vector mins = b.GetBBoxMins();
+    Vector maxs = b.GetBBoxMaxs();
+    float x0 = mins.x, x1 = maxs.x;
+    float y0 = mins.y, y1 = maxs.y;
+    float z0 = mins.z, z1 = maxs.z;
+
+    glDisable(GL_TEXTURE_2D);
+    glBegin(GL_QUADS);
+    
+    // We pass custom color markers representing the Face Index channels
+    // +Z (FACE_POS_Z = 0) -> Color key: (1, 0, 0)
+    glColor4ub(1, 0, 0, 255);
+    glVertex3f(x0, y0, z1); glVertex3f(x1, y0, z1); glVertex3f(x1, y1, z1); glVertex3f(x0, y1, z1);
+
+    // -Z (FACE_NEG_Z = 1) -> Color key: (2, 0, 0)
+    glColor4ub(2, 0, 0, 255);
+    glVertex3f(x0, y0, z0); glVertex3f(x0, y1, z0); glVertex3f(x1, y1, z0); glVertex3f(x1, y0, z0);
+
+    // +X (FACE_POS_X = 2) -> Color key: (3, 0, 0)
+    glColor4ub(3, 0, 0, 255);
+    glVertex3f(x1, y0, z0); glVertex3f(x1, y1, z0); glVertex3f(x1, y1, z1); glVertex3f(x1, y0, z1);
+
+    // -X (FACE_NEG_X = 3) -> Color key: (4, 0, 0)
+    glColor4ub(4, 0, 0, 255);
+    glVertex3f(x0, y0, z0); glVertex3f(x0, y0, z1); glVertex3f(x0, y1, z1); glVertex3f(x0, y1, z0);
+
+    // +Y (FACE_POS_Y = 4) -> Color key: (5, 0, 0)
+    glColor4ub(5, 0, 0, 255);
+    glVertex3f(x0, y1, z0); glVertex3f(x1, y1, z0); glVertex3f(x1, y1, z1); glVertex3f(x0, y1, z1);
+
+    // -Y (FACE_NEG_Y = 5) -> Color key: (6, 0, 0)
+    glColor4ub(6, 0, 0, 255);
+    glVertex3f(x0, y0, z0); glVertex3f(x0, y0, z1); glVertex3f(x1, y0, z1); glVertex3f(x1, y0, z0);
+    
+    glEnd();
+}
+
+//-----------------------------------------------------------------------------
 int Pick(int mouseX, int mouseY, HandleType& outType)
 {
     outType = HANDLE_NONE;

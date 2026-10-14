@@ -4,6 +4,22 @@
 #include <string>
 #include "mathlib/vector.h"
 
+// Near the top or bottom of hammer/scene/Brush.h
+enum BrushFaceIndex {
+    FACE_NONE = -1,
+    FACE_POS_Z = 0,
+    FACE_NEG_Z = 1,
+    FACE_POS_X = 2,
+    FACE_NEG_X = 3,
+    FACE_POS_Y = 4,
+    FACE_NEG_Y = 5
+};
+
+// Global variables to track state (can be placed inside SceneGlobals or main.cpp)
+extern int g_iHoverFace;   // The brush face the mouse is currently hovering over
+extern int g_iActiveFace;  // The face locked down during an active drag operation
+
+
 struct CBrush
 {
     Vector m_vecPos;
