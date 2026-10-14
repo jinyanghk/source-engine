@@ -31,8 +31,10 @@ void MaterialPreview::ClearCache()
 {
     for (auto& kv : m_cache)
     {
-        if (kv.second != 0)
-            glDeleteTextures(1, &kv.second);
+        if (kv.second.thumbnailTexID != 0)
+            glDeleteTextures(1, &kv.second.thumbnailTexID);
+        if (kv.second.worldRenderTexID != 0)
+            glDeleteTextures(1, &kv.second.worldRenderTexID);
     }
     m_cache.clear();
 }
@@ -100,7 +102,6 @@ std::string MaterialPreview::ParseBaseTextureFromVMT(const std::string& material
                 if (c == '\\') c = '/';
                 c = (char)tolower(c);
             }
-            //printf("[PREVIEW] Parsed $basetexture = '%s'\n", result.c_str());
             return result;
         }
     }
@@ -110,115 +111,92 @@ std::string MaterialPreview::ParseBaseTextureFromVMT(const std::string& material
 }
 
 //-----------------------------------------------------------------------------
-// 加载 .vtf 并上传到 OpenGL
+// ★ FIX: Clean routing wrapper maintaining backward compatibility for UI panels ★
 //-----------------------------------------------------------------------------
-GLuint MaterialPreview::LoadMaterialPreview(const std::string& materialPath)
+GLuint MaterialPreview::GetPreviewTexture(const std::string& materialPath)
 {
-    //printf("[PREVIEW] Loading '%s'\n", materialPath.c_str());
+    // Simply fetch our unified dual-resource container and forward the thumbnail handle
+    MaterialTextureResource_t res = GetMaterialResource(materialPath);
+    return res.thumbnailTexID;
+}
 
-    // 1. 从 .vmt 找 $basetexture
+//-----------------------------------------------------------------------------
+MaterialTextureResource_t MaterialPreview::LoadMaterialResource(const std::string& materialPath)
+{
+    MaterialTextureResource_t res;
+
     std::string baseTex = ParseBaseTextureFromVMT(materialPath);
-    if (baseTex.empty())
-    {
-        printf("[PREVIEW] No basetexture for '%s'\n", materialPath.c_str());
-        return 0;
-    }
-    //printf("[PREVIEW] basetexture = '%s'\n", baseTex.c_str());
+    if (baseTex.empty()) return res;
 
-    // 2. 读 .vtf 文件
     std::string vtfPath = "materials/" + baseTex + ".vtf";
     FileHandle_t f = g_pFileSystem->Open(vtfPath.c_str(), "rb", "GAME");
-    if (!f)
-    {
-        printf("[PREVIEW] Cannot open VTF: %s\n", vtfPath.c_str());
-        return 0;
-    }
+    if (!f) return res;
 
     int size = g_pFileSystem->Size(f);
-    if (size <= 0)
-    {
-        g_pFileSystem->Close(f);
-        return 0;
-    }
+    if (size <= 0) { g_pFileSystem->Close(f); return res; }
 
     std::vector<byte> fileData(size);
     g_pFileSystem->Read(fileData.data(), size, f);
     g_pFileSystem->Close(f);
 
-    // 3. 解码 VTF
     IVTFTexture* pVTF = CreateVTFTexture();
-    if (!pVTF)
-    {
-        printf("[PREVIEW] CreateVTFTexture failed\n");
-        return 0;
-    }
+    if (!pVTF) return res;
 
     CUtlBuffer utlBuf(fileData.data(), size, CUtlBuffer::READ_ONLY);
-    if (!pVTF->Unserialize(utlBuf))
-    {
-        printf("[PREVIEW] VTF Unserialize failed: %s\n", vtfPath.c_str());
-        DestroyVTFTexture(pVTF);
-        return 0;
-    }
+    if (!pVTF->Unserialize(utlBuf)) { DestroyVTFTexture(pVTF); return res; }
 
-    int fullW = pVTF->Width();
-    int fullH = pVTF->Height();
-    //printf("[PREVIEW] VTF size: %dx%d, mips=%d, format=%d\n",
-    //       fullW, fullH, pVTF->MipCount(), (int)pVTF->Format());
+    res.nativeWidth = pVTF->Width();
+    res.nativeHeight = pVTF->Height();
 
-    // 4. 找一个 ≤128 的 mip 层
     int targetMip = 0;
-    int mipW = fullW, mipH = fullH, mipD = 1;
+    int mipW = res.nativeWidth, mipH = res.nativeHeight, mipD = 1;
     for (int m = 0; m < pVTF->MipCount(); m++)
     {
-        int w, h, d;
-        pVTF->ComputeMipLevelDimensions(m, &w, &h, &d);
+        pVTF->ComputeMipLevelDimensions(m, &mipW, &mipH, &mipD);
         targetMip = m;
-        mipW = w;
-        mipH = h;
-        mipD = d;
-        if (w <= 64 && h <= 64)
-            break;
+        if (mipW <= 64 && mipH <= 64) break;
     }
 
-    // 5. 转 RGBA8888
     pVTF->ConvertImageFormat(IMAGE_FORMAT_RGBA8888, false);
 
-    unsigned char* data = pVTF->ImageData(0, 0, targetMip);
-    if (!data)
+    // UPLOAD HANDLE A: Thumbnail Preview for ImGui Drop-Downs
+    unsigned char* thumbData = pVTF->ImageData(0, 0, targetMip);
+    if (thumbData)
     {
-        printf("[PREVIEW] ImageData failed\n");
-        DestroyVTFTexture(pVTF);
-        return 0;
+        glGenTextures(1, &res.thumbnailTexID);
+        glBindTexture(GL_TEXTURE_2D, res.thumbnailTexID);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, mipW, mipH, 0, GL_RGBA, GL_UNSIGNED_BYTE, thumbData);
     }
 
-    // 6. 上传 OpenGL
-    GLuint tex = 0;
-    glGenTextures(1, &tex);
-    glBindTexture(GL_TEXTURE_2D, tex);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, mipW, mipH, 0,
-                 GL_RGBA, GL_UNSIGNED_BYTE, data);
+    // UPLOAD HANDLE B: Full-Resolution Layer for 3D Viewport Brush Faces
+    unsigned char* worldData = pVTF->ImageData(0, 0, 0); 
+    if (worldData)
+    {
+        glGenTextures(1, &res.worldRenderTexID);
+        glBindTexture(GL_TEXTURE_2D, res.worldRenderTexID);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR); 
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, res.nativeWidth, res.nativeHeight, 0,
+                     GL_RGBA, GL_UNSIGNED_BYTE, worldData);
+        glGenerateMipmap(GL_TEXTURE_2D); 
+    }
 
     DestroyVTFTexture(pVTF);
-
-    //printf("[PREVIEW] OK: '%s' -> tex=%u (%dx%d, mip=%d)\n",
-    //       materialPath.c_str(), tex, mipW, mipH, targetMip);
-
-    return tex;
+    return res;
 }
 
 //-----------------------------------------------------------------------------
-GLuint MaterialPreview::GetPreviewTexture(const std::string& materialPath)
+MaterialTextureResource_t MaterialPreview::GetMaterialResource(const std::string& materialPath)
 {
     auto it = m_cache.find(materialPath);
-    if (it != m_cache.end())
-        return it->second;
+    if (it != m_cache.end()) return it->second;
 
-    GLuint tex = LoadMaterialPreview(materialPath);
-    m_cache[materialPath] = tex;
-    return tex;
+    MaterialTextureResource_t res = LoadMaterialResource(materialPath);
+    m_cache[materialPath] = res;
+    return res;
 }

@@ -251,6 +251,7 @@ int CHammerApp::Main()
     SDL_Window *pWindow = SDL_GL_GetCurrentWindow();
     if (pWindow)
     {
+        SDL_SetWindowTitle(pWindow, "Hammer");
         if (bFullscreen)
         {
             SDL_SetWindowSize(pWindow, w, h);
@@ -262,6 +263,11 @@ int CHammerApp::Main()
             SDL_SetWindowSize(pWindow, w, h);
             SDL_SetWindowPosition(pWindow, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
         }
+    }
+    else
+    {
+        printf("[DEBUG ERROR] SDL_GL_GetCurrentWindow returned NULL!\n");
+        return -1;
     }
     MaterialVideoMode_t mode;
     mode.m_Width = w; mode.m_Height = h; mode.m_Format = IMAGE_FORMAT_RGBA8888; mode.m_RefreshRate = 60;
