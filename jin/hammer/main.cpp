@@ -69,6 +69,8 @@ extern void *CreateSDLMgr();
 // 全局：face / vertex gizmo 的 hover / active 状态
 int g_iHoverFace = -1;
 int g_iActiveFace = -1;
+// 全局：网格吸附
+float g_flGridSize = 16.0f;   // 默认 16 单位
 
 //-----------------------------------------------------------------------------
 
@@ -280,6 +282,23 @@ static void CompileAndRun()
 
     LogBuffer::Instance().Add("[COMPILE] Done.");
     printf("[COMPILE] Done.\n");
+}
+
+// 把 v 吸附到最近网格
+inline float SnapToGrid(float v)
+{
+    if (g_flGridSize <= 0.0f) return v;
+    return roundf(v / g_flGridSize) * g_flGridSize;
+}
+
+inline Vector SnapToGrid(const Vector& v)
+{
+    if (g_flGridSize <= 0.0f) return v;
+    return Vector(
+        roundf(v.x / g_flGridSize) * g_flGridSize,
+        roundf(v.y / g_flGridSize) * g_flGridSize,
+        roundf(v.z / g_flGridSize) * g_flGridSize
+    );
 }
 
 //-----------------------------------------------------------------------------
@@ -595,6 +614,38 @@ int CHammerApp::Main()
                     { m_camDistance *= 0.85f; if (m_camDistance < 20.0f) m_camDistance = 20.0f; }
                     else if (event.key.keysym.sym == SDLK_z && (event.key.keysym.mod & KMOD_SHIFT))
                     { m_camDistance *= 1.15f; if (m_camDistance > 3000.0f) m_camDistance = 3000.0f; }
+                    else if (event.key.keysym.sym == SDLK_LEFTBRACKET)
+                    {
+                        // 减小网格
+                        if (g_flGridSize <= 1.0f) g_flGridSize = 0.0f;
+                        else if (g_flGridSize <= 2.0f) g_flGridSize = 1.0f;
+                        else if (g_flGridSize <= 4.0f) g_flGridSize = 2.0f;
+                        else if (g_flGridSize <= 8.0f) g_flGridSize = 4.0f;
+                        else if (g_flGridSize <= 16.0f) g_flGridSize = 8.0f;
+                        else if (g_flGridSize <= 32.0f) g_flGridSize = 16.0f;
+                        else if (g_flGridSize <= 64.0f) g_flGridSize = 32.0f;
+                        else g_flGridSize = 64.0f;
+
+                        char buf[64];
+                        snprintf(buf, sizeof(buf), "[GRID] Grid size = %.0f", g_flGridSize);
+                        LogBuffer::Instance().Add(buf);
+                    }
+                    else if (event.key.keysym.sym == SDLK_RIGHTBRACKET)
+                    {
+                        // 增大网格
+                        if (g_flGridSize < 1.0f) g_flGridSize = 1.0f;
+                        else if (g_flGridSize < 2.0f) g_flGridSize = 2.0f;
+                        else if (g_flGridSize < 4.0f) g_flGridSize = 4.0f;
+                        else if (g_flGridSize < 8.0f) g_flGridSize = 8.0f;
+                        else if (g_flGridSize < 16.0f) g_flGridSize = 16.0f;
+                        else if (g_flGridSize < 32.0f) g_flGridSize = 32.0f;
+                        else if (g_flGridSize < 64.0f) g_flGridSize = 64.0f;
+                        else g_flGridSize = 128.0f;
+
+                        char buf[64];
+                        snprintf(buf, sizeof(buf), "[GRID] Grid size = %.0f", g_flGridSize);
+                        LogBuffer::Instance().Add(buf);
+                    }                    
                 }
                 break;
             }
@@ -1257,41 +1308,42 @@ int CHammerApp::Main()
                             float localMouseX = (float)g_iMouseX - centralWorkPos.x;
                             float localMouseY = (float)g_iMouseY - centralWorkPos.y;
 
-                            float t = ((localMouseX - sx0) * dx + (localMouseY - sy0) * dy) / lenSq; 
+                            float t = ((localMouseX - sx0) * dx + (localMouseY - sy0) * dy) / lenSq;
                             float worldDelta = t * axisLength;
-                            
-                            if (g_flDragStartWorldT < 0.0f) 
-                            {
-                                g_flDragStartWorldT = worldDelta; 
-                            }
-                            else 
+
+                            if (g_flDragStartWorldT < 0.0f)
+                                g_flDragStartWorldT = worldDelta;
+                            else
                             {
                                 float deltaT = worldDelta - g_flDragStartWorldT;
-                                
-                                // Calculate the explicit physical displacement vector direction
-                                Vector translationOffsetVector = axisDirs[g_iActiveAxis] * deltaT;
-                                
+
+                                // ★ 绝对位置模式
                                 if (bGizmoOnBrush)
                                 {
                                     CBrush& activeBrush = g_brushes[g_iSelectedBrush];
-                                    
-                                    // ★ THE FIX: Move ALL vertices by the spatial offset delta directly! ★
-                                    // This completely preserves any custom vertex sculpting or face extensions.
+
+                                    // 1. 未吸附的目标位置（从拖动起始位置算）
+                                    Vector rawPos = g_vecDragStartPos + axisDirs[g_iActiveAxis] * deltaT;
+
+                                    // 2. 吸附
+                                    Vector snappedPos = SnapToGrid(rawPos);
+
+                                    // 3. 计算"从当前到目标"的增量
+                                    Vector delta = snappedPos - activeBrush.m_vecPos;
+
+                                    // 4. 应用到顶点和中心
                                     for (int v = 0; v < 8; v++)
-                                    {
-                                        activeBrush.m_vertices[v] += translationOffsetVector;
-                                    }
-                                    
-                                    // Slide the bounding container properties inline to sync highlights
-                                    activeBrush.m_vecPos += translationOffsetVector;
+                                        activeBrush.m_vertices[v] += delta;
+                                    activeBrush.m_vecPos = snappedPos;
                                 }
                                 else
                                 {
-                                    g_entities[g_iSelectedEntity].m_vecPos = g_vecDragStartPos + axisDirs[g_iActiveAxis] * deltaT;
+                                    // entity：直接设位置
+                                    Vector rawPos = g_vecDragStartPos + axisDirs[g_iActiveAxis] * deltaT;
+                                    g_entities[g_iSelectedEntity].m_vecPos = SnapToGrid(rawPos);
                                 }
-                                
-                                // Advance our tracking baseline state smoothly to avoid coordinate runaway jumps
-                                g_flDragStartWorldT = worldDelta;
+
+                                // ★ 不再更新 g_flDragStartWorldT（因为用的是"绝对位置"模式）
                             }
                         }
                     }
