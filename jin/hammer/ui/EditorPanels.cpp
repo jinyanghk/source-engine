@@ -134,18 +134,36 @@ void DrawEntityPanel(CEntity* entities, int entityCount, int* pSelectedEntity,
         ImGui::Text("Selected: %s", sel.m_szName.c_str());
 
         ImGui::SliderFloat("Pos X", &sel.m_vecPos.x, -512.0f, 512.0f, "%.2f");
+        if (ImGui::IsItemActivated())
+            UndoStack::Instance().PushSnapshot("Entity Pos");
+
         ImGui::SliderFloat("Pos Y", &sel.m_vecPos.y, -512.0f, 512.0f, "%.2f");
+        if (ImGui::IsItemActivated())
+            UndoStack::Instance().PushSnapshot("Entity Pos");
+
         ImGui::SliderFloat("Pos Z", &sel.m_vecPos.z, -128.0f, 256.0f, "%.2f");
+        if (ImGui::IsItemActivated())
+            UndoStack::Instance().PushSnapshot("Entity Pos");
 
         if (sel.m_iType == ENTITY_PLAYER_START)
         {
             ImGui::SliderFloat("Yaw", &sel.m_angRot.y, -180.0f, 180.0f, "%.1f");
+            if (ImGui::IsItemActivated())
+                UndoStack::Instance().PushSnapshot("Entity Rot");
         }
         else
         {
             ImGui::SliderFloat("Pitch", &sel.m_angRot.x, -180.0f, 180.0f, "%.1f");
+            if (ImGui::IsItemActivated())
+                UndoStack::Instance().PushSnapshot("Entity Rot");
+
             ImGui::SliderFloat("Yaw",   &sel.m_angRot.y, -180.0f, 180.0f, "%.1f");
+            if (ImGui::IsItemActivated())
+                UndoStack::Instance().PushSnapshot("Entity Rot");
+
             ImGui::SliderFloat("Roll",  &sel.m_angRot.z, -180.0f, 180.0f, "%.1f");
+            if (ImGui::IsItemActivated())
+                UndoStack::Instance().PushSnapshot("Entity Rot");
         }
 
         // Properties（FGD keyvalue）
@@ -384,16 +402,34 @@ void DrawBrushPanel(const CBrush* brushes, int brushCount, int* pSelectedBrush,
         ImGui::Text("Center");
         Vector oldPos = b.m_vecPos;
         bool posChanged = false;
+
         posChanged |= ImGui::SliderFloat("CX", &b.m_vecPos.x, -512.0f, 512.0f, "%.1f");
+        if (ImGui::IsItemActivated())
+            UndoStack::Instance().PushSnapshot("Brush Center");
+
         posChanged |= ImGui::SliderFloat("CY", &b.m_vecPos.y, -512.0f, 512.0f, "%.1f");
+        if (ImGui::IsItemActivated())
+            UndoStack::Instance().PushSnapshot("Brush Center");
+
         posChanged |= ImGui::SliderFloat("CZ", &b.m_vecPos.z, -128.0f, 256.0f, "%.1f");
+        if (ImGui::IsItemActivated())
+            UndoStack::Instance().PushSnapshot("Brush Center");
 
         ImGui::Text("Half-size");
         Vector oldSize = b.m_vecSize;
         bool sizeChanged = false;
+
         sizeChanged |= ImGui::SliderFloat("SX", &b.m_vecSize.x, 1.0f, 512.0f, "%.1f");
+        if (ImGui::IsItemActivated())
+            UndoStack::Instance().PushSnapshot("Brush Size");
+
         sizeChanged |= ImGui::SliderFloat("SY", &b.m_vecSize.y, 1.0f, 512.0f, "%.1f");
+        if (ImGui::IsItemActivated())
+            UndoStack::Instance().PushSnapshot("Brush Size");
+
         sizeChanged |= ImGui::SliderFloat("SZ", &b.m_vecSize.z, 1.0f, 512.0f, "%.1f");
+        if (ImGui::IsItemActivated())
+            UndoStack::Instance().PushSnapshot("Brush Size");
 
         // ★ 关键：如果 pos/size 变了，把 m_vertices 也重建
         if (posChanged || sizeChanged)
@@ -446,7 +482,10 @@ void DrawBrushPanel(const CBrush* brushes, int brushCount, int* pSelectedBrush,
 
                     bool bSelected = (mat == b.m_szMaterial);
                     if (ImGui::Selectable(mat.c_str(), bSelected, 0, ImVec2(0, 32)))
+                    {
+                        UndoStack::Instance().PushSnapshot("Material Change");   // ★
                         b.m_szMaterial = mat;
+                    }
                     if (bSelected) ImGui::SetItemDefaultFocus();
 
                     ImGui::PopID();
