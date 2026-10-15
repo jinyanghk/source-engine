@@ -541,6 +541,31 @@ int CHammerApp::Main()
     };
 
     SetExportVMFHandler(ExportVMF);
+
+    auto ImportVMF = []()
+    {
+        char vmfPath[128];
+        snprintf(vmfPath, sizeof(vmfPath), "%s.vmf", g_compileSettings.mapName);
+
+        MapDocument doc;
+        if (!VmfIO::LoadFromFile(vmfPath, doc))
+        {
+            char buf[256];
+            snprintf(buf, sizeof(buf), "[VMF] Load FAILED: %s", vmfPath);
+            LogBuffer::Instance().Add(buf);
+            printf("%s\n", buf);
+            return;
+        }
+
+        ConvertDocumentToEditor(doc);
+
+        // 清空选中
+        g_iSelectedBrush  = -1;
+        g_iSelectedEntity = -1;
+    };
+
+    SetImportVMFHandler(ImportVMF);
+
     SetCompileAndRunHandler(CompileAndRun);
 
     while (bRunning)

@@ -4,6 +4,12 @@
 #include "scene/Brush.h"
 #include "scene/Entity.h"
 #include "scene/SceneGlobals.h"
+#include "app/FgdManager.h"
+#include "app/LogBuffer.h"
+#include "datacache/imdlcache.h"
+
+extern IMDLCache* g_pMDLCache;   // ★ 如果还没 extern
+
 #include "mathlib/vector.h"
 
 #include <cstdio>
@@ -137,4 +143,106 @@ void ConvertEditorToDocument(MapDocument& doc)
 
     printf("[VMF] Conversion done: %zu solids, %zu entities\n", //
            doc.GetSolids().size(), doc.GetEntities().size()); //
+}
+
+//-----------------------------------------------------------------------------
+// 反向转换：从 MapDocument 恢复到 g_brushes / g_entities
+// 第一版：只支持"轴对齐 brush"（从所有 planePoints 算 AABB）
+//-----------------------------------------------------------------------------
+void ConvertDocumentToEditor(const MapDocument& doc)
+{
+    g_brushes.clear();
+    g_entities.clear();
+
+    // 1. Brushes
+    for (const auto& solid : doc.GetSolids())
+    {
+        // 收集所有 planePoints，算 AABB
+        Vector mins( 1e9f,  1e9f,  1e9f);
+        Vector maxs(-1e9f, -1e9f, -1e9f);
+        std::string material = "DEV/DEV_MEASUREGENERIC01";
+        bool bHasGeometry = false;
+
+        for (const auto& face : solid.faces)
+        {
+            if (!face.material.empty())
+                material = face.material;
+
+            for (int p = 0; p < 3; p++)
+            {
+                const Vector3D& pt = face.planePoints[p];
+
+                // 跳过 (0,0,0) 的无效点（如果 plane 没解析成功，planePoints 全是 0）
+                if (pt.x == 0.0f && pt.y == 0.0f && pt.z == 0.0f)
+                    continue;
+
+                bHasGeometry = true;
+                mins.x = std::min(mins.x, pt.x); maxs.x = std::max(maxs.x, pt.x);
+                mins.y = std::min(mins.y, pt.y); maxs.y = std::max(maxs.y, pt.y);
+                mins.z = std::min(mins.z, pt.z); maxs.z = std::max(maxs.z, pt.z);
+            }
+        }
+
+        // 跳过"没几何"的 brush
+        if (!bHasGeometry || mins.x > maxs.x) continue;
+
+        CBrush b;
+        b.m_vecPos  = (mins + maxs) * 0.5f;
+        b.m_vecSize = (maxs - mins) * 0.5f;
+        b.m_szMaterial = material;
+        b.RebuildPrimitiveMesh();
+        g_brushes.push_back(b);
+    }
+
+    // 2. Entities
+    for (const auto& ent : doc.GetEntities())
+    {
+        // 跳过 worldspawn
+        if (ent.classname == "worldspawn")
+            continue;
+
+        CEntity e;
+        e.m_iType = ENTITY_MODEL;
+        e.m_szName = ent.classname;
+        e.m_vecPos = ent.origin;
+        e.m_angRot = QAngle(0, 0, 0);
+        e.m_hMdl = MDLHANDLE_INVALID;
+
+        // 处理 properties
+        for (const auto& kv : ent.properties)
+        {
+            if (kv.key == "angles")
+            {
+                float p = 0, y = 0, r = 0;
+                sscanf(kv.value.c_str(), "%f %f %f", &p, &y, &r);
+                e.m_angRot = QAngle(p, y, r);
+            }
+            else if (kv.key == "origin" || kv.key == "classname" || kv.key == "id")
+            {
+                // 跳过（已经处理过）
+            }
+            else
+            {
+                e.m_properties[kv.key] = kv.value;
+            }
+        }
+
+        // 加载模型
+        std::string modelPath = FgdManager::Instance().GetModelPathForClass(ent.classname);
+        if (!modelPath.empty())
+            e.m_hMdl = g_pMDLCache->FindMDL(modelPath.c_str());
+
+        // info_player_start 特殊处理
+        if (ent.classname == "info_player_start")
+            e.m_iType = ENTITY_PLAYER_START;
+
+        g_entities.push_back(e);
+    }
+
+    // 日志
+    char buf[256];
+    snprintf(buf, sizeof(buf), "[VMF] Imported %zu brushes, %zu entities",
+             g_brushes.size(), g_entities.size());
+    LogBuffer::Instance().Add(buf);
+    printf("%s\n", buf);
 }

@@ -33,7 +33,9 @@ struct BrushPanelResult
 void DrawMenuBar();
 
 void SetExportVMFHandler(void (*pfn)());
+void SetImportVMFHandler(void (*pfn)());
 void SetCompileAndRunHandler(void (*pfn)());
+
 // 编译配置面板（Compile Options 窗口 + 菜单项）
 void DrawCompileOptionsWindow();
 void OpenCompileOptionsWindow();

@@ -7,4 +7,7 @@ class MapDocument;
 // 第一版：只处理轴对齐 brush（忽略 m_angRot），entity 只导出 classname/origin/angles
 void ConvertEditorToDocument(MapDocument& doc);
 
+// 反向：从 MapDocument 恢复到 g_brushes / g_entities
+void ConvertDocumentToEditor(const MapDocument& doc);
+
 #endif

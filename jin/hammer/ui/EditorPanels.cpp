@@ -17,11 +17,17 @@
 
 // 文件顶部
 static void (*s_pfnExportVMF)() = nullptr;
+static void (*s_pfnImportVMF)() = nullptr;
 static void (*s_pfnCompileAndRun)() = nullptr;
 
 void SetExportVMFHandler(void (*pfn)())
 {
     s_pfnExportVMF = pfn;
+}
+
+void SetImportVMFHandler(void (*pfn)())
+{
+    s_pfnImportVMF = pfn;
 }
 
 void SetCompileAndRunHandler(void (*pfn)())
@@ -36,6 +42,11 @@ void DrawMenuBar()
     {
         if (ImGui::BeginMenu("File"))
         {
+            if (ImGui::MenuItem("Open VMF"))
+            {
+                if (s_pfnImportVMF) s_pfnImportVMF();
+            }
+            ImGui::Separator();
             if (ImGui::MenuItem("Export VMF"))
             {
                 if (s_pfnExportVMF) s_pfnExportVMF();
