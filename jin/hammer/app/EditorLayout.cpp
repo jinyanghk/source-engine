@@ -51,9 +51,9 @@ void Begin()
         ImGuiID dock_bottom = ImGui::DockBuilderSplitNode(
             dock_main, ImGuiDir_Down, 0.22f, nullptr, &dock_main);
 
-        ImGui::DockBuilderDockWindow("Entity Palette", dock_right);
-        ImGui::DockBuilderDockWindow("Selection",      dock_right);
-        ImGui::DockBuilderDockWindow("Console",        dock_bottom);
+        ImGui::DockBuilderDockWindow("Entity",          dock_right);
+        ImGui::DockBuilderDockWindow("Brush",           dock_right);
+        ImGui::DockBuilderDockWindow("Console",         dock_bottom);
 
         ImGui::DockBuilderFinish(dockspace_id);
     }

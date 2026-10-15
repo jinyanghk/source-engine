@@ -1395,41 +1395,27 @@ int CHammerApp::Main()
 
             EditorLayout::Begin();
 
-            std::string newClassFromPalette;
-            DrawEntityPalette(newClassFromPalette);
             DrawCompileOptionsWindow();
 
-            if (!newClassFromPalette.empty())
-            {
-                std::string modelPath = FgdManager::Instance().GetModelPathForClass(newClassFromPalette);
-                printf("[Palette] selected class='%s' model='%s'\n",
-                    newClassFromPalette.c_str(), modelPath.c_str());
-
-                CEntity e;
-                e.m_iType = ENTITY_MODEL;
-                e.m_szName = newClassFromPalette;
-                e.m_vecPos = Vector(0, 0, 0);
-
-                if (!modelPath.empty())
-                {
-                    // This requests the engine's native cache to load the actual tool .mdl file
-                    e.m_hMdl = g_pMDLCache->FindMDL(modelPath.c_str());
-                    if (e.m_hMdl == MDLHANDLE_INVALID)
-                        printf("[Palette] FindMDL failed for '%s'\n", modelPath.c_str());
-                }
-                else
-                {
-                    e.m_hMdl = MDLHANDLE_INVALID;
-                }
-
-                g_entities.push_back(e);
-                g_iSelectedEntity = (int)g_entities.size() - 1;
-            }
-
             BrushPanelResult brushResult;
-            DrawSelectionPanel(g_entities.data(), (int)g_entities.size(), &g_iSelectedEntity,
-                            g_brushes.data(), (int)g_brushes.size(), &g_iSelectedBrush,
-                            brushResult);
+
+            DrawEntityPanel(g_entities.data(), (int)g_entities.size(), &g_iSelectedEntity,
+                            &g_iSelectedBrush, brushResult);
+
+            DrawBrushPanel(g_brushes.data(), (int)g_brushes.size(), &g_iSelectedBrush,
+                        &g_iSelectedEntity, brushResult);
+
+            // ★ 处理新建 brush
+            if (brushResult.bRequestNew)
+            {
+                CBrush b;
+                b.m_vecPos = Vector(0, 0, 32);
+                b.m_vecSize = Vector(32, 32, 32);
+                b.m_iTexId = 0;
+                b.RebuildPrimitiveMesh();
+                g_brushes.push_back(b);
+                g_iSelectedBrush = (int)g_brushes.size() - 1;
+            }
 
             if (brushResult.bRequestDeleteEntity &&
                 brushResult.iTargetEntityIndex >= 0 &&
@@ -1444,16 +1430,33 @@ int CHammerApp::Main()
                     g_iSelectedEntity--;
             }
 
-            if (brushResult.bRequestNew)
+            // ★ 处理从 Entity Palette 创建新 entity
+            if (brushResult.bRequestNewEntity && !brushResult.szNewEntityClass.empty())
             {
-                CBrush b;
-                b.m_vecPos = Vector(0, 0, 32);
-                b.m_vecSize = Vector(32, 32, 32);
-                b.m_iTexId = 0;
-                b.RebuildPrimitiveMesh(); // ★ THE FIX: Invalidate and rebuild immediately upon creation!
-                g_brushes.push_back(b);
-                g_iSelectedBrush = (int)g_brushes.size() - 1;
+                std::string modelPath = FgdManager::Instance().GetModelPathForClass(brushResult.szNewEntityClass);
+                printf("[Palette] selected class='%s' model='%s'\n",
+                    brushResult.szNewEntityClass.c_str(), modelPath.c_str());
+
+                CEntity e;
+                e.m_iType = ENTITY_MODEL;
+                e.m_szName = brushResult.szNewEntityClass;
+                e.m_vecPos = Vector(0, 0, 0);
+
+                if (!modelPath.empty())
+                {
+                    e.m_hMdl = g_pMDLCache->FindMDL(modelPath.c_str());
+                    if (e.m_hMdl == MDLHANDLE_INVALID)
+                        printf("[Palette] FindMDL failed for '%s'\n", modelPath.c_str());
+                }
+                else
+                {
+                    e.m_hMdl = MDLHANDLE_INVALID;
+                }
+
+                g_entities.push_back(e);
+                g_iSelectedEntity = (int)g_entities.size() - 1;
             }
+
             if (brushResult.bRequestDelete &&
                 brushResult.iTargetIndex >= 0 &&
                 brushResult.iTargetIndex < (int)g_brushes.size())
@@ -1461,15 +1464,26 @@ int CHammerApp::Main()
                 g_brushes.erase(g_brushes.begin() + brushResult.iTargetIndex);
                 g_iSelectedBrush = -1;
             }
+
             if (brushResult.bRequestDuplicate &&
                 brushResult.iTargetIndex >= 0 &&
                 brushResult.iTargetIndex < (int)g_brushes.size())
             {
                 CBrush b = g_brushes[brushResult.iTargetIndex];
-                b.m_vecPos.x += 32.0f;
+
+                Vector offset(32.0f, 0, 0);
+
+                // ★ 关键：顶点也平移
+                for (auto& v : b.m_vertices)
+                    v += offset;
+
+                // m_vecPos 也平移（和顶点保持一致）
+                b.m_vecPos += offset;
+
                 g_brushes.push_back(b);
                 g_iSelectedBrush = (int)g_brushes.size() - 1;
             }
+            
             DrawConsolePanel(m_camTarget, m_camDistance, g_bShowGizmo, g_bXRayGizmo);
 
             EditorLayout::End();
