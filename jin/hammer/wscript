@@ -33,6 +33,7 @@ def build(bld):
 		'app/EditorLayout.cpp',
 		'app/FgdManager.cpp',
 		'app/CompileSettings.cpp',
+		'app/LogBuffer.cpp',
 		'ui/EditorPanels.cpp',
 		'ui/EntityPalette.cpp',
 		'map/MapDocument.cpp',

@@ -12,6 +12,7 @@
 #include "app/FgdManager.h"
 #include "fgdlib/gdvar.h"   // GDIV_TYPE 枚举
 #include "ui/EntityPalette.h"
+#include "app/LogBuffer.h"
 
 // 文件顶部
 static void (*s_pfnExportVMF)() = nullptr;
@@ -452,15 +453,68 @@ void DrawConsolePanel(const Vector& camTarget, float camDist,
         return;
     }
 
-    ImGui::Text("Camera: LMB empty = orbit | RMB/MMB = pan | Wheel = zoom");
-    ImGui::Text("        W/A/S/D = fly | Q/E = down/up | Z / Shift+Z = zoom");
-    ImGui::Text("        [R] = Reset Camera");
-    ImGui::Text("Gizmo:  1 = Translate | 2 = Rotate | 3 = Scale | 4 = Face | 5 = Vertex | 0 = None");
-    ImGui::Separator();
-    ImGui::Text("Cam Target: (%.1f, %.1f, %.1f)", camTarget.x, camTarget.y, camTarget.z);
-    ImGui::Text("Cam Dist: %.1f", camDist);
-    ImGui::TextColored(ImVec4(1, 0.5f, 0, 1), "Press R to reset camera!");
+    // --- 工具栏 ---
+    if (ImGui::Button("Clear"))
+        LogBuffer::Instance().Clear();
+    ImGui::SameLine();
+    ImGui::TextDisabled("(%d lines)", (int)LogBuffer::Instance().GetLines().size());
 
+    // 保留相机提示作为快速参考（也可以删掉）
+    if (ImGui::CollapsingHeader("Controls"))
+    {
+        ImGui::Text("Camera: LMB empty = orbit | RMB/MMB = pan | Wheel = zoom");
+        ImGui::Text("        W/A/S/D = fly | Q/E = down/up | Z / Shift+Z = zoom");
+        ImGui::Text("        [R] = Reset Camera");
+        ImGui::Text("Gizmo:  1 = Translate | 2 = Rotate | 3 = Scale | 4 = Face | 5 = Vertex | 0 = None");
+        ImGui::Text("Cam Target: (%.1f, %.1f, %.1f)", camTarget.x, camTarget.y, camTarget.z);
+        ImGui::Text("Cam Dist: %.1f", camDist);
+    }
+
+    ImGui::Separator();
+
+    // --- 日志区域 ---
+    ImGui::BeginChild("##LogScroll", ImVec2(0, 0), false,
+                     ImGuiWindowFlags_HorizontalScrollbar);
+
+    const auto& lines = LogBuffer::Instance().GetLines();
+    for (const auto& line : lines)
+    {
+        // 根据内容着色
+        ImVec4 color(0.85f, 0.85f, 0.85f, 1.0f);   // 默认灰白
+
+        if (line.find("FAILED") != std::string::npos ||
+            line.find("ERROR") != std::string::npos ||
+            line.find("Cannot") != std::string::npos ||
+            line.find("cannot") != std::string::npos)
+        {
+            color = ImVec4(1.0f, 0.4f, 0.4f, 1.0f);   // 红
+        }
+        else if (line.find("WARNING") != std::string::npos ||
+                 line.find("WARN") != std::string::npos)
+        {
+            color = ImVec4(1.0f, 0.8f, 0.3f, 1.0f);   // 黄
+        }
+        else if (line.find("exit code = 0") != std::string::npos ||
+                 line.find("OK") != std::string::npos)
+        {
+            color = ImVec4(0.5f, 1.0f, 0.5f, 1.0f);   // 绿
+        }
+        else if (line.find("$ ") != std::string::npos)
+        {
+            color = ImVec4(0.5f, 0.7f, 1.0f, 1.0f);   // 蓝（命令行）
+        }
+
+        ImGui::TextColored(color, "%s", line.c_str());
+    }
+
+    // 有新日志时自动滚到底部
+    if (LogBuffer::Instance().IsDirty())
+    {
+        ImGui::SetScrollHereY(1.0f);
+        LogBuffer::Instance().SetClean();
+    }
+
+    ImGui::EndChild();
     ImGui::End();
 }
 

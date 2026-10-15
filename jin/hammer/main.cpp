@@ -55,6 +55,7 @@
 #include "gizmo/GizmoDraw.h"   // DrawScaleGizmo
 #include "render/MaterialList.h"
 #include "app/CompileSettings.h"
+#include "app/LogBuffer.h"
 
 extern IMaterialSystem *g_pMaterialSystem;
 IFileSystem *g_pFileSystem;
@@ -167,12 +168,24 @@ enum GizmoMode {
 //-----------------------------------------------------------------------------
 static bool RunCommand(const char* cmd)
 {
-    printf("[COMPILE] $ %s\n", cmd);
-    fflush(stdout);
+    {
+        char buf[1024];
+        snprintf(buf, sizeof(buf), "[COMPILE] $ %s", cmd);
+        LogBuffer::Instance().Add(buf);
+        printf("%s\n", buf);
+        fflush(stdout);
+    }
 
     int ret = system(cmd);
-    printf("[COMPILE] exit code = %d\n", ret);
-    fflush(stdout);
+
+    {
+        char buf[64];
+        snprintf(buf, sizeof(buf), "[COMPILE] exit code = %d", ret);
+        LogBuffer::Instance().Add(buf);
+        printf("%s\n", buf);
+        fflush(stdout);
+    }
+
     return ret == 0;
 }
 
@@ -185,7 +198,6 @@ static void CompileAndRun()
     const char* mapName = g_compileSettings.mapName;
     const char* gameDir = g_compileSettings.gameDir;
 
-    // VMF / BSP 用地图名命名
     char vmfPath[128];
     char bspPath[128];
     snprintf(vmfPath, sizeof(vmfPath), "%s.vmf", mapName);
@@ -196,17 +208,28 @@ static void CompileAndRun()
     ConvertEditorToDocument(doc);
     if (!VmfIO::SaveToFile(vmfPath, doc))
     {
+        LogBuffer::Instance().Add("[COMPILE] VMF export FAILED");
         printf("[COMPILE] VMF export FAILED\n");
         return;
     }
-    printf("[COMPILE] VMF export OK: %s\n", vmfPath);
+    {
+        char buf[256];
+        snprintf(buf, sizeof(buf), "[COMPILE] VMF export OK: %s", vmfPath);
+        LogBuffer::Instance().Add(buf);
+        printf("%s\n", buf);
+    }
 
     // 2. VBSP
     if (g_compileSettings.bRunVbsp)
     {
         snprintf(cmd, sizeof(cmd), "./vbsp -game %s %s %s",
                  gameDir, g_compileSettings.vbspArgs, vmfPath);
-        if (!RunCommand(cmd)) { printf("[COMPILE] VBSP FAILED\n"); return; }
+        if (!RunCommand(cmd))
+        {
+            LogBuffer::Instance().Add("[COMPILE] VBSP FAILED");
+            printf("[COMPILE] VBSP FAILED\n");
+            return;
+        }
     }
 
     // 3. VVIS
@@ -214,7 +237,12 @@ static void CompileAndRun()
     {
         snprintf(cmd, sizeof(cmd), "./vvis -game %s %s %s",
                  gameDir, g_compileSettings.vvisArgs, bspPath);
-        if (!RunCommand(cmd)) { printf("[COMPILE] VVIS FAILED\n"); return; }
+        if (!RunCommand(cmd))
+        {
+            LogBuffer::Instance().Add("[COMPILE] VVIS FAILED");
+            printf("[COMPILE] VVIS FAILED\n");
+            return;
+        }
     }
 
     // 4. VRAD
@@ -222,14 +250,24 @@ static void CompileAndRun()
     {
         snprintf(cmd, sizeof(cmd), "./vrad -game %s %s %s",
                  gameDir, g_compileSettings.vradArgs, bspPath);
-        if (!RunCommand(cmd)) { printf("[COMPILE] VRAD FAILED\n"); return; }
+        if (!RunCommand(cmd))
+        {
+            LogBuffer::Instance().Add("[COMPILE] VRAD FAILED");
+            printf("[COMPILE] VRAD FAILED\n");
+            return;
+        }
     }
 
-    // 5. 复制 BSP 到 maps/
+    // 5. 复制 BSP
     if (g_compileSettings.bCopyToMaps)
     {
         snprintf(cmd, sizeof(cmd), "cp %s %s/maps/%s", bspPath, gameDir, bspPath);
-        if (!RunCommand(cmd)) { printf("[COMPILE] cp FAILED\n"); return; }
+        if (!RunCommand(cmd))
+        {
+            LogBuffer::Instance().Add("[COMPILE] cp FAILED");
+            printf("[COMPILE] cp FAILED\n");
+            return;
+        }
     }
 
     // 6. 启动 HL2
@@ -240,6 +278,7 @@ static void CompileAndRun()
         RunCommand(cmd);
     }
 
+    LogBuffer::Instance().Add("[COMPILE] Done.");
     printf("[COMPILE] Done.\n");
 }
 
@@ -308,6 +347,13 @@ int CHammerApp::Main()
     if (!MaterialList::Instance().LoadFromFile("materials.txt"))
     {
         Warning("[HAMMER] Failed to load materials.txt\n");
+    }
+    else
+    {
+        char buf[128];
+        snprintf(buf, sizeof(buf), "[MAT] Loaded %d materials", 
+                (int)MaterialList::Instance().GetAll().size());
+        LogBuffer::Instance().Add(buf);
     }
 
     GizmoPick::Init(w, h);
@@ -415,7 +461,11 @@ int CHammerApp::Main()
         char vmfPath[128];
         snprintf(vmfPath, sizeof(vmfPath), "%s.vmf", g_compileSettings.mapName);
         bool ok = VmfIO::SaveToFile(vmfPath, doc);
-        printf("[VMF] Export %s: %s\n", ok ? "OK" : "FAILED", vmfPath);
+
+        char buf[256];
+        snprintf(buf, sizeof(buf), "[VMF] Export %s: %s", ok ? "OK" : "FAILED", vmfPath);
+        LogBuffer::Instance().Add(buf);
+        printf("%s\n", buf);
     };
 
     SetExportVMFHandler(ExportVMF);
@@ -1483,7 +1533,7 @@ int CHammerApp::Main()
                 g_brushes.push_back(b);
                 g_iSelectedBrush = (int)g_brushes.size() - 1;
             }
-            
+
             DrawConsolePanel(m_camTarget, m_camDistance, g_bShowGizmo, g_bXRayGizmo);
 
             EditorLayout::End();
