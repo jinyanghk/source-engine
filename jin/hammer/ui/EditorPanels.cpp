@@ -13,6 +13,7 @@
 #include "fgdlib/gdvar.h"   // GDIV_TYPE 枚举
 #include "ui/EntityPalette.h"
 #include "app/LogBuffer.h"
+#include "app/UndoStack.h"
 
 // 文件顶部
 static void (*s_pfnExportVMF)() = nullptr;
@@ -53,8 +54,29 @@ void DrawMenuBar()
         }
         if (ImGui::BeginMenu("Edit"))
         {
-            ImGui::MenuItem("Undo", "Ctrl+Z", false, false);
-            ImGui::MenuItem("Redo", "Ctrl+Y", false, false);
+            std::string undoLabel = UndoStack::Instance().GetUndoLabel();
+            std::string redoLabel = UndoStack::Instance().GetRedoLabel();
+
+            char undoBuf[128];
+            if (!undoLabel.empty())
+                snprintf(undoBuf, sizeof(undoBuf), "Undo %s", undoLabel.c_str());
+            else
+                snprintf(undoBuf, sizeof(undoBuf), "Undo");
+
+            char redoBuf[128];
+            if (!redoLabel.empty())
+                snprintf(redoBuf, sizeof(redoBuf), "Redo %s", redoLabel.c_str());
+            else
+                snprintf(redoBuf, sizeof(redoBuf), "Redo");
+
+            if (ImGui::MenuItem(undoBuf, "Ctrl+Z", false, UndoStack::Instance().CanUndo()))
+            {
+                UndoStack::Instance().Undo();
+            }
+            if (ImGui::MenuItem(redoBuf, "Ctrl+Y", false, UndoStack::Instance().CanRedo()))
+            {
+                UndoStack::Instance().Redo();
+            }
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("View"))

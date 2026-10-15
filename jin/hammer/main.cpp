@@ -56,6 +56,7 @@
 #include "render/MaterialList.h"
 #include "app/CompileSettings.h"
 #include "app/LogBuffer.h"
+#include "app/UndoStack.h"
 
 extern IMaterialSystem *g_pMaterialSystem;
 IFileSystem *g_pFileSystem;
@@ -610,7 +611,7 @@ int CHammerApp::Main()
                         m_camDistance = 450.0f;
                         Msg("[HAMMER] Camera reset\n");
                     }
-                    else if (event.key.keysym.sym == SDLK_z && !(event.key.keysym.mod & KMOD_SHIFT))
+                    else if (event.key.keysym.sym == SDLK_z && !(event.key.keysym.mod & KMOD_SHIFT) && !(event.key.keysym.mod & KMOD_CTRL))
                     { m_camDistance *= 0.85f; if (m_camDistance < 20.0f) m_camDistance = 20.0f; }
                     else if (event.key.keysym.sym == SDLK_z && (event.key.keysym.mod & KMOD_SHIFT))
                     { m_camDistance *= 1.15f; if (m_camDistance > 3000.0f) m_camDistance = 3000.0f; }
@@ -645,7 +646,29 @@ int CHammerApp::Main()
                         char buf[64];
                         snprintf(buf, sizeof(buf), "[GRID] Grid size = %.0f", g_flGridSize);
                         LogBuffer::Instance().Add(buf);
-                    }                    
+                    }    
+                    else if (event.key.keysym.sym == SDLK_z && (event.key.keysym.mod & KMOD_CTRL))
+                    {
+                        if (UndoStack::Instance().Undo())
+                        {
+                            LogBuffer::Instance().Add("[UNDO] Undo");
+                        }
+                        else
+                        {
+                            LogBuffer::Instance().Add("[UNDO] Nothing to undo");
+                        }
+                    }
+                    else if (event.key.keysym.sym == SDLK_y && (event.key.keysym.mod & KMOD_CTRL))
+                    {
+                        if (UndoStack::Instance().Redo())
+                        {
+                            LogBuffer::Instance().Add("[UNDO] Redo");
+                        }
+                        else
+                        {
+                            LogBuffer::Instance().Add("[UNDO] Nothing to redo");
+                        }
+                    }                                    
                 }
                 break;
             }
@@ -1191,6 +1214,7 @@ int CHammerApp::Main()
                     int vertexPixelID = GizmoPick::Pick((int)localMouseX, (int)localMouseY, htype);
                     if (vertexPixelID >= 0 && vertexPixelID < 8)
                     {
+                        UndoStack::Instance().PushSnapshot("Vertex Edit");   // ★
                         g_iActiveVertex = vertexPixelID;
                         g_bDraggingGizmo = true;
                         g_iActiveAxis = 0; // Lock safety constraint placeholder safely
@@ -1204,6 +1228,7 @@ int CHammerApp::Main()
                 {
                     if (g_iHoverFace != FACE_NONE)
                     {
+                        UndoStack::Instance().PushSnapshot("Face Edit");   // ★
                         g_iActiveFace = g_iHoverFace;
                         g_bDraggingGizmo = true;
                         g_vecFrozenGizmoCenterAtClick = gizmoCenter; 
@@ -1227,6 +1252,7 @@ int CHammerApp::Main()
 
                     if (g_iGizmoMode == GIZMO_TRANSLATE)
                     {
+                        UndoStack::Instance().PushSnapshot("Translate");   // ★
                         g_iActiveAxis = g_iHoverAxis;
                         g_bDraggingGizmo = true;
                         if (bGizmoOnBrush) g_vecDragStartPos = g_brushes[g_iSelectedBrush].m_vecPos;
@@ -1235,6 +1261,7 @@ int CHammerApp::Main()
                     }
                     else if (g_iGizmoMode == GIZMO_ROTATE)
                     {
+                        UndoStack::Instance().PushSnapshot("Rotate");   // ★
                         g_iActiveAxis = g_iHoverAxis;
                         g_bDraggingGizmo = true;
                         //g_flDragStartAngle = -1000.0f; 
@@ -1243,6 +1270,7 @@ int CHammerApp::Main()
                     }
                     else if (g_iGizmoMode == GIZMO_SCALE && bGizmoOnBrush)
                     {
+                        UndoStack::Instance().PushSnapshot("Scale");   // ★
                         g_iActiveAxis = g_iHoverAxis;
                         g_bDraggingGizmo = true;
                         g_vecDragStartPos = g_brushes[g_iSelectedBrush].m_vecPos;
@@ -1573,6 +1601,7 @@ int CHammerApp::Main()
             // ★ 处理新建 brush
             if (brushResult.bRequestNew)
             {
+                UndoStack::Instance().PushSnapshot("New Brush");   // ★
                 CBrush b;
                 b.m_vecPos = Vector(0, 0, 32);
                 b.m_vecSize = Vector(32, 32, 32);
@@ -1586,6 +1615,7 @@ int CHammerApp::Main()
                 brushResult.iTargetEntityIndex >= 0 &&
                 brushResult.iTargetEntityIndex < (int)g_entities.size())
             {
+                UndoStack::Instance().PushSnapshot("Delete Entity");   // ★
                 g_entities.erase(g_entities.begin() + brushResult.iTargetEntityIndex);
 
                 // 修正选中索引
@@ -1598,6 +1628,7 @@ int CHammerApp::Main()
             // ★ 处理从 Entity Palette 创建新 entity
             if (brushResult.bRequestNewEntity && !brushResult.szNewEntityClass.empty())
             {
+                UndoStack::Instance().PushSnapshot("New Entity");   // ★
                 std::string modelPath = FgdManager::Instance().GetModelPathForClass(brushResult.szNewEntityClass);
                 printf("[Palette] selected class='%s' model='%s'\n",
                     brushResult.szNewEntityClass.c_str(), modelPath.c_str());
@@ -1626,6 +1657,7 @@ int CHammerApp::Main()
                 brushResult.iTargetIndex >= 0 &&
                 brushResult.iTargetIndex < (int)g_brushes.size())
             {
+                UndoStack::Instance().PushSnapshot("Delete Brush");   // ★ 加这个
                 g_brushes.erase(g_brushes.begin() + brushResult.iTargetIndex);
                 g_iSelectedBrush = -1;
             }
@@ -1634,6 +1666,7 @@ int CHammerApp::Main()
                 brushResult.iTargetIndex >= 0 &&
                 brushResult.iTargetIndex < (int)g_brushes.size())
             {
+                UndoStack::Instance().PushSnapshot("Duplicate Brush");   // ★ 加这个
                 CBrush b = g_brushes[brushResult.iTargetIndex];
 
                 Vector offset(32.0f, 0, 0);
