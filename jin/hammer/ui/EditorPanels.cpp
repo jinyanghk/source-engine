@@ -175,6 +175,11 @@ void DrawToolsPanel()
         if (s_pfnCompileAndRun) s_pfnCompileAndRun();
     }
 
+    ImGui::SameLine();
+    ImGui::TextUnformatted("|");
+    ImGui::SameLine();
+    ImGui::Checkbox("Auto Save", &g_bAutoSaveEnabled);
+
     ImGui::End();
 }
 

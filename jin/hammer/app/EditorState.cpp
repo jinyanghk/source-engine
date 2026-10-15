@@ -2,3 +2,5 @@
 
 int   g_iGizmoMode = GIZMO_TRANSLATE;
 float g_flGridSize = 16.0f;
+
+bool g_bAutoSaveEnabled = true;

@@ -368,113 +368,135 @@ int CHammerApp::Main()
 
     GizmoPick::Init(w, h);
 
-    // 初始场景：1024×1024 的房间，高 256，带光照 + 出生点
+    // 尝试加载 autosave.vmf
+    bool bLoadedAutosave = false;
     {
-        const float HALF_W   = 512.0f;
-        const float WALL_TH  = 16.0f;
-        const float FLOOR_H  = 16.0f;
-        const float CEIL_H   = 16.0f;
-        const float ROOM_H   = 256.0f;
-
-        const float WALL_Z_CENTER = (ROOM_H + CEIL_H - FLOOR_H) * 0.5f;   // 128
-        const float WALL_Z_HALF   = (ROOM_H + CEIL_H + FLOOR_H) * 0.5f;   // 144
-
-        const char* MAT_FLOOR = "CONCRETE/CONCRETEFLOOR001A";
-        const char* MAT_WALL  = "BRICK/BRICKWALL001A";
-        const char* MAT_CEIL  = "CONCRETE/CONCRETECEILING001A";
-
-        // 地板
+        MapDocument autosaveDoc;
+        if (VmfIO::LoadFromFile("autosave.vmf", autosaveDoc))
         {
-            CBrush floor;
-            floor.m_vecPos  = Vector(0, 0, -FLOOR_H * 0.5f);
-            floor.m_vecSize = Vector(HALF_W, HALF_W, FLOOR_H * 0.5f);
-            floor.m_szMaterial = MAT_FLOOR;
-            floor.RebuildPrimitiveMesh();
-            g_brushes.push_back(floor);
-        }
-
-        // 天花板
-        {
-            CBrush ceiling;
-            ceiling.m_vecPos  = Vector(0, 0, ROOM_H + CEIL_H * 0.5f);
-            ceiling.m_vecSize = Vector(HALF_W, HALF_W, CEIL_H * 0.5f);
-            ceiling.m_szMaterial = MAT_CEIL;
-            ceiling.RebuildPrimitiveMesh();
-            g_brushes.push_back(ceiling);
-        }
-
-        // 北墙（+Y）
-        {
-            CBrush wallN;
-            wallN.m_vecPos  = Vector(0, HALF_W + WALL_TH * 0.5f, WALL_Z_CENTER);
-            wallN.m_vecSize = Vector(HALF_W + WALL_TH, WALL_TH * 0.5f, WALL_Z_HALF);
-            wallN.m_szMaterial = MAT_WALL;
-            wallN.RebuildPrimitiveMesh();
-            g_brushes.push_back(wallN);
-        }
-
-        // 南墙（-Y）
-        {
-            CBrush wallS;
-            wallS.m_vecPos  = Vector(0, -(HALF_W + WALL_TH * 0.5f), WALL_Z_CENTER);
-            wallS.m_vecSize = Vector(HALF_W + WALL_TH, WALL_TH * 0.5f, WALL_Z_HALF);
-            wallS.m_szMaterial = MAT_WALL;
-            wallS.RebuildPrimitiveMesh();
-            g_brushes.push_back(wallS);
-        }
-
-        // 西墙（-X）
-        {
-            CBrush wallW;
-            wallW.m_vecPos  = Vector(-(HALF_W + WALL_TH * 0.5f), 0, WALL_Z_CENTER);
-            wallW.m_vecSize = Vector(WALL_TH * 0.5f, HALF_W + WALL_TH, WALL_Z_HALF);
-            wallW.m_szMaterial = MAT_WALL;
-            wallW.RebuildPrimitiveMesh();
-            g_brushes.push_back(wallW);
-        }
-
-        // 东墙（+X）
-        {
-            CBrush wallE;
-            wallE.m_vecPos  = Vector(HALF_W + WALL_TH * 0.5f, 0, WALL_Z_CENTER);
-            wallE.m_vecSize = Vector(WALL_TH * 0.5f, HALF_W + WALL_TH, WALL_Z_HALF);
-            wallE.m_szMaterial = MAT_WALL;
-            wallE.RebuildPrimitiveMesh();
-            g_brushes.push_back(wallE);
+            // 检查是否有内容（避免加载空的 autosave）
+            if (!autosaveDoc.GetSolids().empty() || !autosaveDoc.GetEntities().empty())
+            {
+                ConvertDocumentToEditor(autosaveDoc);
+                bLoadedAutosave = true;
+                LogBuffer::Instance().Add("[VMF] Loaded autosave.vmf");
+            }
         }
     }
 
-    // 初始 entity：吸顶灯 + 出生点
+    // 如果 autosave 不存在或为空，用默认场景
+    if (!bLoadedAutosave)
     {
-        // 吸顶灯：房顶中间偏下，不贴天花板
+        // 初始场景：1024×1024 的房间，高 256，带光照 + 出生点
         {
-            CEntity light;
-            light.m_iType = ENTITY_MODEL;
-            light.m_szName = "light";
-            light.m_vecPos = Vector(0, 0, 240);   // 天花板底面 256，light 放 240
-            light.m_angRot = QAngle(0, 0, 0);
-            light.m_hMdl = MDLHANDLE_INVALID;
+            const float HALF_W   = 512.0f;
+            const float WALL_TH  = 16.0f;
+            const float FLOOR_H  = 16.0f;
+            const float CEIL_H   = 16.0f;
+            const float ROOM_H   = 256.0f;
 
-            light.m_properties["_light"] = "255 240 200";
-            light.m_properties["_distance"] = "1024";
-            light.m_properties["_fifty_percent_distance"] = "512";
+            const float WALL_Z_CENTER = (ROOM_H + CEIL_H - FLOOR_H) * 0.5f;   // 128
+            const float WALL_Z_HALF   = (ROOM_H + CEIL_H + FLOOR_H) * 0.5f;   // 144
 
-            g_entities.push_back(light);
+            const char* MAT_FLOOR = "CONCRETE/CONCRETEFLOOR001A";
+            const char* MAT_WALL  = "BRICK/BRICKWALL001A";
+            const char* MAT_CEIL  = "CONCRETE/CONCRETECEILING001A";
+
+            // 地板
+            {
+                CBrush floor;
+                floor.m_vecPos  = Vector(0, 0, -FLOOR_H * 0.5f);
+                floor.m_vecSize = Vector(HALF_W, HALF_W, FLOOR_H * 0.5f);
+                floor.m_szMaterial = MAT_FLOOR;
+                floor.RebuildPrimitiveMesh();
+                g_brushes.push_back(floor);
+            }
+
+            // 天花板
+            {
+                CBrush ceiling;
+                ceiling.m_vecPos  = Vector(0, 0, ROOM_H + CEIL_H * 0.5f);
+                ceiling.m_vecSize = Vector(HALF_W, HALF_W, CEIL_H * 0.5f);
+                ceiling.m_szMaterial = MAT_CEIL;
+                ceiling.RebuildPrimitiveMesh();
+                g_brushes.push_back(ceiling);
+            }
+
+            // 北墙（+Y）
+            {
+                CBrush wallN;
+                wallN.m_vecPos  = Vector(0, HALF_W + WALL_TH * 0.5f, WALL_Z_CENTER);
+                wallN.m_vecSize = Vector(HALF_W + WALL_TH, WALL_TH * 0.5f, WALL_Z_HALF);
+                wallN.m_szMaterial = MAT_WALL;
+                wallN.RebuildPrimitiveMesh();
+                g_brushes.push_back(wallN);
+            }
+
+            // 南墙（-Y）
+            {
+                CBrush wallS;
+                wallS.m_vecPos  = Vector(0, -(HALF_W + WALL_TH * 0.5f), WALL_Z_CENTER);
+                wallS.m_vecSize = Vector(HALF_W + WALL_TH, WALL_TH * 0.5f, WALL_Z_HALF);
+                wallS.m_szMaterial = MAT_WALL;
+                wallS.RebuildPrimitiveMesh();
+                g_brushes.push_back(wallS);
+            }
+
+            // 西墙（-X）
+            {
+                CBrush wallW;
+                wallW.m_vecPos  = Vector(-(HALF_W + WALL_TH * 0.5f), 0, WALL_Z_CENTER);
+                wallW.m_vecSize = Vector(WALL_TH * 0.5f, HALF_W + WALL_TH, WALL_Z_HALF);
+                wallW.m_szMaterial = MAT_WALL;
+                wallW.RebuildPrimitiveMesh();
+                g_brushes.push_back(wallW);
+            }
+
+            // 东墙（+X）
+            {
+                CBrush wallE;
+                wallE.m_vecPos  = Vector(HALF_W + WALL_TH * 0.5f, 0, WALL_Z_CENTER);
+                wallE.m_vecSize = Vector(WALL_TH * 0.5f, HALF_W + WALL_TH, WALL_Z_HALF);
+                wallE.m_szMaterial = MAT_WALL;
+                wallE.RebuildPrimitiveMesh();
+                g_brushes.push_back(wallE);
+            }
         }
 
-        // 出生点：地板正中间偏上
+        // 初始 entity：吸顶灯 + 出生点
         {
-            CEntity spawn;
-            spawn.m_iType = ENTITY_PLAYER_START;
-            spawn.m_szName = "info_player_start";
-            spawn.m_vecPos = Vector(0, 0, 16);   // 地板顶面 0，玩家身高 72，放 z=16
-            spawn.m_angRot = QAngle(0, 0, 0);
+            // 吸顶灯
+            {
+                CEntity light;
+                light.m_iType = ENTITY_MODEL;
+                light.m_szName = "light";
+                light.m_vecPos = Vector(0, 0, 240);
+                light.m_angRot = QAngle(0, 0, 0);
+                light.m_hMdl = MDLHANDLE_INVALID;
 
-            std::string modelPath = "models/editor/playerstart.mdl";
-            spawn.m_hMdl = g_pMDLCache->FindMDL(modelPath.c_str());
+                light.m_properties["_light"] = "255 240 200";
+                light.m_properties["_distance"] = "1024";
+                light.m_properties["_fifty_percent_distance"] = "512";
 
-            g_entities.push_back(spawn);
+                g_entities.push_back(light);
+            }
+
+            // 出生点
+            {
+                CEntity spawn;
+                spawn.m_iType = ENTITY_PLAYER_START;
+                spawn.m_szName = "info_player_start";
+                spawn.m_vecPos = Vector(0, 0, 16);
+                spawn.m_angRot = QAngle(0, 0, 0);
+
+                std::string modelPath = "models/editor/playerstart.mdl";
+                spawn.m_hMdl = g_pMDLCache->FindMDL(modelPath.c_str());
+
+                g_entities.push_back(spawn);
+            }
         }
+
+        LogBuffer::Instance().Add("[VMF] Using default scene");
     }
 
     // 初始没有 entity 被选中。
@@ -1709,6 +1731,17 @@ int CHammerApp::Main()
         // ★ THE FIX: Record the historical mouse position at the VERY END of the frame! ★
         g_iLastMouseX = g_iMouseX;
         g_iLastMouseY = g_iMouseY;        
+    }
+
+    // 保存 autosave.vmf
+    if (g_bAutoSaveEnabled)
+    {
+        MapDocument doc;
+        ConvertEditorToDocument(doc);
+        if (VmfIO::SaveToFile("autosave.vmf", doc))
+            LogBuffer::Instance().Add("[VMF] Saved autosave.vmf");
+        else
+            LogBuffer::Instance().Add("[VMF] Failed to save autosave.vmf");
     }
 
     ImGuiLayer::Shutdown();
