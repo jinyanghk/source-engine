@@ -57,6 +57,7 @@
 #include "app/CompileSettings.h"
 #include "app/LogBuffer.h"
 #include "app/UndoStack.h"
+#include "app/EditorState.h"
 
 extern IMaterialSystem *g_pMaterialSystem;
 IFileSystem *g_pFileSystem;
@@ -67,11 +68,11 @@ IMDLCache *g_pMDLCache;
 
 extern void *CreateSDLMgr();
 
+//-----------------------------------------------------------------------------
+
 // 全局：face / vertex gizmo 的 hover / active 状态
 int g_iHoverFace = -1;
 int g_iActiveFace = -1;
-// 全局：网格吸附
-float g_flGridSize = 16.0f;   // 默认 16 单位
 
 //-----------------------------------------------------------------------------
 
@@ -154,17 +155,6 @@ bool CHammerApp::PreInit()
 }
 
 void CHammerApp::PostShutdown() {}
-
-//-----------------------------------------------------------------------------
-
-enum GizmoMode { 
-    GIZMO_NONE = 0, 
-    GIZMO_TRANSLATE, 
-    GIZMO_ROTATE, 
-    GIZMO_SCALE, 
-    GIZMO_FACE,
-    GIZMO_VERTEX
-};
 
 //-----------------------------------------------------------------------------
 // 执行 shell 命令，返回是否成功
@@ -504,7 +494,6 @@ int CHammerApp::Main()
     Vector g_camForward(0,0,0), g_camLeft(0,0,0), g_camUp(0,0,0);
     float g_camTanHalfFov = 0.0f, g_camAspect = 1.0f;
 
-    int g_iGizmoMode = GIZMO_TRANSLATE;
     bool g_bShowGizmo = true;
     bool g_bXRayGizmo = false;
     int g_iActiveAxis = -1;
@@ -1683,6 +1672,7 @@ int CHammerApp::Main()
             }
 
             DrawConsolePanel(m_camTarget, m_camDistance, g_bShowGizmo, g_bXRayGizmo);
+            DrawToolsPanel();
 
             EditorLayout::End();
 

@@ -54,6 +54,7 @@ void Begin()
         ImGui::DockBuilderDockWindow("Entity",          dock_right);
         ImGui::DockBuilderDockWindow("Brush",           dock_right);
         ImGui::DockBuilderDockWindow("Console",         dock_bottom);
+        ImGui::DockBuilderDockWindow("Tools",           dock_bottom);
 
         ImGui::DockBuilderFinish(dockspace_id);
     }

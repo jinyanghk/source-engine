@@ -8,9 +8,7 @@
 
 #include "scene/Entity.h"
 #include "scene/Brush.h"
-
-// 全局编辑器状态
-extern float g_flGridSize;
+#include "app/EditorState.h"
 
 //-----------------------------------------------------------------------------
 // DrawSelectionPanel 的输出：告诉调用者用户想做什么操作。
@@ -33,6 +31,7 @@ struct BrushPanelResult
 // 顶部菜单栏。
 //-----------------------------------------------------------------------------
 void DrawMenuBar();
+
 void SetExportVMFHandler(void (*pfn)());
 void SetCompileAndRunHandler(void (*pfn)());
 // 编译配置面板（Compile Options 窗口 + 菜单项）
@@ -47,6 +46,8 @@ void DrawEntityPanel(CEntity* entities, int entityCount, int* pSelectedEntity,
 void DrawBrushPanel(const CBrush* brushes, int brushCount, int* pSelectedBrush,
                     int* pSelectedEntity,
                     BrushPanelResult& outResult);
+
+void DrawToolsPanel();
 
 //-----------------------------------------------------------------------------
 // 底部控制台面板（操作提示 + 相机信息）。

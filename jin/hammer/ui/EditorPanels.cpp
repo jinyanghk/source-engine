@@ -89,6 +89,84 @@ void DrawMenuBar()
     }
 }
 
+void DrawToolsPanel()
+{
+    if (!ImGui::Begin("Tools"))
+    {
+        ImGui::End();
+        return;
+    }
+
+    // Gizmo 模式按钮组
+    ImGui::TextUnformatted("Gizmo:");
+    ImGui::SameLine();
+
+    struct GizmoButton { const char* label; int mode; };
+    GizmoButton buttons[] = {
+        { "Move",   GIZMO_TRANSLATE },
+        { "Rotate", GIZMO_ROTATE },
+        { "Scale",  GIZMO_SCALE },
+        { "Face",   GIZMO_FACE },
+        { "Vertex", GIZMO_VERTEX },
+        { "None",   GIZMO_NONE },
+    };
+
+    for (int i = 0; i < IM_ARRAYSIZE(buttons); i++)
+    {
+        if (i > 0) ImGui::SameLine();
+
+        bool bActive = (g_iGizmoMode == buttons[i].mode);
+        if (bActive)
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.3f, 0.5f, 0.8f, 1.0f));
+
+        ImGui::PushID(i);
+        if (ImGui::Button(buttons[i].label))
+            g_iGizmoMode = buttons[i].mode;
+        ImGui::PopID();
+
+        if (bActive)
+            ImGui::PopStyleColor();
+    }
+
+    ImGui::SameLine();
+    ImGui::TextUnformatted("|");
+    ImGui::SameLine();
+
+    // Grid 下拉框
+    ImGui::TextUnformatted("Grid:");
+    ImGui::SameLine();
+
+    const float gridSizes[] = { 0.0f, 1.0f, 2.0f, 4.0f, 8.0f, 16.0f, 32.0f, 64.0f, 128.0f };
+    const char* gridItems[] = { "Off", "1", "2", "4", "8", "16", "32", "64", "128" };
+
+    int gridIdx = 5;
+    for (int i = 0; i < IM_ARRAYSIZE(gridSizes); i++)
+    {
+        if (fabsf(g_flGridSize - gridSizes[i]) < 0.01f) { gridIdx = i; break; }
+    }
+
+    ImGui::SetNextItemWidth(80.0f);
+    if (ImGui::Combo("##Grid", &gridIdx, gridItems, IM_ARRAYSIZE(gridItems)))
+    {
+        g_flGridSize = gridSizes[gridIdx];
+        char buf[64];
+        snprintf(buf, sizeof(buf), "[GRID] Grid size = %.0f", g_flGridSize);
+        LogBuffer::Instance().Add(buf);
+    }
+
+    ImGui::SameLine();
+    ImGui::TextUnformatted("|");
+    ImGui::SameLine();
+
+    // Compile & Run 按钮
+    if (ImGui::Button("Compile & Run"))
+    {
+        if (s_pfnCompileAndRun) s_pfnCompileAndRun();
+    }
+
+    ImGui::End();
+}
+
 //-----------------------------------------------------------------------------
 // Entity 面板：list + 属性 + 折叠的 palette
 //-----------------------------------------------------------------------------
