@@ -301,6 +301,8 @@ void DrawEntityPanel(CEntity* entities, int entityCount, int* pSelectedEntity,
                     buf[sizeof(buf) - 1] = '\0';
                     if (ImGui::InputText(label.c_str(), buf, sizeof(buf)))
                         sel.m_properties[kv.name] = buf;
+                    if (ImGui::IsItemActivated())   // ★
+                        UndoStack::Instance().PushSnapshot("Entity Property");
                     break;
                 }
                 case ivInteger:
@@ -308,6 +310,8 @@ void DrawEntityPanel(CEntity* entities, int entityCount, int* pSelectedEntity,
                     int v = atoi(curValue.c_str());
                     if (ImGui::InputInt(label.c_str(), &v))
                         sel.m_properties[kv.name] = std::to_string(v);
+                    if (ImGui::IsItemActivated())   // ★
+                        UndoStack::Instance().PushSnapshot("Entity Property");
                     break;
                 }
                 case ivFloat:
@@ -321,6 +325,8 @@ void DrawEntityPanel(CEntity* entities, int entityCount, int* pSelectedEntity,
                         snprintf(buf, sizeof(buf), "%.2f", v);
                         sel.m_properties[kv.name] = buf;
                     }
+                    if (ImGui::IsItemActivated())   // ★
+                        UndoStack::Instance().PushSnapshot("Entity Property");
                     break;
                 }
                 case ivChoices:
@@ -337,6 +343,8 @@ void DrawEntityPanel(CEntity* entities, int entityCount, int* pSelectedEntity,
                     {
                         if (ImGui::Combo(label.c_str(), &curIdx, captions.data(), (int)captions.size()))
                             sel.m_properties[kv.name] = kv.choices[curIdx].value;
+                        if (ImGui::IsItemActivated())   // ★
+                            UndoStack::Instance().PushSnapshot("Entity Property");
                     }
                     break;
                 }
@@ -354,6 +362,8 @@ void DrawEntityPanel(CEntity* entities, int entityCount, int* pSelectedEntity,
                             else      newFlags &= ~kv.flagMasks[fi];
                             changed = true;
                         }
+                        if (ImGui::IsItemActivated())   // ★
+                            UndoStack::Instance().PushSnapshot("Entity Property");
                     }
                     if (changed)
                         sel.m_properties[kv.name] = std::to_string(newFlags);
@@ -372,6 +382,8 @@ void DrawEntityPanel(CEntity* entities, int entityCount, int* pSelectedEntity,
                                 (int)(col[0] * 255), (int)(col[1] * 255), (int)(col[2] * 255));
                         sel.m_properties[kv.name] = buf;
                     }
+                    if (ImGui::IsItemActivated())   // ★
+                        UndoStack::Instance().PushSnapshot("Entity Property");
                     break;
                 }
                 case ivVector:
@@ -387,6 +399,8 @@ void DrawEntityPanel(CEntity* entities, int entityCount, int* pSelectedEntity,
                         snprintf(buf, sizeof(buf), "%.2f %.2f %.2f", vec[0], vec[1], vec[2]);
                         sel.m_properties[kv.name] = buf;
                     }
+                    if (ImGui::IsItemActivated())   // ★
+                        UndoStack::Instance().PushSnapshot("Entity Property");
                     break;
                 }
                 default:
@@ -396,6 +410,8 @@ void DrawEntityPanel(CEntity* entities, int entityCount, int* pSelectedEntity,
                     buf[sizeof(buf) - 1] = '\0';
                     if (ImGui::InputText(label.c_str(), buf, sizeof(buf)))
                         sel.m_properties[kv.name] = buf;
+                    if (ImGui::IsItemActivated())   // ★
+                        UndoStack::Instance().PushSnapshot("Entity Property");
                     break;
                 }
                 }

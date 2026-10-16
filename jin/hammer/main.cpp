@@ -929,6 +929,40 @@ int CHammerApp::Main()
                 glTranslatef(-g_brushes[i].m_vecPos.x, -g_brushes[i].m_vecPos.y, -g_brushes[i].m_vecPos.z);
 
                 DrawBrush(g_brushes[i]);
+
+                // ★ Face 高亮（hover 时）
+                if (g_iGizmoMode == GIZMO_FACE
+                    && (int)i == g_iSelectedBrush
+                    && g_iHoverFace >= 0
+                    && g_iHoverFace < 6)
+                {
+                    glDisable(GL_TEXTURE_2D);
+
+                    const CBrush& b = g_brushes[i];
+                    const BrushFace_t& face = b.m_faces[g_iHoverFace];
+
+                    glEnable(GL_BLEND);
+                    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+                    glEnable(GL_POLYGON_OFFSET_FILL);
+                    glPolygonOffset(-1.0f, -1.0f);
+
+                    glColor4ub(255, 255, 0, 128);   // 半透明黄色
+
+                    glBegin(GL_QUADS);
+                    for (int v = 0; v < 4; v++)
+                    {
+                        int idx = face.m_nVertexIndices[v];
+                        const Vector& p = b.m_vertices[idx];
+                        glVertex3f(p.x, p.y, p.z);
+                    }
+                    glEnd();
+
+                    glDisable(GL_POLYGON_OFFSET_FILL);
+                    glDisable(GL_BLEND);
+
+                    glEnable(GL_TEXTURE_2D);
+                }
+
                 DrawBrushEdges(g_brushes[i]);
                 
                 if ((int)i == g_iSelectedBrush)
@@ -986,64 +1020,10 @@ int CHammerApp::Main()
             }
             glDisable(GL_TEXTURE_2D);
 
-            // =========================================================================
-            // ★ MAKE SURE LINES 482-508 IN YOUR CURRENT FILE ARE REMOVED OR DELETED! ★
-            // =========================================================================
-/*
-            // Locate your brush loops inside your immediate OpenGL viewport pass:
-            for (size_t i = 0; i < g_brushes.size(); i++)
-            {
-                // --- Part 1: Keep ALL local brush geometry inside the matrix stack ---
-                glPushMatrix();
-                
-                glTranslatef(g_brushes[i].m_vecPos.x, g_brushes[i].m_vecPos.y, g_brushes[i].m_vecPos.z);
-                glRotatef(g_brushes[i].m_angRot.y, 0.0f, 1.0f, 0.0f);
-                glRotatef(g_brushes[i].m_angRot.x, 1.0f, 0.0f, 0.0f);
-                glRotatef(g_brushes[i].m_angRot.z, 0.0f, 0.0f, 1.0f);
-                glTranslatef(-g_brushes[i].m_vecPos.x, -g_brushes[i].m_vecPos.y, -g_brushes[i].m_vecPos.z);
-                
-                // Draw the textured faces and wireframe outlines together
-                DrawBrush(g_brushes[i]);
-                DrawBrushEdges(g_brushes[i]);
-                
-                // Draw selection handles over the dynamic corners
-                if (g_iGizmoMode == GIZMO_VERTEX && (int)i == g_iSelectedBrush)
-                {
-                    glDisable(GL_TEXTURE_2D);
-                    glDisable(GL_DEPTH_TEST); 
-                    for (int v = 0; v < 8; v++)
-                    {
-                        Vector vPos = g_brushes[i].m_vertices[v];
-                        if (v == g_iHoverAxis) glColor3ub(255, 255, 0); 
-                        else glColor3ub(255, 255, 255);
-
-                        float hSz = 2.0f;
-                        glBegin(GL_LINE_LOOP);
-                        glVertex3f(vPos.x-hSz, vPos.y-hSz, vPos.z+hSz); 
-                        glVertex3f(vPos.x+hSz, vPos.y-hSz, vPos.z+hSz);
-                        glVertex3f(vPos.x+hSz, vPos.y+hSz, vPos.z+hSz); 
-                        glVertex3f(vPos.x-hSz, vPos.y+hSz, vPos.z+hSz);
-                        glEnd();
-                    }
-                    glEnable(GL_DEPTH_TEST);
-                }
-                
-                glPopMatrix(); // ★ Pop matrix here to reset safely back to world space!
-
-                // --- Part 2: Draw only the yellow selection box in absolute world space ---
-                if ((int)i == g_iSelectedBrush)
-                {
-                    glDepthMask(GL_FALSE);
-                    DrawBrushBBox(g_brushes[i], true); // Resolves the floating box issue perfectly
-                    glDepthMask(GL_TRUE);
-                }
-            }
-*/
             glDepthMask(GL_FALSE);
             for (size_t i = 0; i < g_entities.size(); i++)
                 DrawEntityBBox(g_entities[i], (int)i == g_iSelectedEntity);
-            //for (size_t i = 0; i < g_brushes.size(); i++)
-            //    DrawBrushBBox(g_brushes[i], (int)i == g_iSelectedBrush);
+
             glDepthMask(GL_TRUE);
 
             if (g_bXRayGizmo)
@@ -1070,8 +1050,6 @@ int CHammerApp::Main()
 
             Vector axisDirs[3] = { Vector(1,0,0), Vector(0,1,0), Vector(0,0,1) };
 
-            //float ndcX = (g_iMouseX / (float)w) * 2.0f - 1.0f;
-            //float ndcY = 1.0f - (g_iMouseY / (float)h) * 2.0f;
             // 1. Query the explicit position and size of the current central view space from ImGui
             ImVec2 canvasMin = ImGui::GetMainViewport()->WorkPos; // Basal offset of your app workspace
             float localMouseX = (float)g_iMouseX - canvasMin.x;
