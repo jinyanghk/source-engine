@@ -58,6 +58,7 @@
 #include "app/LogBuffer.h"
 #include "app/UndoStack.h"
 #include "app/EditorState.h"
+#include "ui/View2D.h"
 
 extern IMaterialSystem *g_pMaterialSystem;
 IFileSystem *g_pFileSystem;
@@ -1601,6 +1602,13 @@ int CHammerApp::Main()
             DrawMenuBar();
 
             EditorLayout::Begin();
+            
+            // 只在 Unity / Quad 布局时画 2D 视图
+            if (EditorLayout::GetLayoutMode() != EditorLayout::LAYOUT_DEFAULT)
+            {
+                Draw2DViews();
+            }
+
 
             DrawCompileOptionsWindow();
 

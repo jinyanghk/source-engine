@@ -94,6 +94,19 @@ void DrawMenuBar()
         {
             if (ImGui::MenuItem("Reset Layout"))
                 EditorLayout::ResetDefaultLayout();
+
+            ImGui::Separator();
+            ImGui::TextDisabled("Layout Mode");
+
+            if (ImGui::MenuItem("Default", nullptr, EditorLayout::GetLayoutMode() == EditorLayout::LAYOUT_DEFAULT))
+                EditorLayout::SetLayoutMode(EditorLayout::LAYOUT_DEFAULT);
+
+            if (ImGui::MenuItem("Unity (right panel)", nullptr, EditorLayout::GetLayoutMode() == EditorLayout::LAYOUT_UNITY))
+                EditorLayout::SetLayoutMode(EditorLayout::LAYOUT_UNITY);
+
+            if (ImGui::MenuItem("Quad (4 views)", nullptr, EditorLayout::GetLayoutMode() == EditorLayout::LAYOUT_QUAD))
+                EditorLayout::SetLayoutMode(EditorLayout::LAYOUT_QUAD);
+
             ImGui::EndMenu();
         }
         ImGui::EndMainMenuBar();

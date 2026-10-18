@@ -38,6 +38,7 @@ def build(bld):
 		'app/EditorState.cpp',
 		'ui/EditorPanels.cpp',
 		'ui/EntityPalette.cpp',
+		'ui/View2D.cpp',
 		'map/MapDocument.cpp',
 		'map/MapConverter.cpp',
 		'map/VmfIO.cpp',
