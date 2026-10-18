@@ -36,6 +36,16 @@ struct View2D
     int    iDraggingEntity      = -1;
     Vector vecDragStartEntityPos;
 
+    // 手柄缩放状态
+    bool   bResizingBrush       = false;
+    int    iResizingBrush       = -1;
+    int    iResizeHandle        = -1;   // 0-7：左上、右上、右下、左下、上中、右中、下中、左中
+    // 固定边界的"世界坐标"（8 个手柄对应 4 条边界的组合）
+    float  fResizeFixedMinX     = 0.0f;   // 固定的"左"边界
+    float  fResizeFixedMaxX     = 0.0f;   // 固定的"右"边界
+    float  fResizeFixedMinY     = 0.0f;   // 固定的"下"边界
+    float  fResizeFixedMaxY     = 0.0f;   // 固定的"上"边界
+
     // 标记"本次拖动是否已经 push 过快照"
     bool   bPushedDragSnapshot  = false;
 
@@ -137,6 +147,27 @@ static float GetVectorAxis(const Vector& v, int axis)
 }
 
 //-----------------------------------------------------------------------------
+// 8 个手柄的"世界坐标"（顺序：左上、右上、右下、左下、上中、右中、下中、左中）
+//-----------------------------------------------------------------------------
+static void GetBrushHandles(const CBrush& b, const View2D& view,
+                            float outHandles[8][2])
+{
+    float minX, maxX, minY, maxY;
+    GetBrush2DRange(b, view, minX, maxX, minY, maxY);
+    float midX = (minX + maxX) * 0.5f;
+    float midY = (minY + maxY) * 0.5f;
+
+    outHandles[0][0] = minX; outHandles[0][1] = maxY;   // 左上
+    outHandles[1][0] = maxX; outHandles[1][1] = maxY;   // 右上
+    outHandles[2][0] = maxX; outHandles[2][1] = minY;   // 右下
+    outHandles[3][0] = minX; outHandles[3][1] = minY;   // 左下
+    outHandles[4][0] = midX; outHandles[4][1] = maxY;   // 上中
+    outHandles[5][0] = maxX; outHandles[5][1] = midY;   // 右中
+    outHandles[6][0] = midX; outHandles[6][1] = minY;   // 下中
+    outHandles[7][0] = minX; outHandles[7][1] = midY;   // 左中
+}
+
+//-----------------------------------------------------------------------------
 // 画网格
 //-----------------------------------------------------------------------------
 static void DrawGrid2D(ImDrawList* draw, const View2D& view,
@@ -181,7 +212,7 @@ static void DrawGrid2D(ImDrawList* draw, const View2D& view,
 }
 
 //-----------------------------------------------------------------------------
-// 画所有 brush 的 2D 投影
+// 画所有 brush 的 2D 投影 + 选中 brush 的 8 个手柄
 //-----------------------------------------------------------------------------
 static void DrawBrushes2D(ImDrawList* draw, const View2D& view,
                           const ImVec2& canvasPos, const ImVec2& canvasSize)
@@ -203,6 +234,33 @@ static void DrawBrushes2D(ImDrawList* draw, const View2D& view,
         draw->AddRectFilled(p1, p2, IM_COL32(120, 120, 120, 80));
         draw->AddRect(p1, p2, color, 0.0f, 0, bSelected ? 2.0f : 1.0f);
     }
+
+    // 画"选中 brush"的 8 个手柄
+    if (g_iSelectedBrush >= 0 && g_iSelectedBrush < (int)g_brushes.size())
+    {
+        float handles[8][2];
+        GetBrushHandles(g_brushes[g_iSelectedBrush], view, handles);
+
+        const float HANDLE_HALF = 4.0f;   // 手柄半边长（像素）
+
+        for (int h = 0; h < 8; h++)
+        {
+            ImVec2 p = WorldToScreen2D(handles[h][0], handles[h][1], view, canvasPos, canvasSize);
+
+            // hover 或"正在拖"时高亮
+            bool bHighlighted = (view.bResizingBrush && view.iResizeHandle == h);
+
+            ImU32 fillColor   = bHighlighted ? IM_COL32(255, 200, 0, 255)
+                                             : IM_COL32(255, 255, 0, 255);
+            ImU32 borderColor = IM_COL32(0, 0, 0, 255);
+
+            ImVec2 hMin(p.x - HANDLE_HALF, p.y - HANDLE_HALF);
+            ImVec2 hMax(p.x + HANDLE_HALF, p.y + HANDLE_HALF);
+
+            draw->AddRectFilled(hMin, hMax, fillColor);
+            draw->AddRect(hMin, hMax, borderColor);
+        }
+    }
 }
 
 //-----------------------------------------------------------------------------
@@ -219,7 +277,6 @@ static void DrawEntities2D(ImDrawList* draw, const View2D& view,
         ImU32 color = bSelected ? IM_COL32(255, 255, 0, 255)
                                 : IM_COL32(0, 200, 0, 255);
 
-        // bbox 2D 投影
         float minX, maxX, minY, maxY;
         GetEntity2DRange(e, view, minX, maxX, minY, maxY);
 
@@ -240,18 +297,179 @@ static void DrawEntities2D(ImDrawList* draw, const View2D& view,
 }
 
 //-----------------------------------------------------------------------------
+// 检测"鼠标是否点中 8 个手柄之一"
+// 返回 -1 表示没点中，否则返回手柄索引 0-7
+//-----------------------------------------------------------------------------
+static int HitTestHandles(const CBrush& b, const View2D& view,
+                          const ImVec2& mousePos, const ImVec2& canvasPos, const ImVec2& canvasSize)
+{
+    float handles[8][2];
+    GetBrushHandles(b, view, handles);
+
+    const float HANDLE_HALF = 6.0f;   // 点击容差稍大（像素）
+
+    for (int h = 0; h < 8; h++)
+    {
+        ImVec2 p = WorldToScreen2D(handles[h][0], handles[h][1], view, canvasPos, canvasSize);
+
+        if (mousePos.x >= p.x - HANDLE_HALF && mousePos.x <= p.x + HANDLE_HALF &&
+            mousePos.y >= p.y - HANDLE_HALF && mousePos.y <= p.y + HANDLE_HALF)
+        {
+            return h;
+        }
+    }
+
+    return -1;
+}
+
+//-----------------------------------------------------------------------------
+// 开始手柄缩放
+//-----------------------------------------------------------------------------
+static void StartResize(View2D& view, int brushIdx, int handle)
+{
+    view.bResizingBrush = true;
+    view.iResizingBrush = brushIdx;
+    view.iResizeHandle  = handle;
+    view.bPushedDragSnapshot = false;
+
+    float minX, maxX, minY, maxY;
+    GetBrush2DRange(g_brushes[brushIdx], view, minX, maxX, minY, maxY);
+
+    // 保存"固定边界"（"手柄"的"对侧"）
+    view.fResizeFixedMinX = minX;
+    view.fResizeFixedMaxX = maxX;
+    view.fResizeFixedMinY = minY;
+    view.fResizeFixedMaxY = maxY;
+}
+
+//-----------------------------------------------------------------------------
+// 处理手柄缩放（"拖动中"）
+//-----------------------------------------------------------------------------
+static void UpdateResize(View2D& view, ImGuiIO& io,
+                         const ImVec2& canvasPos, const ImVec2& canvasSize)
+{
+    if (!view.bResizingBrush || view.iResizingBrush < 0 || view.iResizeHandle < 0)
+        return;
+
+    float wx, wy;
+    ScreenToWorld2D(io.MousePos, view, canvasPos, canvasSize, wx, wy);
+
+    // 首次有实际位移时 push Undo
+    if (!view.bPushedDragSnapshot)
+    {
+        UndoStack::Instance().PushSnapshot("2D Resize Brush");
+        view.bPushedDragSnapshot = true;
+    }
+
+    CBrush& brush = g_brushes[view.iResizingBrush];
+
+    float newMinX = view.fResizeFixedMinX;
+    float newMaxX = view.fResizeFixedMaxX;
+    float newMinY = view.fResizeFixedMinY;
+    float newMaxY = view.fResizeFixedMaxY;
+
+    int h = view.iResizeHandle;
+
+    // 根据手柄更新对应边界
+    switch (h)
+    {
+    case 0:   // 左上角：动 minX, maxY
+        newMinX = wx; newMaxY = wy;
+        break;
+    case 1:   // 右上角：动 maxX, maxY
+        newMaxX = wx; newMaxY = wy;
+        break;
+    case 2:   // 右下角：动 maxX, minY
+        newMaxX = wx; newMinY = wy;
+        break;
+    case 3:   // 左下角：动 minX, minY
+        newMinX = wx; newMinY = wy;
+        break;
+    case 4:   // 上中：动 maxY
+        newMaxY = wy;
+        break;
+    case 5:   // 右中：动 maxX
+        newMaxX = wx;
+        break;
+    case 6:   // 下中：动 minY
+        newMinY = wy;
+        break;
+    case 7:   // 左中：动 minX
+        newMinX = wx;
+        break;
+    }
+
+    // Grid Snap
+    if (g_flGridSize > 0.0f)
+    {
+        if (h == 0 || h == 3 || h == 7) newMinX = roundf(newMinX / g_flGridSize) * g_flGridSize;
+        if (h == 1 || h == 2 || h == 5) newMaxX = roundf(newMaxX / g_flGridSize) * g_flGridSize;
+        if (h == 0 || h == 1 || h == 4) newMaxY = roundf(newMaxY / g_flGridSize) * g_flGridSize;
+        if (h == 2 || h == 3 || h == 6) newMinY = roundf(newMinY / g_flGridSize) * g_flGridSize;
+    }
+
+    // 检查尺寸
+    if (newMaxX - newMinX < 1.0f || newMaxY - newMinY < 1.0f)
+        return;
+
+    // 计算新的中心/半尺寸（沿着两个轴）
+    float newCenterX = (newMinX + newMaxX) * 0.5f;
+    float newHalfX   = (newMaxX - newMinX) * 0.5f;
+    float newCenterY = (newMinY + newMaxY) * 0.5f;
+    float newHalfY   = (newMaxY - newMinY) * 0.5f;
+
+    Vector oldPos = brush.m_vecPos;
+    Vector oldSize = brush.m_vecSize;
+
+    // 设置（axisMapX / axisMapY）
+    SetVectorAxis(brush.m_vecPos, view.axisMapX, newCenterX);
+    SetVectorAxis(brush.m_vecSize, view.axisMapX, newHalfX);
+    SetVectorAxis(brush.m_vecPos, view.axisMapY, newCenterY);
+    SetVectorAxis(brush.m_vecSize, view.axisMapY, newHalfY);
+
+    // 同步 m_vertices
+    Vector delta = brush.m_vecPos - oldPos;
+    Vector scale;
+    scale.x = (oldSize.x > 0.0001f) ? (brush.m_vecSize.x / oldSize.x) : 1.0f;
+    scale.y = (oldSize.y > 0.0001f) ? (brush.m_vecSize.y / oldSize.y) : 1.0f;
+    scale.z = (oldSize.z > 0.0001f) ? (brush.m_vecSize.z / oldSize.z) : 1.0f;
+
+    for (auto& v : brush.m_vertices)
+    {
+        Vector local = v - oldPos;
+        local.x *= scale.x;
+        local.y *= scale.y;
+        local.z *= scale.z;
+        v = oldPos + local + delta;
+    }
+
+    brush.RecalcFaceNormals();
+}
+
+//-----------------------------------------------------------------------------
 // 拖动处理
 //-----------------------------------------------------------------------------
 static bool HandleDrag(View2D& view, ImGuiIO& io,
                        const ImVec2& canvasPos, const ImVec2& canvasSize)
 {
-    // --- 1. 左键按下：拾取 + 开始拖动 ---
+    // --- 1. 左键按下：拾取 + 开始拖动 / 开始缩放 ---
     if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
     {
         float wx, wy;
         ScreenToWorld2D(io.MousePos, view, canvasPos, canvasSize, wx, wy);
 
-        // ★ 先查 entity（entity 优先，和 3D 拾取一致）
+        // ★ 优先：如果"当前选中的 brush"的"手柄"被点中 → 边缘缩放
+        if (g_iSelectedBrush >= 0 && g_iSelectedBrush < (int)g_brushes.size())
+        {
+            int handle = HitTestHandles(g_brushes[g_iSelectedBrush], view, io.MousePos, canvasPos, canvasSize);
+            if (handle >= 0)
+            {
+                StartResize(view, g_iSelectedBrush, handle);
+                return true;
+            }
+        }
+
+        // 先查 entity
         int hitEntity = -1;
         for (int i = (int)g_entities.size() - 1; i >= 0; i--)
         {
@@ -310,7 +528,14 @@ static bool HandleDrag(View2D& view, ImGuiIO& io,
         g_iSelectedEntity = -1;
     }
 
-    // --- 2. 拖动中 ---
+    // --- 2. 拖动中：手柄缩放 ---
+    if (view.bResizingBrush && ImGui::IsMouseDown(ImGuiMouseButton_Left))
+    {
+        UpdateResize(view, io, canvasPos, canvasSize);
+        return true;
+    }
+
+    // --- 3. 拖动中：brush / entity 移动 ---
     bool bAnyDragging = view.bDraggingBrush || view.bDraggingEntity;
     if (bAnyDragging && ImGui::IsMouseDown(ImGuiMouseButton_Left))
     {
@@ -320,7 +545,6 @@ static bool HandleDrag(View2D& view, ImGuiIO& io,
         float deltaX = wx - view.fDragStartWorldX;
         float deltaY = wy - view.fDragStartWorldY;
 
-        // 首次有实际位移时 push Undo
         if (!view.bPushedDragSnapshot && (fabsf(deltaX) > 0.01f || fabsf(deltaY) > 0.01f))
         {
             UndoStack::Instance().PushSnapshot(
@@ -371,13 +595,16 @@ static bool HandleDrag(View2D& view, ImGuiIO& io,
         }
     }
 
-    // --- 3. 左键松开：结束拖动 ---
+    // --- 4. 左键松开：结束拖动 / 缩放 ---
     if (ImGui::IsMouseReleased(ImGuiMouseButton_Left))
     {
         view.bDraggingBrush      = false;
         view.iDraggingBrush      = -1;
         view.bDraggingEntity     = false;
         view.iDraggingEntity     = -1;
+        view.bResizingBrush      = false;
+        view.iResizingBrush      = -1;
+        view.iResizeHandle       = -1;
         view.bPushedDragSnapshot = false;
     }
 
@@ -414,10 +641,10 @@ static void Draw2DViewCommon(const char* name, View2D& view)
     // 2. 网格
     DrawGrid2D(draw, view, canvasPos, canvasSize);
 
-    // 3. Brush 投影
+    // 3. Brush 投影 + 手柄
     DrawBrushes2D(draw, view, canvasPos, canvasSize);
 
-    // 4. Entity 图标（bbox + 圆圈 + 十字）
+    // 4. Entity 图标
     DrawEntities2D(draw, view, canvasPos, canvasSize);
 
     // 5. 交互
@@ -426,7 +653,7 @@ static void Draw2DViewCommon(const char* name, View2D& view)
         ImGuiIO& io = ImGui::GetIO();
 
         // 5a. 缩放（滚轮，以鼠标为中心；拖动中禁用）
-        if (io.MouseWheel != 0.0f && !view.bDraggingBrush && !view.bDraggingEntity)
+        if (io.MouseWheel != 0.0f && !view.bDraggingBrush && !view.bDraggingEntity && !view.bResizingBrush)
         {
             float wxBefore, wyBefore;
             ScreenToWorld2D(io.MousePos, view, canvasPos, canvasSize, wxBefore, wyBefore);
@@ -449,7 +676,7 @@ static void Draw2DViewCommon(const char* name, View2D& view)
             view.centerY += io.MouseDelta.y / view.zoom;
         }
 
-        // 5c. 拖动（entity 优先，其次 brush）
+        // 5c. 拖动 / 缩放
         HandleDrag(view, io, canvasPos, canvasSize);
     }
 
