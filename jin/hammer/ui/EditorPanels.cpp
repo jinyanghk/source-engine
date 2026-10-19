@@ -183,6 +183,20 @@ void DrawToolsPanel()
     ImGui::TextUnformatted("|");
     ImGui::SameLine();
 
+    bool bWasActive = g_bBlockToolActive;
+    if (bWasActive)
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(1.0f, 0.6f, 0.2f, 1.0f));
+
+    if (ImGui::Button("Block Tool"))
+        g_bBlockToolActive = !g_bBlockToolActive;
+
+    if (bWasActive)
+        ImGui::PopStyleColor();
+
+    ImGui::SameLine();
+    ImGui::TextUnformatted("|");
+    ImGui::SameLine();
+
     // Compile & Run 按钮
     if (ImGui::Button("Compile & Run"))
     {

@@ -46,6 +46,13 @@ struct View2D
     float  fResizeFixedMinY     = 0.0f;   // 固定的"下"边界
     float  fResizeFixedMaxY     = 0.0f;   // 固定的"上"边界
 
+    // 画框创建状态
+    bool   bBoxCreating       = false;
+    float  fBoxCreateStartX   = 0.0f;
+    float  fBoxCreateStartY   = 0.0f;
+    float  fBoxCreateEndX     = 0.0f;
+    float  fBoxCreateEndY     = 0.0f;
+
     // 标记"本次拖动是否已经 push 过快照"
     bool   bPushedDragSnapshot  = false;
 
@@ -446,6 +453,76 @@ static void UpdateResize(View2D& view, ImGuiIO& io,
     brush.RecalcFaceNormals();
 }
 
+static void CreateBrushFromBox(View2D& view)
+{
+    float minX = std::min(view.fBoxCreateStartX, view.fBoxCreateEndX);
+    float maxX = std::max(view.fBoxCreateStartX, view.fBoxCreateEndX);
+    float minY = std::min(view.fBoxCreateStartY, view.fBoxCreateEndY);
+    float maxY = std::max(view.fBoxCreateStartY, view.fBoxCreateEndY);
+
+    // 太小，忽略（用户"点击"而不是"拖动"）
+    if ((maxX - minX) < 1.0f || (maxY - minY) < 1.0f)
+        return;
+
+    // Grid Snap
+    if (g_flGridSize > 0.0f)
+    {
+        minX = roundf(minX / g_flGridSize) * g_flGridSize;
+        maxX = roundf(maxX / g_flGridSize) * g_flGridSize;
+        minY = roundf(minY / g_flGridSize) * g_flGridSize;
+        maxY = roundf(maxY / g_flGridSize) * g_flGridSize;
+    }
+
+    // "第三轴"的"深度"：用"当前选中的 brush"的深度；没有的话，默认 16 单位厚
+    float depthMin = -8.0f;
+    float depthMax =  8.0f;
+
+    if (g_iSelectedBrush >= 0 && g_iSelectedBrush < (int)g_brushes.size())
+    {
+        const CBrush& sel = g_brushes[g_iSelectedBrush];
+        float selMin[3] = { sel.m_vecPos.x - sel.m_vecSize.x,
+                            sel.m_vecPos.y - sel.m_vecSize.y,
+                            sel.m_vecPos.z - sel.m_vecSize.z };
+        float selMax[3] = { sel.m_vecPos.x + sel.m_vecSize.x,
+                            sel.m_vecPos.y + sel.m_vecSize.y,
+                            sel.m_vecPos.z + sel.m_vecSize.z };
+        depthMin = selMin[view.axisDepth];
+        depthMax = selMax[view.axisDepth];
+    }
+
+    // 计算"三维"的 min/max
+    float minCoords[3], maxCoords[3];
+    minCoords[view.axisMapX] = minX;
+    maxCoords[view.axisMapX] = maxX;
+    minCoords[view.axisMapY] = minY;
+    maxCoords[view.axisMapY] = maxY;
+    minCoords[view.axisDepth] = depthMin;
+    maxCoords[view.axisDepth] = depthMax;
+
+    // 创建 brush
+    CBrush newBrush;
+    newBrush.m_vecPos  = Vector(
+        (minCoords[0] + maxCoords[0]) * 0.5f,
+        (minCoords[1] + maxCoords[1]) * 0.5f,
+        (minCoords[2] + maxCoords[2]) * 0.5f
+    );
+    newBrush.m_vecSize = Vector(
+        (maxCoords[0] - minCoords[0]) * 0.5f,
+        (maxCoords[1] - minCoords[1]) * 0.5f,
+        (maxCoords[2] - minCoords[2]) * 0.5f
+    );
+    newBrush.m_szMaterial = "DEV/DEV_MEASUREGENERIC01";
+    newBrush.RebuildPrimitiveMesh();
+
+    // Push Undo
+    UndoStack::Instance().PushSnapshot("Create Brush (2D Block)");
+
+    // 添加到 g_brushes
+    g_brushes.push_back(newBrush);
+    g_iSelectedBrush  = (int)g_brushes.size() - 1;
+    g_iSelectedEntity = -1;
+}
+
 //-----------------------------------------------------------------------------
 // 拖动处理
 //-----------------------------------------------------------------------------
@@ -457,6 +534,17 @@ static bool HandleDrag(View2D& view, ImGuiIO& io,
     {
         float wx, wy;
         ScreenToWorld2D(io.MousePos, view, canvasPos, canvasSize, wx, wy);
+
+        // ★ Block Tool 模式：左键拖动 = 画框创建
+        if (g_bBlockToolActive)
+        {
+            view.bBoxCreating     = true;
+            view.fBoxCreateStartX = wx;
+            view.fBoxCreateStartY = wy;
+            view.fBoxCreateEndX   = wx;
+            view.fBoxCreateEndY   = wy;
+            return true;
+        }
 
         // ★ 优先：如果"当前选中的 brush"的"手柄"被点中 → 边缘缩放
         if (g_iSelectedBrush >= 0 && g_iSelectedBrush < (int)g_brushes.size())
@@ -536,6 +624,15 @@ static bool HandleDrag(View2D& view, ImGuiIO& io,
     }
 
     // --- 3. 拖动中：brush / entity 移动 ---
+    if (view.bBoxCreating && ImGui::IsMouseDown(ImGuiMouseButton_Left))
+    {
+        float wx, wy;
+        ScreenToWorld2D(io.MousePos, view, canvasPos, canvasSize, wx, wy);
+        view.fBoxCreateEndX = wx;
+        view.fBoxCreateEndY = wy;
+        return true;
+    }
+
     bool bAnyDragging = view.bDraggingBrush || view.bDraggingEntity;
     if (bAnyDragging && ImGui::IsMouseDown(ImGuiMouseButton_Left))
     {
@@ -596,6 +693,13 @@ static bool HandleDrag(View2D& view, ImGuiIO& io,
     }
 
     // --- 4. 左键松开：结束拖动 / 缩放 ---
+    if (view.bBoxCreating && ImGui::IsMouseReleased(ImGuiMouseButton_Left))
+    {
+        // 创建 brush
+        CreateBrushFromBox(view);
+        view.bBoxCreating = false;
+        return true;
+    }
     if (ImGui::IsMouseReleased(ImGuiMouseButton_Left))
     {
         view.bDraggingBrush      = false;
@@ -647,13 +751,25 @@ static void Draw2DViewCommon(const char* name, View2D& view)
     // 4. Entity 图标
     DrawEntities2D(draw, view, canvasPos, canvasSize);
 
+    if (view.bBoxCreating)
+    {
+        ImVec2 p1 = WorldToScreen2D(view.fBoxCreateStartX, view.fBoxCreateStartY, view, canvasPos, canvasSize);
+        ImVec2 p2 = WorldToScreen2D(view.fBoxCreateEndX, view.fBoxCreateEndY, view, canvasPos, canvasSize);
+
+        ImVec2 minP = ImVec2(std::min(p1.x, p2.x), std::min(p1.y, p2.y));
+        ImVec2 maxP = ImVec2(std::max(p1.x, p2.x), std::max(p1.y, p2.y));
+
+        draw->AddRectFilled(minP, maxP, IM_COL32(100, 150, 255, 60));
+        draw->AddRect(minP, maxP, IM_COL32(100, 150, 255, 255), 0.0f, 0, 2.0f);
+    }
+
     // 5. 交互
     if (ImGui::IsWindowHovered())
     {
         ImGuiIO& io = ImGui::GetIO();
 
         // 5a. 缩放（滚轮，以鼠标为中心；拖动中禁用）
-        if (io.MouseWheel != 0.0f && !view.bDraggingBrush && !view.bDraggingEntity && !view.bResizingBrush)
+        if (io.MouseWheel != 0.0f && !view.bDraggingBrush && !view.bDraggingEntity && !view.bResizingBrush && !view.bBoxCreating)
         {
             float wxBefore, wyBefore;
             ScreenToWorld2D(io.MousePos, view, canvasPos, canvasSize, wxBefore, wyBefore);

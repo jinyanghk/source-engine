@@ -644,6 +644,11 @@ int CHammerApp::Main()
                     else if (event.key.keysym.sym == SDLK_5) g_iGizmoMode = GIZMO_EDGE;
                     else if (event.key.keysym.sym == SDLK_6) g_iGizmoMode = GIZMO_VERTEX;
                     else if (event.key.keysym.sym == SDLK_0) g_iGizmoMode = GIZMO_NONE;
+                    else if (event.key.keysym.sym == SDLK_b)
+                    {
+                        g_bBlockToolActive = !g_bBlockToolActive;
+                        LogBuffer::Instance().Add(g_bBlockToolActive ? "[BLOCK] Block tool ON" : "[BLOCK] Block tool OFF");
+                    }                    
                     else if (event.key.keysym.sym == SDLK_r)
                     {
                         m_camTarget = Vector(0, 0, 40);
