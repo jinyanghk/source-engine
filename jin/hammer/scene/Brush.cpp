@@ -1,6 +1,6 @@
 #include "scene/Brush.h"
 #include "render/TextureManager.h"
-#include "render/MaterialPreview.h" // ★ ADD: Gain access to the new multi-handle metadata caching tools
+#include "render/MaterialPreview.h"
 
 #include <GL/gl.h>
 #include <cmath>
@@ -38,54 +38,53 @@ static void GetBaseTextureVectors(const Vector& normal, Vector& outU, Vector& ou
 //-----------------------------------------------------------------------------
 void DrawBrush(const CBrush& b)
 {
-    // 1. Fetch our unified dual-resource container from the cache manager
-    MaterialTextureResource_t tex = MaterialPreview::Instance().GetMaterialResource(b.m_szMaterial);
-    
-    if (tex.worldRenderTexID == 0)
-    {
-        glBindTexture(GL_TEXTURE_2D, GetBrushTexture(b.m_iTexId));
-        tex.nativeWidth = 64;
-        tex.nativeHeight = 64;
-    }
-    else
-    {
-        glBindTexture(GL_TEXTURE_2D, tex.worldRenderTexID);
-    }
-
-    const float textureScale = 0.25f; 
     const float shiftU = 0.0f;
     const float shiftV = 0.0f;
-
     glColor3ub(255, 255, 255);
-    glBegin(GL_QUADS);
 
-    // ★ THE CORE CORRECTION: Loop over the 6 explicit index faces rather than static box bounds! ★
     for (int f = 0; f < 6; f++)
     {
         const BrushFace_t& face = b.m_faces[f];
-        
+
+        // per-face 材质：空 = 继承 brush 材质
+        std::string mat = face.m_szMaterial.empty() ? b.m_szMaterial : face.m_szMaterial;
+        MaterialTextureResource_t tex = MaterialPreview::Instance().GetMaterialResource(mat);
+
+        if (tex.worldRenderTexID == 0)
+        {
+            static int s_warnCount = 0;
+            if (s_warnCount < 5) // 只打印前5次，防止控制台刷屏
+            {
+                printf("[BRUSH] Failed to load texture for material '%s', falling back to placeholder.\n", mat.c_str());
+                fflush(stdout);
+                s_warnCount++;
+            }            
+            glBindTexture(GL_TEXTURE_2D, GetBrushTexture(b.m_iTexId));
+        }
+        else
+        {
+            glBindTexture(GL_TEXTURE_2D, tex.worldRenderTexID);
+        }
+
         Vector uAxis, vAxis;
         GetBaseTextureVectors(face.m_vecNormal, uAxis, vAxis);
 
+        glBegin(GL_QUADS);
         for (int v = 0; v < 4; v++)
         {
-            // Lookup the physical vertex index dynamically out of the mesh cache!
             int vertexIndex = face.m_nVertexIndices[v];
             const Vector& vertexPos = b.m_vertices[vertexIndex];
 
-            // Linear Dot Product World-to-Texture projections
             float rawU = DotProduct(vertexPos, uAxis) + shiftU;
             float rawV = DotProduct(vertexPos, vAxis) + shiftV;
-
-            float finalU = rawU * 0.25f;   // 直接乘以 0.25
+            float finalU = rawU * 0.25f;
             float finalV = rawV * 0.25f;
 
             glTexCoord2f(finalU, finalV);
             glVertex3f(vertexPos.x, vertexPos.y, vertexPos.z);
         }
+        glEnd();
     }
-
-    glEnd();
 }
 
 //-----------------------------------------------------------------------------
@@ -100,21 +99,20 @@ void DrawBrushEdges(const CBrush& b)
     {
         const BrushFace_t& face = b.m_faces[f];
         for (int v = 0; v < 4; v++)
-            {
-                int i0 = face.m_nVertexIndices[v];
-                int i1 = face.m_nVertexIndices[(v + 1) % 4];
-                
-                glVertex3f(b.m_vertices[i0].x, b.m_vertices[i0].y, b.m_vertices[i0].z);
-                glVertex3f(b.m_vertices[i1].x, b.m_vertices[i1].y, b.m_vertices[i1].z);
-            }
+        {
+            int i0 = face.m_nVertexIndices[v];
+            int i1 = face.m_nVertexIndices[(v + 1) % 4];
+
+            glVertex3f(b.m_vertices[i0].x, b.m_vertices[i0].y, b.m_vertices[i0].z);
+            glVertex3f(b.m_vertices[i1].x, b.m_vertices[i1].y, b.m_vertices[i1].z);
+        }
     }
-    
+
     glEnd();
     glLineWidth(1.0f);
 }
 
-
-// Append this method inside hammer/scene/Brush.cpp:
+//-----------------------------------------------------------------------------
 void CBrush::RebuildPrimitiveMesh()
 {
     Vector mins = GetBBoxMins();
@@ -133,19 +131,20 @@ void CBrush::RebuildPrimitiveMesh()
 
     // 2. Define standard polygon index rings mapping our vertices counter-clockwise
     m_faces.resize(6);
-    
+
+    // 空字符串 = 继承 brush 的 m_szMaterial
     // +Z (Top Face)
-    m_faces[FACE_POS_Z] = { Vector(0,0,1),  {4, 5, 6, 7}, m_szMaterial };
+    m_faces[FACE_POS_Z] = { Vector(0,0,1),  {4, 5, 6, 7}, "" };
     // -Z (Bottom Face)
-    m_faces[FACE_NEG_Z] = { Vector(0,0,-1), {0, 3, 2, 1}, m_szMaterial };
+    m_faces[FACE_NEG_Z] = { Vector(0,0,-1), {0, 3, 2, 1}, "" };
     // +X (Right Face)
-    m_faces[FACE_POS_X] = { Vector(1,0,0),  {1, 2, 6, 5}, m_szMaterial };
+    m_faces[FACE_POS_X] = { Vector(1,0,0),  {1, 2, 6, 5}, "" };
     // -X (Left Face)
-    m_faces[FACE_NEG_X] = { Vector(-1,0,0), {0, 4, 7, 3}, m_szMaterial };
+    m_faces[FACE_NEG_X] = { Vector(-1,0,0), {0, 4, 7, 3}, "" };
     // +Y (Front Face)
-    m_faces[FACE_POS_Y] = { Vector(0,1,0),  {3, 7, 6, 2}, m_szMaterial };
+    m_faces[FACE_POS_Y] = { Vector(0,1,0),  {3, 7, 6, 2}, "" };
     // -Y (Back Face)
-    m_faces[FACE_NEG_Y] = { Vector(0,-1,0), {0, 1, 5, 4}, m_szMaterial };
+    m_faces[FACE_NEG_Y] = { Vector(0,-1,0), {0, 1, 5, 4}, "" };
 }
 
 void CBrush::RecalcBoundsFromVertices()

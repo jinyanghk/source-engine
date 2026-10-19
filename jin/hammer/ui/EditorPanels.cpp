@@ -477,6 +477,56 @@ void DrawEntityPanel(CEntity* entities, int entityCount, int* pSelectedEntity,
 }
 
 //-----------------------------------------------------------------------------
+// 材质选择列表 helper。
+// - 上面带 32x32 缩略图
+// - 返回 true 表示用户点了某个材质，outSelected 被填入
+// - 不负责 Undo / 应用，调用方自己处理
+//-----------------------------------------------------------------------------
+static bool DrawMaterialPickerList(const std::string& currentMaterial,
+                                   const char* filter,
+                                   std::string& outSelected)
+{
+    outSelected.clear();
+
+    auto filtered = MaterialList::Instance().Filter(filter, 200);
+
+    bool bPicked = false;
+
+    ImGuiListClipper clipper;
+    clipper.Begin((int)filtered.size(), ImGui::GetTextLineHeightWithSpacing() + 32);
+    while (clipper.Step())
+    {
+        for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
+        {
+            const auto& mat = filtered[i];
+            ImGui::PushID(i);
+
+            GLuint tex = MaterialPreview::Instance().GetPreviewTexture(mat);
+            if (tex) {
+                ImGui::Image((ImTextureID)(intptr_t)tex, ImVec2(32, 32));
+                ImGui::SameLine();
+            } else {
+                ImGui::Dummy(ImVec2(32, 32));
+                ImGui::SameLine();
+            }
+
+            bool bSelected = (mat == currentMaterial);
+            if (ImGui::Selectable(mat.c_str(), bSelected, 0, ImVec2(0, 32)))
+            {
+                outSelected = mat;
+                bPicked = true;
+            }
+            if (bSelected) ImGui::SetItemDefaultFocus();
+
+            ImGui::PopID();
+        }
+    }
+    clipper.End();
+
+    return bPicked;
+}
+
+//-----------------------------------------------------------------------------
 // Brush 面板：list + 属性
 //-----------------------------------------------------------------------------
 void DrawBrushPanel(const CBrush* brushes, int brushCount, int* pSelectedBrush,
@@ -569,7 +619,7 @@ void DrawBrushPanel(const CBrush* brushes, int brushCount, int* pSelectedBrush,
         if (ImGui::IsItemActivated())
             UndoStack::Instance().PushSnapshot("Brush Size");
 
-        // ★ 关键：如果 pos/size 变了，把 m_vertices 也重建
+        // 如果 pos/size 变了，把 m_vertices 也同步
         if (posChanged || sizeChanged)
         {
             Vector delta = b.m_vecPos - oldPos;
@@ -590,48 +640,101 @@ void DrawBrushPanel(const CBrush* brushes, int brushCount, int* pSelectedBrush,
             b.RecalcFaceNormals();
         }
 
-        ImGui::Text("Material:");
+        // =====================================================================
+        // Brush 整体材质
+        // =====================================================================
+        ImGui::Separator();
+        ImGui::Text("Brush Material:");
         ImGui::TextWrapped("%s", b.m_szMaterial.c_str());
 
-        static char s_materialFilter[64] = "";
-        ImGui::InputText("Filter##mat", s_materialFilter, sizeof(s_materialFilter));
+        static char s_brushMaterialFilter[64] = "";
+        ImGui::InputText("Filter##brushMat", s_brushMaterialFilter, sizeof(s_brushMaterialFilter));
 
-        if (ImGui::BeginCombo("##MaterialCombo", "Select..."))
+        if (ImGui::BeginCombo("##BrushMaterialCombo", "Select..."))
         {
-            auto filtered = MaterialList::Instance().Filter(s_materialFilter, 200);
-
-            ImGuiListClipper clipper;
-            clipper.Begin((int)filtered.size(), ImGui::GetTextLineHeightWithSpacing() + 32);
-            while (clipper.Step())
+            std::string picked;
+            if (DrawMaterialPickerList(b.m_szMaterial, s_brushMaterialFilter, picked))
             {
-                for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
-                {
-                    const auto& mat = filtered[i];
-                    ImGui::PushID(i);
-
-                    GLuint tex = MaterialPreview::Instance().GetPreviewTexture(mat);
-                    if (tex) {
-                        ImGui::Image((ImTextureID)(intptr_t)tex, ImVec2(32, 32));
-                        ImGui::SameLine();
-                    } else {
-                        ImGui::Dummy(ImVec2(32, 32));
-                        ImGui::SameLine();
-                    }
-
-                    bool bSelected = (mat == b.m_szMaterial);
-                    if (ImGui::Selectable(mat.c_str(), bSelected, 0, ImVec2(0, 32)))
-                    {
-                        UndoStack::Instance().PushSnapshot("Material Change");   // ★
-                        b.m_szMaterial = mat;
-                    }
-                    if (bSelected) ImGui::SetItemDefaultFocus();
-
-                    ImGui::PopID();
-                }
+                UndoStack::Instance().PushSnapshot("Material Change");
+                b.m_szMaterial = picked;
             }
-            clipper.End();
+            ImGui::EndCombo();
+        }
+
+        // =====================================================================
+        // Per-face 材质
+        // =====================================================================
+        ImGui::Separator();
+        ImGui::Text("Per-Face Materials:");
+
+        // 防御：g_iSelectedFace 越界兜底（你已改初值 0，但 Combo 内部可能 reset）
+        if (g_iSelectedFace < 0 || g_iSelectedFace >= 6)
+            g_iSelectedFace = 0;
+
+        const char* faceNames[6] = {
+            "+Z (Top)", "-Z (Bottom)",
+            "+X (Right)", "-X (Left)",
+            "+Y (Front)", "-Y (Back)"
+        };
+
+        // 注意：faceNames 的顺序必须和 BrushFaceIndex 枚举一致：
+        // FACE_POS_Z=0, FACE_NEG_Z=1, FACE_POS_X=2, FACE_NEG_X=3, FACE_POS_Y=4, FACE_NEG_Y=5
+        // 上面数组已按这个顺序写，OK。
+
+        ImGui::Combo("Face##faceSel", &g_iSelectedFace, faceNames, 6);
+
+        // Combo 返回后再 clamp 一次（ImGui 在某些情况下会 reset current_item）
+        if (g_iSelectedFace < 0 || g_iSelectedFace >= 6)
+            g_iSelectedFace = 0;
+
+        BrushFace_t& face = b.m_faces[g_iSelectedFace];
+
+        // 当前面材质标签：空 = 继承
+        const char* currentLabel = face.m_szMaterial.empty()
+            ? "(inherits brush material)"
+            : face.m_szMaterial.c_str();
+
+        static char s_faceMaterialFilter[64] = "";
+        ImGui::InputText("Filter##faceMat", s_faceMaterialFilter, sizeof(s_faceMaterialFilter));
+
+        if (ImGui::BeginCombo("##FaceMaterialCombo", currentLabel))
+        {
+            // 继承选项
+            bool bInherit = face.m_szMaterial.empty();
+            if (ImGui::Selectable("(inherit brush)", bInherit))
+            {
+                UndoStack::Instance().PushSnapshot("Face Material");
+                face.m_szMaterial.clear();
+            }
+            if (bInherit) ImGui::SetItemDefaultFocus();
+
+            ImGui::Separator();
+
+            // ★ Bug #5 修复：真正画出材质列表
+            std::string picked;
+            if (DrawMaterialPickerList(face.m_szMaterial, s_faceMaterialFilter, picked))
+            {
+                UndoStack::Instance().PushSnapshot("Face Material");
+                face.m_szMaterial = picked;
+            }
 
             ImGui::EndCombo();
+        }
+
+        // 提示：该面当前是否真的用自定义材质
+        if (!face.m_szMaterial.empty())
+        {
+            ImGui::TextDisabled("(custom: %s)", face.m_szMaterial.c_str());
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Reset##faceMat"))
+            {
+                UndoStack::Instance().PushSnapshot("Face Material");
+                face.m_szMaterial.clear();
+            }
+        }
+        else
+        {
+            ImGui::TextDisabled("(inherits: %s)", b.m_szMaterial.c_str());
         }
 
         ImGui::Separator();

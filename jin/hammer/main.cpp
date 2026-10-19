@@ -508,10 +508,10 @@ int CHammerApp::Main()
     bool bRunning = true;
     SDL_Event event;
 
-    Vector m_camTarget(0, 0, 40);
-    float m_camYaw = 90.0f;
+    Vector m_camTarget(0, 0, 100);
+    float m_camYaw = -90.0f;
     float m_camPitch = -15.0f;
-    float m_camDistance = 150.0f;
+    float m_camDistance = 500.0f;
 
     Vector g_vecEye(0,0,0), g_vecAt(0,0,0);
     Vector g_camForward(0,0,0), g_camLeft(0,0,0), g_camUp(0,0,0);
@@ -1321,6 +1321,7 @@ int CHammerApp::Main()
                     {
                         UndoStack::Instance().PushSnapshot("Face Edit");   // ★
                         g_iActiveFace = g_iHoverFace;
+                        g_iSelectedFace = g_iHoverFace; 
                         g_bDraggingGizmo = true;
                         g_vecFrozenGizmoCenterAtClick = gizmoCenter; 
                         g_vecDragStartPos = g_brushes[g_iSelectedBrush].m_vecPos;

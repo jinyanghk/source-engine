@@ -15,21 +15,32 @@ extern IMDLCache* g_pMDLCache;   // ★ 如果还没 extern
 #include <cstdio>
 #include <algorithm>
 
-// ★ THE ENHANCEMENT: Extract 3 plane coordinates directly from your explicit vertex arrays! ★
-// Follows strict counter-clockwise winding rules so the map compiler doesn't throw inside-out face errors.
+//-----------------------------------------------------------------------------
+// 取一个 brush face 的最终材质：
+//   face.m_szMaterial 为空 -> 继承 brush.m_szMaterial
+//   否则 -> 用 face 自己的
+//-----------------------------------------------------------------------------
+static std::string GetEffectiveFaceMaterial(const CBrush& b, int faceEnum)
+{
+    const BrushFace_t& face = b.m_faces[faceEnum];
+    return face.m_szMaterial.empty() ? b.m_szMaterial : face.m_szMaterial;
+}
+
+//-----------------------------------------------------------------------------
+// 导出单个 Brush 的所有面到 VmfSolid
+//-----------------------------------------------------------------------------
 static void BuildMeshFaces(const CBrush& b, VmfSolid& solid, int& nextFaceId)
 {
-    const char* mat = b.m_szMaterial.c_str();
-
-    // Map defining 3 distinct absolute world corners for the 6 side planes
-    // Match the standard definitions populated inside Brush.cpp
-    int faceWindingIndices[6][3] = {
-        {1, 2, 6}, // +X (FACE_POS_X = 2)
-        {0, 4, 7}, // -X (FACE_NEG_X = 3)
-        {0, 1, 5}, // -Y (FACE_NEG_Y = 5)
-        {3, 7, 6}, // +Y (FACE_POS_Y = 4)
-        {0, 3, 2}, // -Z (FACE_NEG_Z = 1)
-        {4, 5, 6}  // +Z (FACE_POS_Z = 0)
+    // 顺序对应 Brush.h 里的枚举：
+    // FACE_POS_Z=0, FACE_NEG_Z=1, FACE_POS_X=2, FACE_NEG_X=3, FACE_POS_Y=4, FACE_NEG_Y=5
+    // 但为了搭配标准的贴图轴方向，我们按以下顺序处理：
+    int faceEnums[6] = {
+        FACE_POS_X,  // 0
+        FACE_NEG_X,  // 1
+        FACE_NEG_Y,  // 2
+        FACE_POS_Y,  // 3
+        FACE_NEG_Z,  // 4
+        FACE_POS_Z   // 5
     };
 
     // Standard Valve Hammer default texture axis alignment profiles
@@ -56,23 +67,29 @@ static void BuildMeshFaces(const CBrush& b, VmfSolid& solid, int& nextFaceId)
         VmfFace f;
         f.id = nextFaceId++;
 
-        // Fetch the 3 physical world-space vectors cleanly out of the cache map
+        int faceIndex = faceEnums[i];
+        const BrushFace_t& brushFace = b.m_faces[faceIndex];
+
+        // ★ 修复：直接取 m_faces 里定义的前 3 个顶点，保证法线朝外 ★
+        // Brush.cpp 里定义的顶点顺是逆时针的（从外面看），因此 (P2-P1)x(P3-P1) 算出来的法线必定朝外。
         for (int p = 0; p < 3; p++)
         {
-            int vertexIndex = faceWindingIndices[i][p];
+            int vertexIndex = brushFace.m_nVertexIndices[p];
             Vector worldV = b.m_vertices[vertexIndex];
 
-            // Convert to the Document's local Vector3D storage standard
             f.planePoints[p].x = worldV.x;
             f.planePoints[p].y = worldV.y;
             f.planePoints[p].z = worldV.z;
         }
 
-        f.material = mat;
-        for (int k = 0; k < 4; k++) 
-        { 
-            f.uAxis[k] = baseUAxes[i][k]; 
-            f.vAxis[k] = baseVAxes[i][k]; 
+        // 获取材质
+        f.material = GetEffectiveFaceMaterial(b, faceIndex);
+
+        // 贴图轴
+        for (int k = 0; k < 4; k++)
+        {
+            f.uAxis[k] = baseUAxes[i][k];
+            f.vAxis[k] = baseVAxes[i][k];
         }
 
         f.uScale = 0.25f;
@@ -84,70 +101,65 @@ static void BuildMeshFaces(const CBrush& b, VmfSolid& solid, int& nextFaceId)
     }
 }
 
+//-----------------------------------------------------------------------------
 void ConvertEditorToDocument(MapDocument& doc)
 {
     doc.Clear();
 
     printf("[VMF] Converting %zu brushes, %zu entities\n",
-           g_brushes.size(), g_entities.size()); //
+           g_brushes.size(), g_entities.size());
 
     // Brushes
-    int nextFaceId = 1; //
-    for (size_t i = 0; i < g_brushes.size(); i++) //
+    int nextFaceId = 1;
+    for (size_t i = 0; i < g_brushes.size(); i++)
     {
-        const CBrush& b = g_brushes[i]; //
+        const CBrush& b = g_brushes[i];
 
-        // ★ Notice: We can completely remove the old "ignored rotation" warning message here
-        // because our upgraded mesh array system natively carries rotations effortlessly!
+        VmfSolid solid;
+        solid.id = (int)i + 1;
 
-        VmfSolid solid; //
-        solid.id = (int)i + 1; //
-        
-        // ★ Call your upgraded mesh vector extractor pass! ★
         BuildMeshFaces(b, solid, nextFaceId);
-        
-        doc.AddSolid(solid); //
+
+        doc.AddSolid(solid);
     }
 
     // Entities
-    for (size_t i = 0; i < g_entities.size(); i++) //
+    for (size_t i = 0; i < g_entities.size(); i++)
     {
-        const CEntity& e = g_entities[i]; //
+        const CEntity& e = g_entities[i];
 
-        VmfEntity ent; //
-        ent.id = (int)i + 1; //
-        ent.classname = e.m_szName; //
-        ent.origin = e.m_vecPos; //
+        VmfEntity ent;
+        ent.id = (int)i + 1;
+        ent.classname = e.m_szName;
+        ent.origin = e.m_vecPos;
 
         // angles: "pitch yaw roll"
-        if (fabsf(e.m_angRot.x) > 0.01f || //
-            fabsf(e.m_angRot.y) > 0.01f || //
-            fabsf(e.m_angRot.z) > 0.01f) //
+        if (fabsf(e.m_angRot.x) > 0.01f ||
+            fabsf(e.m_angRot.y) > 0.01f ||
+            fabsf(e.m_angRot.z) > 0.01f)
         {
-            char buf[64]; //
-            snprintf(buf, sizeof(buf), "%.2f %.2f %.2f", //
-                     e.m_angRot.x, e.m_angRot.y, e.m_angRot.z); //
-            ent.properties.push_back({"angles", buf}); //
-        }
-        
-        // 把 CEntity 的通用 keyvalue 写进 VMF
-        for (const auto& kv : e.m_properties) { //
-            // 跳过已经处理过的
-            if (kv.first == "origin" || kv.first == "classname" || kv.first == "angles") //
-                continue; //
-            ent.properties.push_back({kv.first, kv.second}); //
+            char buf[64];
+            snprintf(buf, sizeof(buf), "%.2f %.2f %.2f",
+                     e.m_angRot.x, e.m_angRot.y, e.m_angRot.z);
+            ent.properties.push_back({"angles", buf});
         }
 
-        doc.AddEntity(ent); //
+        // 把 CEntity 的通用 keyvalue 写进 VMF
+        for (const auto& kv : e.m_properties) {
+            if (kv.first == "origin" || kv.first == "classname" || kv.first == "angles")
+                continue;
+            ent.properties.push_back({kv.first, kv.second});
+        }
+
+        doc.AddEntity(ent);
     }
 
-    printf("[VMF] Conversion done: %zu solids, %zu entities\n", //
-           doc.GetSolids().size(), doc.GetEntities().size()); //
+    printf("[VMF] Conversion done: %zu solids, %zu entities\n",
+           doc.GetSolids().size(), doc.GetEntities().size());
 }
 
 //-----------------------------------------------------------------------------
 // 反向转换：从 MapDocument 恢复到 g_brushes / g_entities
-// 第一版：只支持"轴对齐 brush"（从所有 planePoints 算 AABB）
 //-----------------------------------------------------------------------------
 void ConvertDocumentToEditor(const MapDocument& doc)
 {
@@ -160,19 +172,24 @@ void ConvertDocumentToEditor(const MapDocument& doc)
         // 收集所有 planePoints，算 AABB
         Vector mins( 1e9f,  1e9f,  1e9f);
         Vector maxs(-1e9f, -1e9f, -1e9f);
-        std::string material = "DEV/DEV_MEASUREGENERIC01";
+        std::string brushMaterial = "DEV/DEV_MEASUREGENERIC01";
         bool bHasGeometry = false;
+        bool bHasBrushMaterial = false;
 
         for (const auto& face : solid.faces)
         {
-            if (!face.material.empty())
-                material = face.material;
+            // brush 默认材质：取第一个非空 face.material
+            if (!bHasBrushMaterial && !face.material.empty())
+            {
+                brushMaterial = face.material;
+                bHasBrushMaterial = true;
+            }
 
             for (int p = 0; p < 3; p++)
             {
                 const Vector3D& pt = face.planePoints[p];
 
-                // 跳过 (0,0,0) 的无效点（如果 plane 没解析成功，planePoints 全是 0）
+                // 跳过 (0,0,0) 的无效点
                 if (pt.x == 0.0f && pt.y == 0.0f && pt.z == 0.0f)
                     continue;
 
@@ -189,8 +206,30 @@ void ConvertDocumentToEditor(const MapDocument& doc)
         CBrush b;
         b.m_vecPos  = (mins + maxs) * 0.5f;
         b.m_vecSize = (maxs - mins) * 0.5f;
-        b.m_szMaterial = material;
+        b.m_szMaterial = brushMaterial;
         b.RebuildPrimitiveMesh();
+
+        // 映射表，把 VMF side 顺序对应回 m_faces 的枚举
+        static const int kFaceEnumForWinding[6] = {
+            FACE_POS_X,  // 0
+            FACE_NEG_X,  // 1
+            FACE_NEG_Y,  // 2
+            FACE_POS_Y,  // 3
+            FACE_NEG_Z,  // 4
+            FACE_POS_Z   // 5
+        };
+
+        for (int i = 0; i < 6 && i < (int)solid.faces.size(); i++)
+        {
+            const std::string& mat = solid.faces[i].material;
+            int faceEnum = kFaceEnumForWinding[i];
+
+            if (mat.empty() || mat == brushMaterial)
+                b.m_faces[faceEnum].m_szMaterial.clear();
+            else
+                b.m_faces[faceEnum].m_szMaterial = mat;
+        }
+
         g_brushes.push_back(b);
     }
 
@@ -208,7 +247,6 @@ void ConvertDocumentToEditor(const MapDocument& doc)
         e.m_angRot = QAngle(0, 0, 0);
         e.m_hMdl = MDLHANDLE_INVALID;
 
-        // 处理 properties
         for (const auto& kv : ent.properties)
         {
             if (kv.key == "angles")
