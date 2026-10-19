@@ -532,6 +532,8 @@ int CHammerApp::Main()
     int g_iHoverVertex = -1;  // Tracks which of the 8 vertices is hovered (-1 to 7)
     int g_iActiveVertex = -1; // Tracks which vertex is locked during an active drag
     //Vector g_vecDragStartVertexPos; // Caches the individual point's starting position
+    int g_iActiveEdge = -1;
+    int g_iHoverEdge = -1;
 
     bool g_bLeftMouseDown = false;
     bool g_bRightMouseDown = false;
@@ -626,6 +628,7 @@ int CHammerApp::Main()
                     g_iActiveAxis = -1; 
                     g_iActiveFace = -1;
                     g_iActiveVertex = -1;
+                    g_iActiveEdge = -1;
                 }
                 else if (event.button.button == SDL_BUTTON_RIGHT) g_bRightMouseDown = false;
                 else if (event.button.button == SDL_BUTTON_MIDDLE) g_bMiddleMouseDown = false;
@@ -638,7 +641,8 @@ int CHammerApp::Main()
                     else if (event.key.keysym.sym == SDLK_2) g_iGizmoMode = GIZMO_ROTATE;
                     else if (event.key.keysym.sym == SDLK_3) g_iGizmoMode = GIZMO_SCALE;
                     else if (event.key.keysym.sym == SDLK_4) g_iGizmoMode = GIZMO_FACE;
-                    else if (event.key.keysym.sym == SDLK_5) g_iGizmoMode = GIZMO_VERTEX;
+                    else if (event.key.keysym.sym == SDLK_5) g_iGizmoMode = GIZMO_EDGE;
+                    else if (event.key.keysym.sym == SDLK_6) g_iGizmoMode = GIZMO_VERTEX;
                     else if (event.key.keysym.sym == SDLK_0) g_iGizmoMode = GIZMO_NONE;
                     else if (event.key.keysym.sym == SDLK_r)
                     {
@@ -964,6 +968,39 @@ int CHammerApp::Main()
                     glEnable(GL_TEXTURE_2D);
                 }
 
+                if (g_iGizmoMode == GIZMO_EDGE
+                    && (int)i == g_iSelectedBrush
+                    && g_iHoverAxis >= 0
+                    && g_iHoverAxis < 12)
+                {
+                    // 画"高亮的边"
+                    static const int edgeVertices[12][2] = {
+                        {0, 1}, {1, 2}, {2, 3}, {3, 0},
+                        {4, 5}, {5, 6}, {6, 7}, {7, 4},
+                        {0, 4}, {1, 5}, {2, 6}, {3, 7},
+                    };
+
+                    int v0 = edgeVertices[g_iHoverAxis][0];
+                    int v1 = edgeVertices[g_iHoverAxis][1];
+
+                    Vector p0 = g_brushes[i].m_vertices[v0];
+                    Vector p1 = g_brushes[i].m_vertices[v1];
+
+                    glDisable(GL_TEXTURE_2D);
+                    glDisable(GL_DEPTH_TEST);
+
+                    glLineWidth(4.0f);
+                    glColor3ub(255, 255, 0);
+                    glBegin(GL_LINES);
+                    glVertex3f(p0.x, p0.y, p0.z);
+                    glVertex3f(p1.x, p1.y, p1.z);
+                    glEnd();
+                    glLineWidth(1.0f);
+
+                    glEnable(GL_DEPTH_TEST);
+                    glEnable(GL_TEXTURE_2D);
+                }
+
                 DrawBrushEdges(g_brushes[i]);
                 
                 if ((int)i == g_iSelectedBrush)
@@ -1107,7 +1144,23 @@ int CHammerApp::Main()
                     GizmoPick::DrawPickableBrushFaces(b);
                     
                     glPopMatrix(); // Safely clear matrix parameters
-                }    
+                }  
+                else if (g_iGizmoMode == GIZMO_EDGE && bGizmoOnBrush)
+                {
+                    const CBrush& b = g_brushes[g_iSelectedBrush];
+
+                    // 应用 brush 的变换矩阵（如果"顶点已烘进世界坐标"，不需要矩阵）
+                    glPushMatrix();
+                    glTranslatef(b.m_vecPos.x, b.m_vecPos.y, b.m_vecPos.z);
+                    glRotatef(b.m_angRot.y, 0.0f, 1.0f, 0.0f);
+                    glRotatef(b.m_angRot.x, 1.0f, 0.0f, 0.0f);
+                    glRotatef(b.m_angRot.z, 0.0f, 0.0f, 1.0f);
+                    glTranslatef(-b.m_vecPos.x, -b.m_vecPos.y, -b.m_vecPos.z);
+
+                    GizmoPick::DrawPickableBrushEdges(b);
+
+                    glPopMatrix();
+                }                  
                 // ★ FIX 1: Wrap the offscreen vertex picker back inside the rotation matrix stack! ★
                 else if (g_iGizmoMode == GIZMO_VERTEX && bGizmoOnBrush)
                 {
@@ -1196,6 +1249,15 @@ int CHammerApp::Main()
                                     g_iHoverFace = facePixelID; 
                                 }
                             }
+                            else if (g_iGizmoMode == GIZMO_EDGE && bGizmoOnBrush)
+                            {
+                                GizmoPick::HandleType htype;
+                                int edgePixelID = GizmoPick::Pick((int)localMouseX, (int)localMouseY, htype);
+                                if (edgePixelID >= 0 && edgePixelID < 12)
+                                {
+                                    g_iHoverAxis = edgePixelID;   // 复用 g_iHoverAxis 存"edge index"
+                                }
+                            }                            
                             else if (g_iGizmoMode == GIZMO_VERTEX && bGizmoOnBrush)
                             {
                                 GizmoPick::HandleType htype;
@@ -1239,6 +1301,15 @@ int CHammerApp::Main()
                         g_flDragStartWorldT = -1.0f;
                     }
                 }
+                else if (g_iGizmoMode == GIZMO_EDGE && bGizmoOnBrush && g_iHoverAxis >= 0 && g_iHoverAxis < 12)
+                {
+                    UndoStack::Instance().PushSnapshot("Edge Edit");
+                    g_iActiveEdge = g_iHoverAxis;   // ★ 改成 g_iActiveEdge
+                    g_bDraggingGizmo = true;
+                    g_iActiveAxis   = 0;
+                    g_vecFrozenGizmoCenterAtClick = gizmoCenter;
+                    g_flDragStartWorldT = -1.0f;
+                }                
                 else if (g_iGizmoMode == GIZMO_FACE && bGizmoOnBrush)
                 {
                     if (g_iHoverFace != FACE_NONE)
@@ -1538,6 +1609,34 @@ int CHammerApp::Main()
                         }
                     }
                 }
+                else if (g_iGizmoMode == GIZMO_EDGE && bGizmoOnBrush && g_iActiveEdge >= 0 && g_iActiveEdge < 12)
+                {
+                    float deltaScreenX = (float)g_iMouseX - (float)g_iLastMouseX;
+                    float deltaScreenY = (float)g_iMouseY - (float)g_iLastMouseY;
+
+                    CBrush& activeBrush = g_brushes[g_iSelectedBrush];
+
+                    // 屏幕方向 → 世界方向
+                    float dragSensitivity = m_camDistance * 0.0015f;
+                    Vector worldDisplacement = (g_camLeft * deltaScreenX - g_camUp * deltaScreenY) * dragSensitivity;
+
+                    // 移动"边的两个端点"
+                    static const int edgeVertices[12][2] = {
+                        {0, 1}, {1, 2}, {2, 3}, {3, 0},
+                        {4, 5}, {5, 6}, {6, 7}, {7, 4},
+                        {0, 4}, {1, 5}, {2, 6}, {3, 7},
+                    };
+
+                    int v0 = edgeVertices[g_iActiveEdge][0];
+                    int v1 = edgeVertices[g_iActiveEdge][1];
+
+                    activeBrush.m_vertices[v0] += worldDisplacement;
+                    activeBrush.m_vertices[v1] += worldDisplacement;
+
+                    // 重算 bounds + 法线
+                    activeBrush.RecalcBoundsFromVertices();
+                    activeBrush.RecalcFaceNormals();
+                }                
                 // ★ UPGRADE: Clean World-Space Proj-T Drag Engine for Vertex Editing! ★
                 else if (g_iGizmoMode == GIZMO_VERTEX && bGizmoOnBrush && g_iActiveVertex != -1)
                 {

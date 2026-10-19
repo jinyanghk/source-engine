@@ -7,6 +7,7 @@ enum GizmoMode {
     GIZMO_ROTATE,
     GIZMO_SCALE,
     GIZMO_FACE,
+    GIZMO_EDGE,
     GIZMO_VERTEX
 };
 

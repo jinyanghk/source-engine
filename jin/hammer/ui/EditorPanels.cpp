@@ -131,6 +131,7 @@ void DrawToolsPanel()
         { "Rotate", GIZMO_ROTATE },
         { "Scale",  GIZMO_SCALE },
         { "Face",   GIZMO_FACE },
+        { "Edge",   GIZMO_EDGE },
         { "Vertex", GIZMO_VERTEX },
         { "None",   GIZMO_NONE },
     };
@@ -643,6 +644,7 @@ void DrawConsolePanel(const Vector& camTarget, float camDist,
     ImGui::SameLine();
     ImGui::TextDisabled("(%d lines)", (int)LogBuffer::Instance().GetLines().size());
 
+  /*  
     // 保留相机提示作为快速参考（也可以删掉）
     if (ImGui::CollapsingHeader("Controls"))
     {
@@ -653,6 +655,7 @@ void DrawConsolePanel(const Vector& camTarget, float camDist,
         ImGui::Text("Cam Target: (%.1f, %.1f, %.1f)", camTarget.x, camTarget.y, camTarget.z);
         ImGui::Text("Cam Dist: %.1f", camDist);
     }
+*/
 
     ImGui::Separator();
 

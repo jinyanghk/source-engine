@@ -48,6 +48,7 @@ namespace GizmoPick
     void DrawPickableRotateRing(int axis, const Vector& center, float radius, int segments);
     void DrawPickableScaleHandle(int axis, const Vector& center, float length);
     void DrawPickableBrushFaces(const CBrush& b);
+    void DrawPickableBrushEdges(const CBrush& b);
 
     // Decode a mouse pick. Mouse coords are SDL convention (top-left origin,
     // Y grows down). Returns -1 if nothing is under the cursor, otherwise

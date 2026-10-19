@@ -46,8 +46,6 @@ def build(bld):
 
 	includes = [
         '.',
-		'../../imgui',
-        '../libgizmo',
 		'../../public',
 		'../../public/tier0',
 		'../../public/tier1',

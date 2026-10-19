@@ -381,6 +381,84 @@ void DrawPickableBrushFaces(const CBrush& b)
 }
 
 //-----------------------------------------------------------------------------
+// 12 条边的索引表
+//-----------------------------------------------------------------------------
+static const int s_edgeVertices[12][2] = {
+    {0, 1}, {1, 2}, {2, 3}, {3, 0},   // 底面
+    {4, 5}, {5, 6}, {6, 7}, {7, 4},   // 顶面
+    {0, 4}, {1, 5}, {2, 6}, {3, 7},   // 垂直边
+};
+
+//-----------------------------------------------------------------------------
+// 画 12 条"粗边"（用 QUADS，不依赖 glLineWidth）
+// 颜色编码：R = edgeIndex + 1 (1-12)，G = 0（不是 gizmo handle），B = 0
+//-----------------------------------------------------------------------------
+void DrawPickableBrushEdges(const CBrush& b)
+{
+    if (!s_bInRender) return;
+    if (b.m_vertices.size() < 8) return;
+
+    // 边的"世界空间"宽度 = 基于 brush 尺寸的 3%
+    float edgeWidth = std::max(std::max(b.m_vecSize.x, b.m_vecSize.y), b.m_vecSize.z) * 0.06f;
+    if (edgeWidth < 1.5f) edgeWidth = 1.5f;
+
+    glDisable(GL_TEXTURE_2D);
+
+    for (int e = 0; e < 12; e++)
+    {
+        const Vector& p0 = b.m_vertices[s_edgeVertices[e][0]];
+        const Vector& p1 = b.m_vertices[s_edgeVertices[e][1]];
+
+        // 边方向
+        Vector dir = p1 - p0;
+        float len = dir.Length();
+        if (len < 0.001f) continue;
+        dir *= (1.0f / len);
+
+        // 找"垂直于边的两个方向"（u, v）
+        Vector refUp(0, 0, 1);
+        if (fabsf(DotProduct(dir, refUp)) > 0.99f)
+            refUp = Vector(0, 1, 0);
+
+        Vector u, v;
+        CrossProduct(dir, refUp, u);
+        VectorNormalize(u);
+        CrossProduct(dir, u, v);
+        VectorNormalize(v);
+
+        // 4 个"边角"
+        float hw = edgeWidth * 0.5f;
+        Vector c0 = p0 + u * hw + v * hw;
+        Vector c1 = p0 + u * hw - v * hw;
+        Vector c2 = p0 - u * hw - v * hw;
+        Vector c3 = p0 - u * hw + v * hw;
+        Vector c4 = p1 + u * hw + v * hw;
+        Vector c5 = p1 + u * hw - v * hw;
+        Vector c6 = p1 - u * hw - v * hw;
+        Vector c7 = p1 - u * hw + v * hw;
+
+        // 颜色编码
+        unsigned char r = (unsigned char)(e + 1);   // 1-12
+        unsigned char g = 0;
+        unsigned char bl = 0;
+
+        glColor3ub(r, g, bl);
+        glBegin(GL_QUADS);
+        // 4 个侧面（"管"的四个面）
+        glVertex3f(c0.x, c0.y, c0.z); glVertex3f(c4.x, c4.y, c4.z); glVertex3f(c5.x, c5.y, c5.z); glVertex3f(c1.x, c1.y, c1.z);
+        glVertex3f(c1.x, c1.y, c1.z); glVertex3f(c5.x, c5.y, c5.z); glVertex3f(c6.x, c6.y, c6.z); glVertex3f(c2.x, c2.y, c2.z);
+        glVertex3f(c2.x, c2.y, c2.z); glVertex3f(c6.x, c6.y, c6.z); glVertex3f(c7.x, c7.y, c7.z); glVertex3f(c3.x, c3.y, c3.z);
+        glVertex3f(c3.x, c3.y, c3.z); glVertex3f(c7.x, c7.y, c7.z); glVertex3f(c4.x, c4.y, c4.z); glVertex3f(c0.x, c0.y, c0.z);
+        // 两个端面
+        glVertex3f(c0.x, c0.y, c0.z); glVertex3f(c3.x, c3.y, c3.z); glVertex3f(c2.x, c2.y, c2.z); glVertex3f(c1.x, c1.y, c1.z);
+        glVertex3f(c4.x, c4.y, c4.z); glVertex3f(c5.x, c5.y, c5.z); glVertex3f(c6.x, c6.y, c6.z); glVertex3f(c7.x, c7.y, c7.z);
+        glEnd();
+    }
+
+    glEnable(GL_TEXTURE_2D);
+}
+
+//-----------------------------------------------------------------------------
 int Pick(int mouseX, int mouseY, HandleType& outType)
 {
     outType = HANDLE_NONE;
