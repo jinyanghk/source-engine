@@ -858,6 +858,9 @@ int CHammerApp::Main()
 
             pRenderContext->Flush(true);
 
+            // =========================================================
+            // Pass 0: 状态清理，彻底和引擎的 StudioRender 划清界限
+            // =========================================================
             glUseProgram(0);
             glBindVertexArray(0);
             glBindBuffer(GL_ARRAY_BUFFER, 0);
@@ -866,6 +869,10 @@ int CHammerApp::Main()
             glDisable(GL_LIGHTING);
             glDisable(GL_CULL_FACE);
             glDisable(GL_SCISSOR_TEST);
+            
+            // 清空深度缓冲！这就是为什么模型之前会穿透 Brush（模型把深度写脏了）
+            glClear(GL_DEPTH_BUFFER_BIT);
+            
             glEnable(GL_DEPTH_TEST);
             glDepthFunc(GL_LEQUAL);
             glDepthMask(GL_TRUE);
@@ -890,8 +897,6 @@ int CHammerApp::Main()
                 }
             }
 
-            // 【关键修复】引擎 D3D 后端使用 Y 轴朝下的坐标系，
-            // 而 OpenGL 期望 Y 轴朝上。翻转 glView 的 Y 行。
             glView[1]  = -glView[1];
             glView[5]  = -glView[5];
             glView[9]  = -glView[9];
@@ -905,7 +910,9 @@ int CHammerApp::Main()
             glMatrixMode(GL_MODELVIEW);
             glLoadMatrixf(glView);
 
-            // ★ THE CORRECTION STEP 1: Compute axisLength BEFORE the brush render loop pass! ★
+            // =========================================================
+            // 计算 Gizmo 尺寸
+            // =========================================================
             Vector gizmoCenterFallback;
             float bboxSizeFallback = 0.0f;
             if (bHasBrushSelection)
@@ -925,29 +932,33 @@ int CHammerApp::Main()
             float localAxisLength = bboxSizeFallback * 1.2f;
             if (localAxisLength < 30.0f) localAxisLength = 30.0f;
 
-            // ===== 绘制可见 Brushes (Textured Surfaces, Edge Wireframes, and ALL Rotating/Scaling Gizmos) =====
+            // =========================================================
+            // Pass 1: 渲染 Brush 表面 (开启深度写入，互相遮挡)
+            // =========================================================
             glEnable(GL_TEXTURE_2D);
             for (size_t i = 0; i < g_brushes.size(); i++)
             {
-                // Group ALL brush components inside the local matrix transformation stack safely
+                glEnable(GL_DEPTH_TEST);
+                glDepthFunc(GL_LEQUAL);
+                glDepthMask(GL_TRUE);
+
                 glPushMatrix();
                 
                 glTranslatef(g_brushes[i].m_vecPos.x, g_brushes[i].m_vecPos.y, g_brushes[i].m_vecPos.z);
-                glRotatef(g_brushes[i].m_angRot.y, 0.0f, 1.0f, 0.0f); // Yaw (Green Ring)
-                glRotatef(g_brushes[i].m_angRot.x, 1.0f, 0.0f, 0.0f); // Pitch (Red Ring)
-                glRotatef(g_brushes[i].m_angRot.z, 0.0f, 0.0f, 1.0f); // Roll (Blue Ring)
+                glRotatef(g_brushes[i].m_angRot.y, 0.0f, 1.0f, 0.0f); // Yaw
+                glRotatef(g_brushes[i].m_angRot.x, 1.0f, 0.0f, 0.0f); // Pitch
+                glRotatef(g_brushes[i].m_angRot.z, 0.0f, 0.0f, 1.0f); // Roll
                 glTranslatef(-g_brushes[i].m_vecPos.x, -g_brushes[i].m_vecPos.y, -g_brushes[i].m_vecPos.z);
 
                 DrawBrush(g_brushes[i]);
 
-                // ★ Face 高亮（hover 时）
+                // Face 高亮
                 if (g_iGizmoMode == GIZMO_FACE
                     && (int)i == g_iSelectedBrush
                     && g_iHoverFace >= 0
                     && g_iHoverFace < 6)
                 {
                     glDisable(GL_TEXTURE_2D);
-
                     const CBrush& b = g_brushes[i];
                     const BrushFace_t& face = b.m_faces[g_iHoverFace];
 
@@ -956,8 +967,7 @@ int CHammerApp::Main()
                     glEnable(GL_POLYGON_OFFSET_FILL);
                     glPolygonOffset(-1.0f, -1.0f);
 
-                    glColor4ub(255, 255, 0, 128);   // 半透明黄色
-
+                    glColor4ub(255, 255, 0, 128);
                     glBegin(GL_QUADS);
                     for (int v = 0; v < 4; v++)
                     {
@@ -969,31 +979,27 @@ int CHammerApp::Main()
 
                     glDisable(GL_POLYGON_OFFSET_FILL);
                     glDisable(GL_BLEND);
-
                     glEnable(GL_TEXTURE_2D);
                 }
 
+                // Edge 高亮
                 if (g_iGizmoMode == GIZMO_EDGE
                     && (int)i == g_iSelectedBrush
                     && g_iHoverAxis >= 0
                     && g_iHoverAxis < 12)
                 {
-                    // 画"高亮的边"
                     static const int edgeVertices[12][2] = {
                         {0, 1}, {1, 2}, {2, 3}, {3, 0},
                         {4, 5}, {5, 6}, {6, 7}, {7, 4},
                         {0, 4}, {1, 5}, {2, 6}, {3, 7},
                     };
-
                     int v0 = edgeVertices[g_iHoverAxis][0];
                     int v1 = edgeVertices[g_iHoverAxis][1];
-
                     Vector p0 = g_brushes[i].m_vertices[v0];
                     Vector p1 = g_brushes[i].m_vertices[v1];
 
                     glDisable(GL_TEXTURE_2D);
                     glDisable(GL_DEPTH_TEST);
-
                     glLineWidth(4.0f);
                     glColor3ub(255, 255, 0);
                     glBegin(GL_LINES);
@@ -1001,77 +1007,53 @@ int CHammerApp::Main()
                     glVertex3f(p1.x, p1.y, p1.z);
                     glEnd();
                     glLineWidth(1.0f);
-
                     glEnable(GL_DEPTH_TEST);
                     glEnable(GL_TEXTURE_2D);
                 }
 
                 DrawBrushEdges(g_brushes[i]);
                 
-                if ((int)i == g_iSelectedBrush)
-                {
-                    glDepthMask(GL_FALSE);
-                    DrawBrushBBox(g_brushes[i], true); 
-                    glDepthMask(GL_TRUE);
-                }
-
-                // Render your 3D editing spheres over corners inside vertex mode
-                if (g_iGizmoMode == GIZMO_VERTEX && (int)i == g_iSelectedBrush)
-                {
-                    glDisable(GL_TEXTURE_2D);
-                    glDisable(GL_DEPTH_TEST); 
-                    for (int v = 0; v < 8; v++)
-                    {
-                        Vector vPos = g_brushes[i].m_vertices[v];
-                        if (v == g_iHoverAxis) glColor3ub(255, 255, 0);   // Flash bright yellow on hover!
-                        else glColor3ub(255, 255, 255);                 
-
-                        DrawGlowSphere(vPos.x, vPos.y, vPos.z, 3.0f, 8);
-                    }
-                    glEnable(GL_DEPTH_TEST);
-                }
-
-                // ★ THE UNIFIED GIZMO DRAW ENGINE: Draw ALL 3 Gizmos inside matching local spaces! ★
-                // Draw your active Translate and Scaling handles inside local space
-                if ((int)i == g_iSelectedBrush && g_bShowGizmo && g_iGizmoMode != GIZMO_NONE)
-                {
-                    int highlightAxis = (g_iActiveAxis >= 0) ? g_iActiveAxis : g_iHoverAxis;
-                    
-                    // ★ THE RESTORATION: Use the local brush position variable directly! ★
-                    if (g_iGizmoMode == GIZMO_TRANSLATE)
-                        DrawTranslateGizmo(g_brushes[i].m_vecPos, localAxisLength, highlightAxis);
-                    else if (g_iGizmoMode == GIZMO_SCALE)
-                        DrawScaleGizmo(g_brushes[i].m_vecPos, localAxisLength, highlightAxis);
-                    else if (g_iGizmoMode == GIZMO_ROTATE)
-                    {
-                        // Draw your rotation rings with pixel-perfect yellow feedback!
-                        unsigned char rX = 255, gX = 0,   bX = 0;
-                        unsigned char rY = 0,   gY = 255, bY = 0;
-                        unsigned char rZ = 0,   gZ = 128, bZ = 255;
-                        
-                        if (highlightAxis == 0) { rX = 255; gX = 255; bX = 0; } // Active ring turns yellow!
-                        if (highlightAxis == 1) { rY = 255; gY = 255; bY = 0; }
-                        if (highlightAxis == 2) { rZ = 255; gZ = 255; bZ = 0; }
-                        
-                        DrawRotationRing(g_brushes[i].m_vecPos, 0, localAxisLength, 64, rX, gX, bX);
-                        DrawRotationRing(g_brushes[i].m_vecPos, 1, localAxisLength, 64, rY, gY, bY);
-                        DrawRotationRing(g_brushes[i].m_vecPos, 2, localAxisLength, 64, rZ, gZ, bZ);
-                    }
-                }
-                
-                glPopMatrix(); // Safely clear matrix parameters
+                glPopMatrix();
             }
             glDisable(GL_TEXTURE_2D);
 
+            // =========================================================
+            // Pass 2: 渲染透视辅助元素 (关闭深度测试，永远在最上层)
+            // =========================================================
+            glDisable(GL_DEPTH_TEST); 
             glDepthMask(GL_FALSE);
+
+            // 1. 渲染 Brush 的 BBox 和 Vertex 球体
+            for (size_t i = 0; i < g_brushes.size(); i++)
+            {
+                if ((int)i == g_iSelectedBrush)
+                {
+                    DrawBrushBBox(g_brushes[i], true); 
+                }
+
+                if (g_iGizmoMode == GIZMO_VERTEX && (int)i == g_iSelectedBrush)
+                {
+                    for (int v = 0; v < 8; v++)
+                    {
+                        Vector vPos = g_brushes[i].m_vertices[v];
+                        if (v == g_iHoverAxis) glColor3ub(255, 255, 0);
+                        else glColor3ub(255, 255, 255);                 
+                        DrawGlowSphere(vPos.x, vPos.y, vPos.z, 3.0f, 8);
+                    }
+                }
+            }
+
+            // 2. 渲染所有 Entity 的包围盒
             for (size_t i = 0; i < g_entities.size(); i++)
                 DrawEntityBBox(g_entities[i], (int)i == g_iSelectedEntity);
 
+            // 恢复深度测试状态，供后续代码使用
             glDepthMask(GL_TRUE);
+            glEnable(GL_DEPTH_TEST); 
 
-            if (g_bXRayGizmo)
-                glDisable(GL_DEPTH_TEST);
-
+            // =========================================================
+            // Pass 3: 渲染 Gizmo (包括 Brush 和 Entity)
+            // =========================================================
             Vector gizmoCenter;
             float bboxSize = 0.0f;
             if (bGizmoOnBrush)
@@ -1090,6 +1072,51 @@ int CHammerApp::Main()
             }
             float axisLength = bboxSize * 1.2f;
             if (axisLength < 30.0f) axisLength = 30.0f;
+
+            if (g_bShowGizmo && g_iGizmoMode != GIZMO_NONE)
+            {
+                int highlightAxis = (g_iActiveAxis >= 0) ? g_iActiveAxis : g_iHoverAxis;
+
+                if (bGizmoOnBrush)
+                {
+                    if (g_iGizmoMode == GIZMO_TRANSLATE)
+                        DrawTranslateGizmo(g_brushes[g_iSelectedBrush].m_vecPos, localAxisLength, highlightAxis);
+                    else if (g_iGizmoMode == GIZMO_SCALE)
+                        DrawScaleGizmo(g_brushes[g_iSelectedBrush].m_vecPos, localAxisLength, highlightAxis);
+                    else if (g_iGizmoMode == GIZMO_ROTATE)
+                    {
+                        unsigned char rX = 255, gX = 0,   bX = 0;
+                        unsigned char rY = 0,   gY = 255, bY = 0;
+                        unsigned char rZ = 0,   gZ = 128, bZ = 255;
+                        if (highlightAxis == 0) { rX = 255; gX = 255; bX = 0; }
+                        if (highlightAxis == 1) { rY = 255; gY = 255; bY = 0; }
+                        if (highlightAxis == 2) { rZ = 255; gZ = 255; bZ = 0; }
+                        DrawRotationRing(g_brushes[g_iSelectedBrush].m_vecPos, 0, localAxisLength, 64, rX, gX, bX);
+                        DrawRotationRing(g_brushes[g_iSelectedBrush].m_vecPos, 1, localAxisLength, 64, rY, gY, bY);
+                        DrawRotationRing(g_brushes[g_iSelectedBrush].m_vecPos, 2, localAxisLength, 64, rZ, gZ, bZ);
+                    }
+                }
+                else if (bHasSelection)
+                {
+                    if (g_iGizmoMode == GIZMO_TRANSLATE)
+                        DrawTranslateGizmo(gizmoCenter, axisLength, highlightAxis);
+                    else if (g_iGizmoMode == GIZMO_ROTATE)
+                    {
+                        unsigned char rX = 255, gX = 0,   bX = 0;
+                        unsigned char rY = 0,   gY = 255, bY = 0;
+                        unsigned char rZ = 0,   gZ = 128, bZ = 255;
+                        if (highlightAxis == 0) { rX = 255; gX = 255; bX = 0; }
+                        if (highlightAxis == 1) { rY = 255; gY = 255; bY = 0; }
+                        if (highlightAxis == 2) { rZ = 255; gZ = 255; bZ = 0; }
+                        DrawRotationRing(gizmoCenter, 0, axisLength, 64, rX, gX, bX);
+                        DrawRotationRing(gizmoCenter, 1, axisLength, 64, rY, gY, bY);
+                        DrawRotationRing(gizmoCenter, 2, axisLength, 64, rZ, gZ, bZ);
+                    }
+                }
+            }
+
+            if (g_bXRayGizmo)
+                glEnable(GL_DEPTH_TEST);
 
             Vector axisDirs[3] = { Vector(1,0,0), Vector(0,1,0), Vector(0,0,1) };
 

@@ -22,7 +22,7 @@ This project was forked from https://github.com/nillerusr/source-engine, I'm wor
 
 ### snapshots
 
-![hlmv](jin/hammer.png)
+![entity fgd properties](jin/entity_fgd_properties.png)
 
 ![hlmv](jin/hlmv.png)
 
